@@ -18,8 +18,6 @@ load_dotenv()
 
 api_key = os.getenv("ANTHROPIC_API_KEY")
 mongo_uri = os.getenv("MONGODB_URI")
-print("DEBUG ANTHROPIC_API_KEY exists:", bool(api_key))
-print("DEBUG MONGODB_URI exists:", bool(mongo_uri))
 
 if not api_key:
     raise ValueError("Missing ANTHROPIC_API_KEY in .env file")
