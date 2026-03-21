@@ -1,0 +1,168 @@
+<html>
+<head>
+    <title>Clinical Assistant</title>
+</head>
+<body style="font-family: Arial; max-width: 700px; margin: auto; padding: 20px;">
+    <h2>Clinical Assistant</h2>
+
+    <div id="chat" style="border:1px solid #ccc; padding:10px; height:400px; overflow-y:auto; margin-bottom:10px;">
+    </div>
+
+    <input id="input" style="width:80%; padding:10px;" placeholder="Type your message..." />
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        let sessionId = localStorage.getItem("session_id");
+
+        if (!sessionId) {
+            sessionId = crypto.randomUUID();
+            localStorage.setItem("session_id", sessionId);
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById("input");
+            const chat = document.getElementById("chat");
+
+            const message = input.value.trim();
+            if (!message) return;
+
+            chat.innerHTML += "<p><b>You:</b> " + message + "</p>";
+            input.value = "";
+            chat.innerHTML += "<p id='thinking'><b>Assistant:</b> Thinking...</p>";
+            chat.scrollTop = chat.scrollHeight;
+
+            try {
+                const response = await fetch("/message", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+
+                const thinking = document.getElementById("thinking");
+                if (thinking) thinking.remove();
+
+                chat.innerHTML += "<p><b>Assistant:</b> " + data.reply + "</p>";
+
+                if (data.undo) {
+                    const label = data.undo_type === "protocol"
+                        ? "Saved as protocol"
+                        : data.undo_type === "knowledge"
+                        ? "Saved in knowledge"
+                        : "Saved for future responses";
+
+                    chat.innerHTML += `
+                        <p style="color:green;">
+                            ${label}
+                            <button onclick="undoSavedItem()">Undo</button>
+                        </p>
+                    `;
+                }
+
+                if (data.show_feedback && data.assistant_message_id) {
+                    chat.innerHTML += `
+                        <div id="feedback-${data.assistant_message_id}" style="margin-top:6px;">
+                            <button id="up-${data.assistant_message_id}" onclick="sendFeedback('${data.assistant_message_id}', 'up')">👍 Useful</button>
+                            <button id="down-${data.assistant_message_id}" onclick="sendFeedback('${data.assistant_message_id}', 'down')">👎 Off</button>
+                        </div>
+                    `;
+                }
+
+                chat.scrollTop = chat.scrollHeight;
+
+            } catch (error) {
+                const thinking = document.getElementById("thinking");
+                if (thinking) thinking.remove();
+
+                chat.innerHTML += "<p style='color:red;'><b>Error:</b> " + error + "</p>";
+                chat.scrollTop = chat.scrollHeight;
+            }
+        }
+
+        async function undoSavedItem() {
+            const chat = document.getElementById("chat");
+
+            try {
+                const response = await fetch("/undo", {
+                    method: "POST"
+                });
+
+                const data = await response.json();
+
+                if (data.status === "undone protocol") {
+                    chat.innerHTML += "<p style='color:orange;'><b>Assistant:</b> Last saved protocol removed.</p>";
+                } else if (data.status === "undone knowledge") {
+                    chat.innerHTML += "<p style='color:orange;'><b>Assistant:</b> Last saved knowledge item removed.</p>";
+                } else if (data.status === "undone principle") {
+                    chat.innerHTML += "<p style='color:orange;'><b>Assistant:</b> Last saved principle removed.</p>";
+                } else if (data.status === "nothing to undo") {
+                    chat.innerHTML += "<p style='color:orange;'><b>Assistant:</b> Nothing to undo.</p>";
+                } else {
+                    chat.innerHTML += "<p style='color:red;'><b>Error:</b> " + data.status + "</p>";
+                }
+
+                chat.scrollTop = chat.scrollHeight;
+
+            } catch (error) {
+                chat.innerHTML += "<p style='color:red;'><b>Error:</b> " + error + "</p>";
+                chat.scrollTop = chat.scrollHeight;
+            }
+        }
+
+        async function sendFeedback(messageId, direction) {
+            const chat = document.getElementById("chat");
+            const upBtn = document.getElementById(`up-${messageId}`);
+            const downBtn = document.getElementById(`down-${messageId}`);
+
+            try {
+                const response = await fetch("/feedback", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        message_id: messageId,
+                        direction: direction
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.status === "marked useful") {
+                    upBtn.style.backgroundColor = "#d1fae5";
+                    upBtn.style.border = "1px solid #10b981";
+                    upBtn.style.fontWeight = "bold";
+                    downBtn.disabled = true;
+                    downBtn.style.opacity = "0.5";
+                } else if (data.status === "marked off") {
+                    downBtn.style.backgroundColor = "#fee2e2";
+                    downBtn.style.border = "1px solid #ef4444";
+                    downBtn.style.fontWeight = "bold";
+                    upBtn.disabled = true;
+                    upBtn.style.opacity = "0.5";
+                } else {
+                    chat.innerHTML += "<p style='color:red;'><b>Error:</b> " + data.status + "</p>";
+                }
+
+                chat.scrollTop = chat.scrollHeight;
+
+            } catch (error) {
+                chat.innerHTML += "<p style='color:red;'><b>Error:</b> " + error + "</p>";
+                chat.scrollTop = chat.scrollHeight;
+            }
+        }
+
+        document.getElementById("input").addEventListener("keypress", function(e) {
+            if (e.key === "Enter") {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

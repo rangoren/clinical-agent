@@ -1,0 +1,50 @@
+[
+  {
+    "role": "user",
+    "content": "\nClinical case:\n28yo woman, acute lower abdominal pain, missed period, spotting\n\nRespond in this structure:\n\nMost likely:\nDanger to rule out:\nWhat changes management now:\nNext step:\n"
+  },
+  {
+    "role": "assistant",
+    "content": "**Most likely:**\nEctopic pregnancy until proven otherwise\n\n**Danger to rule out:**\nRuptured ectopic \u2014 ask about shoulder tip pain, syncopal episodes, haemodynamic instability RIGHT NOW before anything else\n\n**What changes management now:**\n- Vitals + orthostatic BP immediately\n- Serum \u03b2hCG level\n- Transvaginal ultrasound \u2014 empty uterus + adnexal mass = surgical emergency\n- Blood type + crossmatch (don't wait for USS results to do this)\n- If haemodynamically unstable \u2192 theatre, not radiology\n\n**Next step:**\nIV access + bloods (\u03b2hCG, FBC, group & save) simultaneously with TVUS referral \u2014 do not discharge pending results"
+  },
+  {
+    "role": "user",
+    "content": "\nClinical case:\nbeta-hCG positive, hemodynamically stable, no intrauterine pregnancy on TVUS\n\nRespond in this structure:\n\nMost likely:\nDanger to rule out:\nWhat changes management now:\nNext step:\n"
+  },
+  {
+    "role": "assistant",
+    "content": "**Most likely:**\nEctopic pregnancy (tube in ~95%) \u2014 location unconfirmed until USS characterises adnexal findings\n\n**Danger to rule out:**\nImpending rupture \u2014 ectopic can rupture even while stable; adnexal mass >3.5cm, fetal cardiac activity, or free fluid = high rupture risk regardless of current vitals\n\n**What changes management now:**\n- \u03b2hCG level determines pathway:\n  - **<1500 IU/L** + no adnexal mass seen = possible PUL \u2192 serial \u03b2hCG 48h, but don't assume safe\n  - **>1500 IU/L** + empty uterus = ectopic until proven otherwise \u2192 act\n- Adnexal mass present \u2192 methotrexate vs surgery decision NOW\n- Free fluid in pouch of Douglas \u2192 surgery, not methotrexate\n\n**Methotrexate eligibility (all must apply):**\n- Haemodynamically stable\n- Mass \u22643.5cm, no fetal heartbeat\n- \u03b2hCG <5000 IU/L (some units <3000)\n- Reliable follow-up guaranteed\n- No contraindications (renal/hepatic/haematologic)\n\n**Next step:**\nQuantitative \u03b2hCG + USS adnexal characterisation \u2192 if surgical candidate, consent and book; if methotrexate candidate, check FBC/renal/LFTs before dosing \u2014 **admit, do not discharge**"
+  },
+  {
+    "role": "user",
+    "content": "\nClinical case:\nHer name is Dana. She is 32.\n\nRespond in this structure:\n\nMost likely:\nDanger to rule out:\nWhat changes management now:\nNext step:\n"
+  },
+  {
+    "role": "assistant",
+    "content": "I only have a name and age \u2014 no symptoms, vitals, history, or investigation results.\n\n**Give me a clinical problem to work with:**\n- What's she presenting with?\n- Any relevant history, medications, cycle information?\n- Any investigations done?\n\nI'll give you a focused assessment once there's something clinical to assess."
+  },
+  {
+    "role": "user",
+    "content": "\nClinical case:\nWhat is her name?\n\nRespond in this structure:\n\nMost likely:\nDanger to rule out:\nWhat changes management now:\nNext step:\n"
+  },
+  {
+    "role": "assistant",
+    "content": "Her name is Dana.\n\nBut this isn't a clinical question \u2014 I'm a clinical decision support tool.\n\n**Give me her presentation, vitals, or investigation results and I'll get to work.**"
+  },
+  {
+    "role": "user",
+    "content": "her name is dana"
+  },
+  {
+    "role": "assistant",
+    "content": "Yes \u2014 Dana, 32 years old, from the case you shared earlier.\n\nStill waiting on her clinical details to be useful to you. What's she presenting with?"
+  },
+  {
+    "role": "user",
+    "content": "whats her name?"
+  },
+  {
+    "role": "assistant",
+    "content": "Dana.\n\nNow, what's her clinical problem?"
+  }
+]
