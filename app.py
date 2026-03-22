@@ -44,6 +44,7 @@ principles_collection = db["principles"]
 knowledge_collection = db["knowledge"]
 protocols_collection = db["protocols"]
 feedback_logs_collection = db["feedback_logs"]
+user_profiles_collection = db["user_profiles"]
 
 # זיכרון זמני ל-Undo
 # נשמר רק לזמן ריצה של השרת
@@ -228,6 +229,48 @@ def classify_message_intent(user_message, chat_history):
             "confidence": "low"
         }
 
+def get_user_profile(session_id):
+    return user_profiles_collection.find_one({"session_id": session_id})
+
+
+def create_user_profile(session_id, profile_data):
+    now = datetime.utcnow()
+
+    doc = {
+        "session_id": session_id,
+        "country": profile_data.get("country"),
+        "training_stage": profile_data.get("training_stage"),
+        "residency_year": profile_data.get("residency_year"),
+        "subspecialty": profile_data.get("subspecialty"),
+        "answer_style": profile_data.get("answer_style"),
+        "created_at": now,
+        "updated_at": now
+    }
+
+    result = user_profiles_collection.insert_one(doc)
+    return str(result.inserted_id)
+
+
+def update_user_profile(session_id, updates):
+    updates["updated_at"] = datetime.utcnow()
+
+    user_profiles_collection.update_one(
+        {"session_id": session_id},
+        {"$set": updates}
+    )
+
+
+def has_user_profile(session_id):
+    return user_profiles_collection.find_one({"session_id": session_id}) is not None
+
+def build_onboarding_intro():
+    return (
+        "Hi, I’m your OB-GYN clinical assistant.<br><br>"
+        "I’m here to help you think through cases, sharpen risk assessment, "
+        "and suggest focused next steps.<br><br>"
+        "Before we start, I need a few short details so I can adapt the level and style of my answers to you."
+    )
+
 def format_response(text):
     sections = [
         "Most likely:",
@@ -300,6 +343,32 @@ def delete_last_principle(text):
 def load_knowledge():
     docs = knowledge_collection.find().sort("created_at", 1)
     return [doc["text"] for doc in docs]
+
+from datetime import datetime
+
+def save_user_profile(session_id, profile_data):
+    db.user_profiles.insert_one({
+        "session_id": session_id,
+        "profile": profile_data,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow()
+    })
+
+
+def get_user_profile(session_id):
+    return db.user_profiles.find_one({"session_id": session_id})
+
+
+def update_user_profile(session_id, new_data):
+    db.user_profiles.update_one(
+        {"session_id": session_id},
+        {
+            "$set": {
+                "profile": new_data,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
 
 # -------------------------
 # build_protocol_tags(text)
@@ -741,6 +810,29 @@ async def handle_message(request: Request):
 
         knowledge = get_relevant_knowledge(user_message)
         protocols = get_relevant_protocols(user_message)
+        user_profile = get_user_profile(session_id)
+
+        if not user_profile:
+            onboarding_intro = build_onboarding_intro()
+
+            save_message("user", user_message, session_id)
+            assistant_message_id = save_message(
+                "assistant",
+                onboarding_intro,
+                session_id,
+                metadata={
+                    "intent": "onboarding_intro"
+                }
+            )
+
+            return JSONResponse({
+                "reply": onboarding_intro,
+                "undo": False,
+                "undo_type": None,
+                "show_feedback": False,
+                "assistant_message_id": assistant_message_id,
+                "needs_onboarding": True
+            })
 
         classifier_result = classify_message_intent(user_message, chat_history)
         intent = classifier_result["label"]
