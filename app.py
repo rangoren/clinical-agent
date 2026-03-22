@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 from pymongo import MongoClient
 import os
+import json
 import anthropic
 from datetime import datetime
 from bson import ObjectId
@@ -105,6 +106,127 @@ def save_message(role, content, session_id, metadata=None):
 
     result = messages_collection.insert_one(doc)
     return str(result.inserted_id)
+
+def build_intent_classifier_prompt(user_message, recent_context=""):
+    return f"""
+You are an intent classifier for a medical assistant.
+
+Your task is to classify the user's latest message into exactly one label.
+
+Allowed labels:
+- clinical_consult
+- general_chat
+- principle
+- knowledge
+- protocol
+
+Definitions:
+
+clinical_consult:
+A clinical question, case, interpretation request, next-step decision, risk assessment, or follow-up on a patient scenario.
+
+general_chat:
+Greeting, thanks, casual chat, question about the tool, or non-clinical conversation.
+
+principle:
+A general instruction about how the assistant should think or respond.
+
+knowledge:
+A medical fact, rule, insight, or reusable clinical information that should be stored as knowledge.
+
+protocol:
+A department, hospital, local, or team-specific way of practicing medicine or making decisions.
+
+Confidence:
+- high
+- medium
+- low
+
+Rules:
+- Return exactly one label
+- Return exactly one confidence value
+- Do not answer the user
+- Do not explain your reasoning
+- Do not add extra text
+- Output must be valid JSON only
+
+Important routing policy:
+- If the message is a patient case or clinical decision request, label it clinical_consult
+- If uncertain between clinical_consult and a memory label, prefer clinical_consult
+- Only use principle / knowledge / protocol when the user is clearly trying to teach or store something
+- If uncertain between general_chat and clinical_consult, prefer clinical_consult
+- For memory labels, use high confidence only when the intent is clearly explicit
+
+Recent context:
+{recent_context if recent_context else "None"}
+
+Latest user message:
+{user_message}
+
+Return only JSON in this exact shape:
+{{
+  "label": "clinical_consult",
+  "confidence": "high"
+}}
+"""    
+
+def classify_message_intent(user_message, chat_history):
+    recent_context_items = chat_history[-4:] if chat_history else []
+
+    recent_context = "\n".join(
+        [f"{item['role']}: {item['content']}" for item in recent_context_items]
+    )
+
+    prompt = build_intent_classifier_prompt(
+        user_message=user_message,
+        recent_context=recent_context
+    )
+
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=120,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        raw_text = response.content[0].text.strip()
+
+        parsed = json.loads(raw_text)
+
+        allowed_labels = {
+            "clinical_consult",
+            "general_chat",
+            "principle",
+            "knowledge",
+            "protocol"
+        }
+
+        allowed_confidence = {"high", "medium", "low"}
+
+        label = parsed.get("label")
+        confidence = parsed.get("confidence")
+
+        if label not in allowed_labels or confidence not in allowed_confidence:
+            return {
+                "label": "general_chat",
+                "confidence": "low"
+            }
+
+        return {
+            "label": label,
+            "confidence": confidence
+        }
+
+    except Exception:
+        return {
+            "label": "general_chat",
+            "confidence": "low"
+        }
 
 def format_response(text):
     sections = [
@@ -620,13 +742,21 @@ async def handle_message(request: Request):
         knowledge = get_relevant_knowledge(user_message)
         protocols = get_relevant_protocols(user_message)
 
-        intent = detect_intent(user_message)
-        print("DEBUG INTENT:", intent)
+        classifier_result = classify_message_intent(user_message, chat_history)
+        intent = classifier_result["label"]
+        confidence = classifier_result["confidence"]
+
+        print("DEBUG CLASSIFIER LABEL:", intent)
+        print("DEBUG CLASSIFIER CONFIDENCE:", confidence)
 
         undo_flag = False
 
-        # protocol
-        if intent == "protocol":
+        # -------------------------
+        # 1. MEMORY FLOWS
+        # נשמור רק אם confidence גבוה
+        # -------------------------
+
+        if intent == "protocol" and confidence == "high":
             existing_protocols_lower = [p.lower() for p in protocol_items]
 
             if user_message.lower() not in existing_protocols_lower:
@@ -648,8 +778,7 @@ async def handle_message(request: Request):
                 "assistant_message_id": None
             })
 
-        # principle
-        if intent == "principle":
+        if intent == "principle" and confidence == "high":
             existing_principles_lower = [p.lower() for p in principles]
 
             if user_message.lower() not in existing_principles_lower:
@@ -671,8 +800,7 @@ async def handle_message(request: Request):
                 "assistant_message_id": None
             })
 
-        # knowledge
-        if intent == "knowledge":
+        if intent == "knowledge" and confidence == "high":
             existing_knowledge_lower = [k.lower() for k in knowledge_items]
 
             if user_message.lower() not in existing_knowledge_lower:
@@ -694,6 +822,16 @@ async def handle_message(request: Request):
                 "assistant_message_id": None
             })
 
+        # -------------------------
+        # 2. ROUTING POLICY
+        # אם זה לא memory-save, נחליט בין clinical / general
+        # -------------------------
+
+        # אם המודל לא בטוח ב-memory label, לא נשמור.
+        # במקום זה נעביר ל-clinical או general.
+        if intent in ["principle", "knowledge", "protocol"] and confidence != "high":
+            intent = "general_chat"
+
         messages = []
         for item in chat_history[-6:]:
             messages.append({
@@ -710,7 +848,11 @@ async def handle_message(request: Request):
         knowledge_text = "\n".join(f"- {k}" for k in knowledge)
         protocols_text = "\n".join(f"- {p}" for p in protocols)
 
-        system_prompt = f"""
+        # -------------------------
+        # 3. CLINICAL MODE
+        # -------------------------
+        if intent == "clinical_consult":
+            system_prompt = f"""
 You are a senior OB-GYN consultant.
 
 Think like a real clinical decision maker, not a textbook.
@@ -823,6 +965,21 @@ Quality bar:
 - If protocol applies → be decisive
 - Do not hedge unnecessarily
 """
+        else:
+            # -------------------------
+            # 4. GENERAL MODE
+            # -------------------------
+            system_prompt = """
+You are a concise, natural, professional assistant.
+
+Behavior:
+- Reply briefly and naturally
+- Do not use clinical sections
+- Do not force medical structure
+- For greetings or casual messages, respond like a human expert assistant
+- Do not sound robotic
+- Keep the reply short
+"""
 
         response = client.messages.create(
             model="claude-sonnet-4-6",
@@ -832,7 +989,9 @@ Quality bar:
         )
 
         reply = response.content[0].text
-        reply = format_response(reply)
+
+        if intent == "clinical_consult":
+            reply = format_response(reply)
 
         save_message("user", user_message, session_id)
 
@@ -842,11 +1001,13 @@ Quality bar:
             session_id,
             metadata={
                 "used_knowledge": knowledge,
-                "used_protocols": protocols
+                "used_protocols": protocols,
+                "intent": intent,
+                "confidence": confidence
             }
         )
 
-        show_feedback = len(reply) > 80
+        show_feedback = intent == "clinical_consult" and len(reply) > 80
 
         return JSONResponse({
             "reply": reply,
@@ -858,7 +1019,6 @@ Quality bar:
 
     except Exception as e:
         return JSONResponse({"reply": f"ERROR: {str(e)}"})
-
 
 # =========================
 # 7. UNDO ROUTE
