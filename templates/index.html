@@ -354,7 +354,8 @@
         }
 
         .utility-card,
-        .feedback-card {
+        .feedback-card,
+        .sources-card {
             align-self: flex-start;
             max-width: min(100%, 760px);
             border-radius: 18px;
@@ -373,11 +374,68 @@
             border-color: rgba(16, 129, 88, 0.15);
         }
 
+        .sources-card {
+            display: block;
+            background: rgba(245, 248, 247, 0.95);
+        }
+
         .utility-text,
-        .feedback-text {
+        .feedback-text,
+        .sources-title {
             margin: 0;
             font-size: 0.9rem;
             color: var(--text);
+        }
+
+        .sources-title {
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .sources-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .source-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding-top: 10px;
+            border-top: 1px solid var(--line);
+        }
+
+        .source-item:first-child {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .source-meta {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--brand);
+            font-weight: 700;
+        }
+
+        .source-link {
+            color: var(--brand-strong);
+            text-decoration: none;
+            font-weight: 600;
+            line-height: 1.35;
+            word-break: break-word;
+        }
+
+        .source-link:hover {
+            text-decoration: underline;
+        }
+
+        .source-text {
+            color: var(--text);
+            font-weight: 600;
+            line-height: 1.35;
+            word-break: break-word;
         }
 
         .feedback-actions,
@@ -875,6 +933,33 @@
             scrollChatToBottom();
         }
 
+        function appendSourcesCard(sources) {
+            if (!sources || !sources.length) return;
+
+            const chat = document.getElementById("chat");
+            const card = document.createElement("div");
+            card.className = "sources-card";
+
+            const itemsHtml = sources.map((source) => `
+                <div class="source-item">
+                    <div class="source-meta">${escapeHtml(source.source_type)} · ${escapeHtml(source.source_id)}</div>
+                    ${source.url
+                        ? `<a class="source-link" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a>`
+                        : `<div class="source-text">${escapeHtml(source.title)}</div>`
+                    }
+                </div>
+            `).join("");
+
+            card.className = "sources-card";
+            card.innerHTML = `
+                <p class="sources-title">Sources used</p>
+                <div class="sources-list">${itemsHtml}</div>
+            `;
+
+            chat.appendChild(card);
+            scrollChatToBottom();
+        }
+
         function escapeHtml(value) {
             const div = document.createElement("div");
             div.textContent = value;
@@ -1051,6 +1136,10 @@
 
                 if (data.show_feedback && data.assistant_message_id) {
                     appendFeedbackCard(data.assistant_message_id);
+                }
+
+                if (data.sources && data.sources.length) {
+                    appendSourcesCard(data.sources);
                 }
             } catch (error) {
                 setThinkingState(false);

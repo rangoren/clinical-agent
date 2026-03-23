@@ -2,8 +2,8 @@ from services.chat_service import delete_messages_for_session, load_chat, save_m
 from services.intent_service import classify_message_intent
 from services.logging_service import log_event
 from services.memory_service import (
-    get_relevant_knowledge,
-    get_relevant_protocols,
+    get_relevant_knowledge_entries,
+    get_relevant_protocol_entries,
     knowledge_exists,
     load_knowledge,
     load_principles,
@@ -30,7 +30,7 @@ from services.text_formatting import format_response
 from services.undo_service import clear_last_saved, record_last_saved
 
 
-def _build_message_response(reply, undo=False, undo_type=None, show_feedback=False, assistant_message_id=None, needs_onboarding=False):
+def _build_message_response(reply, undo=False, undo_type=None, show_feedback=False, assistant_message_id=None, needs_onboarding=False, sources=None):
     return {
         "reply": reply,
         "undo": undo,
@@ -38,7 +38,74 @@ def _build_message_response(reply, undo=False, undo_type=None, show_feedback=Fal
         "show_feedback": show_feedback,
         "assistant_message_id": assistant_message_id,
         "needs_onboarding": needs_onboarding,
+        "sources": sources or [],
     }
+
+
+def _collect_linked_sources(protocol_entries, knowledge_entries):
+    deduped = []
+    seen_urls = set()
+    for entry in protocol_entries + knowledge_entries:
+        source = entry.get("source")
+        if not source or not source.get("url") or source["url"] in seen_urls:
+            continue
+        seen_urls.add(source["url"])
+        deduped.append(
+            {
+                "source_id": source["source_id"],
+                "title": source["title"],
+                "url": source["url"],
+                "source_type": source.get("source_type", "reference"),
+            }
+        )
+    return deduped
+
+
+def _collect_internal_sources(principles, protocol_entries, knowledge_entries):
+    collected = []
+
+    for index, principle in enumerate(principles[:3], start=1):
+        collected.append(
+            {
+                "source_id": f"PR{index}",
+                "title": principle[:140],
+                "url": None,
+                "source_type": "Based on saved principle",
+                "is_internal": True,
+            }
+        )
+
+    protocol_index = 1
+    for entry in protocol_entries:
+        if entry.get("source"):
+            continue
+        collected.append(
+            {
+                "source_id": f"LP{protocol_index}",
+                "title": entry["text"][:140],
+                "url": None,
+                "source_type": "Based on local protocol memory",
+                "is_internal": True,
+            }
+        )
+        protocol_index += 1
+
+    knowledge_index = 1
+    for entry in knowledge_entries:
+        if entry.get("source"):
+            continue
+        collected.append(
+            {
+                "source_id": f"IK{knowledge_index}",
+                "title": entry["text"][:140],
+                "url": None,
+                "source_type": "Based on user-provided internal knowledge",
+                "is_internal": True,
+            }
+        )
+        knowledge_index += 1
+
+    return collected
 
 
 def _handle_new_user_onboarding(session_id):
@@ -241,8 +308,13 @@ def process_message(user_message, session_id):
     principles = load_principles()
     knowledge_items = load_knowledge()
     protocol_items = load_protocols()
-    relevant_knowledge = get_relevant_knowledge(user_message)
-    relevant_protocols = get_relevant_protocols(user_message)
+    relevant_knowledge_entries = get_relevant_knowledge_entries(user_message)
+    relevant_protocol_entries = get_relevant_protocol_entries(user_message)
+    relevant_knowledge = [entry["text"] for entry in relevant_knowledge_entries]
+    relevant_protocols = [entry["text"] for entry in relevant_protocol_entries]
+    linked_sources = _collect_linked_sources(relevant_protocol_entries, relevant_knowledge_entries)
+    internal_sources = _collect_internal_sources(principles, relevant_protocol_entries, relevant_knowledge_entries)
+    display_sources = linked_sources + internal_sources
 
     classifier_result = classify_message_intent(user_message, chat_history)
     intent = classifier_result["label"]
@@ -273,8 +345,8 @@ def process_message(user_message, session_id):
     if intent == "clinical_consult":
         system_prompt = build_clinical_system_prompt(
             principles=principles,
-            knowledge=relevant_knowledge,
-            protocols=relevant_protocols,
+            knowledge_entries=relevant_knowledge_entries,
+            protocol_entries=relevant_protocol_entries,
             user_profile=user_profile,
         )
     else:
@@ -286,6 +358,8 @@ def process_message(user_message, session_id):
         {
             "knowledge_count": len(relevant_knowledge),
             "protocol_count": len(relevant_protocols),
+            "source_count": len(linked_sources),
+            "internal_source_count": len(internal_sources),
             "intent": intent,
         },
     )
@@ -306,6 +380,7 @@ def process_message(user_message, session_id):
         metadata={
             "used_knowledge": relevant_knowledge,
             "used_protocols": relevant_protocols,
+            "used_sources": display_sources,
             "intent": intent,
             "confidence": confidence,
         },
@@ -318,6 +393,7 @@ def process_message(user_message, session_id):
             "confidence": confidence,
             "reply_length": len(reply),
             "feedback_enabled": intent == "clinical_consult" and len(reply) > 80,
+            "source_count": len(display_sources),
         },
     )
 
@@ -325,4 +401,5 @@ def process_message(user_message, session_id):
         reply=reply,
         show_feedback=intent == "clinical_consult" and len(reply) > 80,
         assistant_message_id=assistant_message_id,
+        sources=display_sources if intent == "clinical_consult" else [],
     )

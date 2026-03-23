@@ -1,10 +1,55 @@
 from services.profile_service import build_user_profile_context
 
 
-def build_clinical_system_prompt(principles, knowledge, protocols, user_profile):
+def _format_memory_entries(entries):
+    if not entries:
+        return "- None"
+
+    lines = []
+    for entry in entries:
+        source = entry.get("source")
+        if source:
+            lines.append(f"- [{source['source_id']}] {entry['text']}")
+        else:
+            lines.append(f"- {entry['text']}")
+    return "\n".join(lines)
+
+
+def _format_source_catalog(knowledge_entries, protocol_entries):
+    sources = []
+    for entry in protocol_entries + knowledge_entries:
+        source = entry.get("source")
+        if not source:
+            continue
+        sources.append(f"- [{source['source_id']}] {source['title']} ({source['url']})")
+    return "\n".join(sources) or "- No external links available"
+
+
+def _format_internal_context(principles, knowledge_entries, protocol_entries):
+    lines = []
+
+    for index, principle in enumerate(principles[:3], start=1):
+        lines.append(f"- [PR{index}] Saved principle: {principle}")
+
+    for entry in protocol_entries:
+        if entry.get("source"):
+            continue
+        lines.append(f"- [LP{len(lines) + 1}] Local protocol memory: {entry['text']}")
+
+    for entry in knowledge_entries:
+        if entry.get("source"):
+            continue
+        lines.append(f"- [IK{len(lines) + 1}] Internal knowledge memory: {entry['text']}")
+
+    return "\n".join(lines) or "- No internal context labels available"
+
+
+def build_clinical_system_prompt(principles, knowledge_entries, protocol_entries, user_profile):
     principles_text = "\n".join(f"- {item}" for item in principles) or "- No saved principles yet"
-    knowledge_text = "\n".join(f"- {item}" for item in knowledge) or "- No relevant knowledge"
-    protocols_text = "\n".join(f"- {item}" for item in protocols) or "- No relevant protocols"
+    knowledge_text = _format_memory_entries(knowledge_entries)
+    protocols_text = _format_memory_entries(protocol_entries)
+    source_catalog = _format_source_catalog(knowledge_entries, protocol_entries)
+    internal_catalog = _format_internal_context(principles, knowledge_entries, protocol_entries)
     profile_text = build_user_profile_context(user_profile)
 
     return f"""
@@ -23,6 +68,12 @@ Relevant clinical knowledge:
 
 Department protocols:
 {protocols_text}
+
+Available linked sources:
+{source_catalog}
+
+Internal context labels:
+{internal_catalog}
 
 Core behavior:
 - Be sharp
@@ -81,6 +132,10 @@ Output discipline:
 - No dense paragraphs
 - Prefer one clear path
 - Avoid vague language
+- If a linked source is directly relevant, cite it inline using its source id, for example [P1] or [K2]
+- If internal user-provided context is directly relevant, cite it inline using its provided label, for example [PR1] or [IK1]
+- Never invent a citation id that was not provided
+- If no linked sources were provided, do not fabricate sources
 
 Output format:
 

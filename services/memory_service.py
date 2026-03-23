@@ -1,6 +1,11 @@
+import re
 from datetime import datetime
+from urllib.parse import urlparse
 
 from db import knowledge_collection, principles_collection, protocols_collection
+
+
+URL_PATTERN = re.compile(r"(https?://[^\s)]+)")
 
 
 def load_principles():
@@ -35,6 +40,40 @@ def principle_exists(text, principles=None):
 def load_knowledge():
     docs = knowledge_collection.find().sort("created_at", 1)
     return [doc["text"] for doc in docs]
+
+
+def _extract_url(text):
+    match = URL_PATTERN.search(text)
+    return match.group(1) if match else None
+
+
+def _infer_source_title(text, url):
+    markdown_match = re.search(r"\[([^\]]+)\]\((https?://[^\s)]+)\)", text)
+    if markdown_match:
+        return markdown_match.group(1).strip()
+
+    if url:
+        cleaned_text = text.replace(url, "").strip(" -:\n\t")
+        if cleaned_text:
+            return cleaned_text[:120]
+
+        hostname = urlparse(url).netloc.replace("www.", "")
+        if hostname:
+            return hostname
+
+    return "Reference"
+
+
+def _build_source_metadata(text, source_type):
+    url = _extract_url(text)
+    if not url:
+        return None
+
+    return {
+        "url": url,
+        "title": _infer_source_title(text, url),
+        "source_type": source_type,
+    }
 
 
 def build_knowledge_tags(text):
@@ -79,6 +118,7 @@ def save_knowledge(text):
     knowledge_collection.insert_one(
         {
             "text": text,
+            "source": _build_source_metadata(text, "reference"),
             "type": "clinical",
             "tags": build_knowledge_tags(text),
             "weight": 3,
@@ -97,6 +137,7 @@ def save_protocol(text):
     protocols_collection.insert_one(
         {
             "text": text,
+            "source": _build_source_metadata(text, "protocol"),
             "type": "protocol",
             "tags": build_protocol_tags(text),
             "weight": 5,
@@ -180,6 +221,34 @@ def _touch_retrieved_docs(collection, docs):
         )
 
 
+def _build_source_entry(doc, prefix, index):
+    source = doc.get("source")
+    if not source or not source.get("url"):
+        return None
+
+    source_id = f"{prefix}{index}"
+    return {
+        "source_id": source_id,
+        "title": source.get("title") or "Reference",
+        "url": source["url"],
+        "source_type": source.get("source_type", prefix.lower()),
+        "text": doc.get("text", ""),
+    }
+
+
+def _prepare_retrieved_entries(docs, prefix):
+    prepared = []
+    for index, doc in enumerate(docs, start=1):
+        source_entry = _build_source_entry(doc, prefix, index)
+        prepared.append(
+            {
+                "text": doc["text"],
+                "source": source_entry,
+            }
+        )
+    return prepared
+
+
 def _score_retrieved_docs(docs, query_tags, query_terms):
     scored_docs = []
     for doc in docs:
@@ -210,6 +279,18 @@ def get_relevant_knowledge(user_message):
     return [doc["text"] for doc in top_docs]
 
 
+def get_relevant_knowledge_entries(user_message):
+    tags = extract_tags_from_query(user_message)
+    query_terms = _extract_query_terms(user_message)
+    if not tags and not query_terms:
+        return []
+
+    docs = list(knowledge_collection.find())
+    top_docs = _score_retrieved_docs(docs, tags, query_terms)
+    _touch_retrieved_docs(knowledge_collection, top_docs)
+    return _prepare_retrieved_entries(top_docs, "K")
+
+
 def get_relevant_protocols(user_message):
     tags = extract_tags_from_query(user_message)
     query_terms = _extract_query_terms(user_message)
@@ -220,6 +301,18 @@ def get_relevant_protocols(user_message):
     top_docs = _score_retrieved_docs(docs, tags, query_terms)
     _touch_retrieved_docs(protocols_collection, top_docs)
     return [doc["text"] for doc in top_docs]
+
+
+def get_relevant_protocol_entries(user_message):
+    tags = extract_tags_from_query(user_message)
+    query_terms = _extract_query_terms(user_message)
+    if not tags and not query_terms:
+        return []
+
+    docs = list(protocols_collection.find())
+    top_docs = _score_retrieved_docs(docs, tags, query_terms)
+    _touch_retrieved_docs(protocols_collection, top_docs)
+    return _prepare_retrieved_entries(top_docs, "P")
 
 
 def increase_knowledge_weight(text, amount=1):
