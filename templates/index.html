@@ -104,9 +104,7 @@
             height: 44px;
             padding: 0 14px;
             border-radius: 15px;
-            background:
-                radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), transparent 34%),
-                linear-gradient(135deg, #0f766e 0%, #0a5c56 100%);
+            background: linear-gradient(135deg, #0f766e 0%, #0a5c56 100%);
             color: white;
             display: inline-flex;
             align-items: center;
@@ -208,7 +206,7 @@
         }
 
         .message-row.user {
-            justify-content: flex-end;
+            justify-content: flex-start;
         }
 
         .message-stack {
@@ -226,10 +224,6 @@
             align-items: flex-end;
             gap: 10px;
             min-width: 0;
-        }
-
-        .message-row.user .message-frame {
-            flex-direction: row-reverse;
         }
 
         .avatar {
@@ -267,10 +261,6 @@
             padding: 0 6px;
         }
 
-        .message-row.user .message-label {
-            text-align: right;
-        }
-
         .bubble {
             max-width: 100%;
             min-width: 0;
@@ -302,7 +292,7 @@
             background: var(--user);
             border-color: transparent;
             color: white;
-            border-bottom-right-radius: 10px;
+            border-bottom-left-radius: 10px;
             box-shadow: 0 16px 32px rgba(15, 118, 110, 0.18);
         }
 
@@ -779,8 +769,8 @@
             <div class="brand">
                 <div class="brand-badge">Doctor Goren</div>
                 <div class="brand-text">
-                    <h1 class="brand-title">Clinical Assistant</h1>
-                    <p class="brand-subtitle">A focused clinical study and decision-support assistant for OB-GYN training.</p>
+                    <h1 class="brand-title">OB-GYN Clinical Assistant</h1>
+                    <p class="brand-subtitle">A focused clinical study and decision-support assistant for OB-GYN.</p>
                 </div>
             </div>
             <div id="status-pill" class="status-pill">Connecting</div>

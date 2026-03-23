@@ -326,6 +326,7 @@ def handle_onboarding_step(session_id, profile, user_message):
             {
                 "training_stage": training_stage,
                 "residency_year": None if training_stage != "resident" else profile.get("residency_year"),
+                "subspecialty": "General OB-GYN" if training_stage == "resident" else profile.get("subspecialty"),
                 "onboarding_step": next_step,
             },
         )
@@ -350,10 +351,10 @@ def handle_onboarding_step(session_id, profile, user_message):
             session_id,
             {
                 "residency_year": residency_year,
-                "onboarding_step": "subspecialty",
+                "onboarding_step": "answer_style",
             },
         )
-        return {"reply": _build_subspecialty_question(), "completed": False, "intent": "onboarding_question"}
+        return {"reply": _build_answer_style_question(), "completed": False, "intent": "onboarding_question"}
 
     if step == "subspecialty":
         subspecialty = cleaned
