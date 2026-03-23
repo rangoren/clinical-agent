@@ -161,63 +161,6 @@
             gap: 12px;
         }
 
-        .hero-card {
-            border-radius: var(--radius-lg);
-            padding: 16px 16px 14px;
-            background:
-                linear-gradient(135deg, rgba(216, 241, 236, 0.92), rgba(255, 255, 255, 0.92)),
-                var(--surface);
-            border: 1px solid rgba(15, 118, 110, 0.12);
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            transition: opacity 180ms ease, transform 180ms ease, max-height 180ms ease, margin 180ms ease, padding 180ms ease;
-            overflow: hidden;
-            max-height: 240px;
-        }
-
-        .hero-card.hidden {
-            opacity: 0;
-            transform: translateY(-6px);
-            max-height: 0;
-            margin: 0;
-            padding-top: 0;
-            padding-bottom: 0;
-            border-width: 0;
-        }
-
-        .hero-title {
-            margin: 0;
-            font-size: 1rem;
-            font-weight: 700;
-        }
-
-        .hero-copy {
-            margin: 0;
-            color: var(--muted);
-            line-height: 1.5;
-            font-size: 0.92rem;
-        }
-
-        .hero-chips {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 9px 12px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.72);
-            border: 1px solid rgba(15, 118, 110, 0.12);
-            color: var(--brand-strong);
-            font-size: 0.8rem;
-            font-weight: 600;
-        }
-
         .session-banner {
             display: none;
             border-radius: var(--radius-md);
@@ -600,10 +543,6 @@
                 padding: 18px 20px;
             }
 
-            .hero-card {
-                padding: 18px 20px 16px;
-            }
-
             .chat-panel {
                 padding: 10px 10px 26px;
             }
@@ -629,18 +568,6 @@
         </header>
 
         <section class="content">
-            <div id="hero-card" class="hero-card">
-                <h2 class="hero-title">Focused guidance, without the clutter.</h2>
-                <p class="hero-copy">
-                    Built for quick case thinking on mobile, but still comfortable on desktop when you need to slow down and review.
-                </p>
-                <div class="hero-chips">
-                    <span class="chip">Mobile-first</span>
-                    <span class="chip">Structured replies</span>
-                    <span class="chip">Session-aware</span>
-                </div>
-            </div>
-
             <div id="session-banner" class="session-banner">
                 <p id="session-banner-text"></p>
                 <div id="session-banner-actions" class="session-banner-actions"></div>
@@ -701,13 +628,6 @@
             setComposerState(enabled ? "Ready for a new case" : "Choose how to continue");
         }
 
-        function syncHeroState() {
-            const heroCard = document.getElementById("hero-card");
-            const chat = document.getElementById("chat");
-            const hasChatContent = chat.childElementCount > 0;
-            heroCard.classList.toggle("hidden", hasChatContent);
-        }
-
         function createMessageRow(role, html, variant = "") {
             const row = document.createElement("div");
             row.className = `message-row ${role}`;
@@ -744,7 +664,6 @@
             const chat = document.getElementById("chat");
             const row = createMessageRow(role, html, variant);
             chat.appendChild(row);
-            syncHeroState();
             scrollChatToBottom();
             return row;
         }
@@ -768,7 +687,6 @@
                 </div>
             `;
             chat.appendChild(card);
-            syncHeroState();
             scrollChatToBottom();
         }
 
@@ -785,7 +703,6 @@
                 </div>
             `;
             chat.appendChild(card);
-            syncHeroState();
             scrollChatToBottom();
         }
 
@@ -811,7 +728,6 @@
             const existing = document.getElementById("thinking-row");
             if (!active) {
                 if (existing) existing.remove();
-                syncHeroState();
                 setStatus(chatReady ? "Ready" : "Waiting");
                 setComposerState(chatReady ? "Ready for a new case" : "Choose how to continue");
                 return;
@@ -825,7 +741,6 @@
             );
             row.id = "thinking-row";
             document.getElementById("chat").appendChild(row);
-            syncHeroState();
             scrollChatToBottom();
             setStatus("Thinking");
             setComposerState("Generating reply");
@@ -916,7 +831,6 @@
 
                 const data = await response.json();
                 document.getElementById("chat").innerHTML = "";
-                syncHeroState();
                 hideSessionBanner();
                 appendAssistantMessage(data.reply);
                 setComposerEnabled(true);
@@ -1047,7 +961,6 @@
         });
 
         autoResizeInput();
-        syncHeroState();
         bootstrapSession();
     </script>
 </body>
