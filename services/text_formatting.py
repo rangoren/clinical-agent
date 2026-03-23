@@ -53,6 +53,29 @@ def _clean_basic_lines(text):
     return cleaned_lines
 
 
+def _soften_basic_clinical_phrasing(text):
+    replacements = {
+        "Pap + HPV co-test": "Pap + HPV testing",
+        "Pap + HPV co-testing": "Pap + HPV testing",
+        "(preferred), or": "or",
+        "(preferred)": "",
+        "adequate prior negative history": "prior screening has been normal",
+        "adequate prior normal history": "prior screening has been normal",
+        "if there is an adequate history of normal results": "if prior screening has been normal",
+        "if adequate prior negative history": "if prior screening has been normal",
+        "No screening needed": "No screening",
+    }
+
+    softened = text
+    for source, target in replacements.items():
+        softened = softened.replace(source, target)
+
+    while "  " in softened:
+        softened = softened.replace("  ", " ")
+
+    return softened
+
+
 def _is_short_labeled_line(line):
     if ":" not in line:
         return False
@@ -125,7 +148,7 @@ def _format_exception_line(line):
 
 
 def format_basic_clinical_response(text):
-    text = text.strip().replace("**", "")
+    text = _soften_basic_clinical_phrasing(text.strip().replace("**", ""))
     cleaned_lines = _clean_basic_lines(text)
 
     if not cleaned_lines:
