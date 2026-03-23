@@ -1,7 +1,37 @@
 import json
+import re
 
 from llm_client import client
 from settings import ANTHROPIC_MODEL
+
+
+GREETING_TERMS = {"hi", "hello", "hey", "thanks", "thank you", "good morning", "good evening"}
+MEMORY_DIRECTIVE_PREFIXES = (
+    "remember that",
+    "save this",
+    "save that",
+    "use this",
+    "from now on",
+    "please remember",
+)
+PROTOCOL_HINTS = ("protocol", "department", "hospital", "our unit", "our practice", "local policy")
+PRINCIPLE_HINTS = ("always", "never", "when i ask", "please answer", "in replies", "respond like")
+CLINICAL_HINTS = (
+    "patient",
+    "pregnant",
+    "bleeding",
+    "bp",
+    "blood pressure",
+    "weeks",
+    "ga",
+    "fever",
+    "pain",
+    "headache",
+    "ultrasound",
+    "management",
+    "next step",
+    "differential",
+)
 
 
 def build_intent_classifier_prompt(user_message, recent_context=""):
@@ -68,7 +98,67 @@ Return only JSON in this exact shape:
 """
 
 
+def _normalize_message(user_message):
+    return re.sub(r"\s+", " ", user_message.strip().lower())
+
+
+def _is_greeting_message(cleaned_message):
+    return cleaned_message in GREETING_TERMS
+
+
+def _looks_like_clinical_consult(cleaned_message):
+    return any(hint in cleaned_message for hint in CLINICAL_HINTS) or "?" in cleaned_message
+
+
+def _detect_rule_based_intent(user_message):
+    cleaned_message = _normalize_message(user_message)
+    if not cleaned_message:
+        return {"label": "general_chat", "confidence": "high", "source": "rule"}
+
+    if _is_greeting_message(cleaned_message):
+        return {"label": "general_chat", "confidence": "high", "source": "rule"}
+
+    if cleaned_message.startswith(MEMORY_DIRECTIVE_PREFIXES):
+        if any(hint in cleaned_message for hint in PROTOCOL_HINTS):
+            return {"label": "protocol", "confidence": "high", "source": "rule"}
+        if any(hint in cleaned_message for hint in PRINCIPLE_HINTS):
+            return {"label": "principle", "confidence": "high", "source": "rule"}
+        return {"label": "knowledge", "confidence": "high", "source": "rule"}
+
+    if any(hint in cleaned_message for hint in PROTOCOL_HINTS) and any(
+        phrase in cleaned_message for phrase in ("save", "remember", "use")
+    ):
+        return {"label": "protocol", "confidence": "high", "source": "rule"}
+
+    if any(hint in cleaned_message for hint in PRINCIPLE_HINTS) and any(
+        phrase in cleaned_message for phrase in ("save", "remember", "from now on", "always")
+    ):
+        return {"label": "principle", "confidence": "medium", "source": "rule"}
+
+    if _looks_like_clinical_consult(cleaned_message):
+        return {"label": "clinical_consult", "confidence": "medium", "source": "rule"}
+
+    return None
+
+
+def _apply_post_classification_guards(user_message, parsed_result):
+    cleaned_message = _normalize_message(user_message)
+    if parsed_result["label"] in {"protocol", "principle", "knowledge"}:
+        explicit_memory_intent = any(prefix in cleaned_message for prefix in MEMORY_DIRECTIVE_PREFIXES) or "save" in cleaned_message
+        if not explicit_memory_intent:
+            return {"label": "clinical_consult" if _looks_like_clinical_consult(cleaned_message) else "general_chat", "confidence": "medium", "source": "guard"}
+
+    if parsed_result["label"] == "general_chat" and _looks_like_clinical_consult(cleaned_message):
+        return {"label": "clinical_consult", "confidence": "medium", "source": "guard"}
+
+    return parsed_result
+
+
 def classify_message_intent(user_message, chat_history):
+    rule_based = _detect_rule_based_intent(user_message)
+    if rule_based and rule_based["confidence"] == "high":
+        return rule_based
+
     recent_context_items = chat_history[-4:] if chat_history else []
     recent_context = "\n".join(f"{item['role']}: {item['content']}" for item in recent_context_items)
     prompt = build_intent_classifier_prompt(user_message=user_message, recent_context=recent_context)
@@ -81,7 +171,9 @@ def classify_message_intent(user_message, chat_history):
         )
         parsed = json.loads(response.content[0].text.strip())
     except Exception:
-        return {"label": "general_chat", "confidence": "low"}
+        if rule_based:
+            return rule_based
+        return {"label": "general_chat", "confidence": "low", "source": "fallback"}
 
     allowed_labels = {"clinical_consult", "general_chat", "principle", "knowledge", "protocol"}
     allowed_confidence = {"high", "medium", "low"}
@@ -89,6 +181,12 @@ def classify_message_intent(user_message, chat_history):
     label = parsed.get("label")
     confidence = parsed.get("confidence")
     if label not in allowed_labels or confidence not in allowed_confidence:
-        return {"label": "general_chat", "confidence": "low"}
+        if rule_based:
+            return rule_based
+        return {"label": "general_chat", "confidence": "low", "source": "fallback"}
 
-    return {"label": label, "confidence": confidence}
+    result = {"label": label, "confidence": confidence, "source": "llm"}
+    if rule_based and rule_based["label"] == "clinical_consult" and result["label"] != "clinical_consult":
+        result = {"label": "clinical_consult", "confidence": "medium", "source": "rule_override"}
+
+    return _apply_post_classification_guards(user_message, result)

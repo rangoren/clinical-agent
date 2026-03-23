@@ -1,4 +1,5 @@
 from services.chat_service import get_message_by_id, save_feedback_log
+from services.logging_service import log_event
 from services.memory_service import (
     decrease_knowledge_weight,
     decrease_protocol_weight,
@@ -21,6 +22,15 @@ def apply_feedback(message_id, direction):
         direction=direction,
         used_knowledge=used_knowledge,
         used_protocols=used_protocols,
+    )
+    log_event(
+        "feedback_applied",
+        payload={
+            "message_id": str(message_id),
+            "direction": direction,
+            "knowledge_count": len(used_knowledge),
+            "protocol_count": len(used_protocols),
+        },
     )
 
     if direction == "up":

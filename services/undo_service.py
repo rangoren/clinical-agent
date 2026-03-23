@@ -1,4 +1,5 @@
 from services.memory_service import delete_last_knowledge, delete_last_principle, delete_last_protocol
+from services.logging_service import log_event
 
 
 _last_saved_items_by_session = {}
@@ -30,16 +31,19 @@ def undo_last_saved(session_id):
     if item_type == "protocol":
         delete_last_protocol(text)
         clear_last_saved(session_id)
+        log_event("undo_applied", session_id, {"item_type": item_type})
         return "undone protocol"
 
     if item_type == "knowledge":
         delete_last_knowledge(text)
         clear_last_saved(session_id)
+        log_event("undo_applied", session_id, {"item_type": item_type})
         return "undone knowledge"
 
     if item_type == "principle":
         delete_last_principle(text)
         clear_last_saved(session_id)
+        log_event("undo_applied", session_id, {"item_type": item_type})
         return "undone principle"
 
     clear_last_saved(session_id)

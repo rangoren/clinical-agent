@@ -1,5 +1,6 @@
 from services.chat_service import delete_messages_for_session, load_chat, save_message
 from services.intent_service import classify_message_intent
+from services.logging_service import log_event
 from services.memory_service import (
     get_relevant_knowledge,
     get_relevant_protocols,
@@ -17,9 +18,11 @@ from services.profile_service import (
     activate_chat_mode,
     build_onboarding_intro,
     build_onboarding_question,
+    delete_user_profile,
     get_user_profile,
     handle_onboarding_step,
     start_onboarding,
+    touch_user_profile,
 )
 from services.prompt_service import build_clinical_system_prompt, build_general_system_prompt
 from services.response_service import generate_reply
@@ -40,6 +43,7 @@ def _build_message_response(reply, undo=False, undo_type=None, show_feedback=Fal
 
 def _handle_new_user_onboarding(session_id):
     start_onboarding(session_id)
+    log_event("session_started", session_id, {"mode": "onboarding"})
     onboarding_intro = build_onboarding_intro()
     assistant_message_id = save_message(
         "assistant",
@@ -55,8 +59,18 @@ def _handle_new_user_onboarding(session_id):
 
 
 def _handle_onboarding_message(session_id, user_profile, user_message):
+    touch_user_profile(session_id)
     save_message("user", user_message, session_id, metadata={"intent": "onboarding_answer"})
     onboarding_result = handle_onboarding_step(session_id, user_profile, user_message)
+    log_event(
+        "onboarding_step_processed",
+        session_id,
+        {
+            "step": user_profile.get("onboarding_step"),
+            "intent": onboarding_result["intent"],
+            "completed": onboarding_result["completed"],
+        },
+    )
     assistant_message_id = save_message(
         "assistant",
         onboarding_result["reply"],
@@ -77,6 +91,7 @@ def get_session_state(session_id):
     user_profile = get_user_profile(session_id)
     if not user_profile:
         start_onboarding(session_id)
+        log_event("session_bootstrap", session_id, {"state": "new_onboarding"})
         onboarding_intro = build_onboarding_intro()
         assistant_message_id = save_message(
             "assistant",
@@ -92,12 +107,16 @@ def get_session_state(session_id):
         }
 
     if not user_profile.get("onboarding_done"):
+        touch_user_profile(session_id)
+        log_event("session_bootstrap", session_id, {"state": "incomplete_onboarding", "step": user_profile.get("onboarding_step")})
         return {
             "state": "incomplete_onboarding",
             "onboarding_step": user_profile.get("onboarding_step") or "country",
             "needs_onboarding": True,
         }
 
+    touch_user_profile(session_id)
+    log_event("session_bootstrap", session_id, {"state": "ready"})
     return {"state": "ready", "needs_onboarding": False}
 
 
@@ -112,6 +131,7 @@ def continue_onboarding(session_id):
     if user_profile.get("onboarding_done"):
         return _build_message_response(reply="Chat mode is already active.")
 
+    touch_user_profile(session_id)
     reply = (
         "You didn’t finish onboarding last time.<br><br>"
         "Let’s continue from where we stopped.<br><br>"
@@ -137,6 +157,7 @@ def start_clean_chat_mode(session_id):
     delete_messages_for_session(session_id)
     clear_last_saved(session_id)
     activate_chat_mode(session_id)
+    log_event("chat_mode_started", session_id, {"reset_messages": True})
     reply = "Clean chat mode is active. Ask any question."
     assistant_message_id = save_message(
         "assistant",
@@ -149,6 +170,17 @@ def start_clean_chat_mode(session_id):
         assistant_message_id=assistant_message_id,
         needs_onboarding=False,
     )
+
+
+def reset_session(session_id):
+    if not session_id:
+        return {"reply": "Missing session_id."}
+
+    delete_messages_for_session(session_id)
+    clear_last_saved(session_id)
+    delete_user_profile(session_id)
+    log_event("session_reset", session_id)
+    return _handle_new_user_onboarding(session_id)
 
 
 def _handle_memory_save(intent, user_message, session_id, principles, knowledge_items, protocol_items):
@@ -182,6 +214,7 @@ def _handle_memory_save(intent, user_message, session_id, principles, knowledge_
 
     save_message("user", user_message, session_id)
     save_message("assistant", reply, session_id)
+    log_event("memory_saved", session_id, {"intent": intent, "undo_enabled": undo})
     return _build_message_response(
         reply=reply,
         undo=undo,
@@ -203,6 +236,7 @@ def process_message(user_message, session_id):
     if not user_profile.get("onboarding_done"):
         return _handle_onboarding_message(session_id, user_profile, user_message)
 
+    touch_user_profile(session_id)
     chat_history = load_chat(session_id)
     principles = load_principles()
     knowledge_items = load_knowledge()
@@ -213,6 +247,15 @@ def process_message(user_message, session_id):
     classifier_result = classify_message_intent(user_message, chat_history)
     intent = classifier_result["label"]
     confidence = classifier_result["confidence"]
+    log_event(
+        "intent_classified",
+        session_id,
+        {
+            "intent": intent,
+            "confidence": confidence,
+            "source": classifier_result.get("source", "unknown"),
+        },
+    )
 
     if intent in {"protocol", "principle", "knowledge"} and confidence == "high":
         return _handle_memory_save(
@@ -237,6 +280,15 @@ def process_message(user_message, session_id):
     else:
         system_prompt = build_general_system_prompt(user_profile)
 
+    log_event(
+        "memory_retrieved",
+        session_id,
+        {
+            "knowledge_count": len(relevant_knowledge),
+            "protocol_count": len(relevant_protocols),
+            "intent": intent,
+        },
+    )
     reply = generate_reply(
         system_prompt=system_prompt,
         chat_history=chat_history,
@@ -256,6 +308,16 @@ def process_message(user_message, session_id):
             "used_protocols": relevant_protocols,
             "intent": intent,
             "confidence": confidence,
+        },
+    )
+    log_event(
+        "response_generated",
+        session_id,
+        {
+            "intent": intent,
+            "confidence": confidence,
+            "reply_length": len(reply),
+            "feedback_enabled": intent == "clinical_consult" and len(reply) > 80,
         },
     )
 

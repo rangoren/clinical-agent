@@ -61,6 +61,7 @@ def create_user_profile(session_id, profile_data):
         "onboarding_step": profile_data.get("onboarding_step"),
         "onboarding_done": profile_data.get("onboarding_done", False),
         "chat_mode": profile_data.get("chat_mode", False),
+        "last_active_at": now,
         "created_at": now,
         "updated_at": now,
     }
@@ -70,8 +71,24 @@ def create_user_profile(session_id, profile_data):
 
 def update_user_profile(session_id, updates):
     payload = dict(updates)
-    payload["updated_at"] = datetime.utcnow()
+    now = datetime.utcnow()
+    payload["updated_at"] = now
+    payload["last_active_at"] = now
     user_profiles_collection.update_one({"session_id": session_id}, {"$set": payload})
+
+
+def touch_user_profile(session_id):
+    if not session_id:
+        return
+    now = datetime.utcnow()
+    user_profiles_collection.update_one(
+        {"session_id": session_id},
+        {"$set": {"last_active_at": now, "updated_at": now}},
+    )
+
+
+def delete_user_profile(session_id):
+    user_profiles_collection.delete_one({"session_id": session_id})
 
 
 def normalize_training_stage(value):
@@ -133,11 +150,29 @@ def is_onboarding_greeting(value):
 
 
 def start_onboarding(session_id):
+    existing_profile = get_user_profile(session_id)
+    if existing_profile:
+        update_user_profile(
+            session_id,
+            {
+                "country": None,
+                "training_stage": None,
+                "residency_year": None,
+                "subspecialty": None,
+                "answer_style": None,
+                "onboarding_step": "country",
+                "onboarding_done": False,
+                "chat_mode": False,
+            },
+        )
+        return
+
     create_user_profile(
         session_id,
         {
             "onboarding_step": "country",
             "onboarding_done": False,
+            "chat_mode": False,
         },
     )
 
