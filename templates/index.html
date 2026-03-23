@@ -146,6 +146,25 @@
             font-weight: 600;
         }
 
+        .topbar-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .version-stamp {
+            flex-shrink: 0;
+            padding: 10px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+
         .content {
             position: relative;
             z-index: 1;
@@ -764,6 +783,15 @@
             .status-pill {
                 display: none;
             }
+
+            .topbar-meta {
+                gap: 0;
+            }
+
+            .version-stamp {
+                padding: 6px 8px;
+                font-size: 0.68rem;
+            }
         }
     </style>
 </head>
@@ -777,7 +805,10 @@
                     <p class="brand-subtitle">A focused clinical study and decision-support assistant for OB-GYN.</p>
                 </div>
             </div>
-            <div id="status-pill" class="status-pill">Connecting</div>
+            <div class="topbar-meta">
+                <div class="version-stamp">{{ app_version }}</div>
+                <div id="status-pill" class="status-pill">Connecting</div>
+            </div>
         </header>
 
         <section class="content">
