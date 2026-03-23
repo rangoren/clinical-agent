@@ -1,35 +1,943 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clinical Assistant</title>
+    <style>
+        :root {
+            --bg: #eef3f1;
+            --bg-accent: #dce8e2;
+            --surface: rgba(255, 255, 255, 0.84);
+            --surface-strong: #ffffff;
+            --surface-soft: #f5f8f7;
+            --line: rgba(29, 58, 52, 0.12);
+            --line-strong: rgba(29, 58, 52, 0.2);
+            --text: #142521;
+            --muted: #617570;
+            --brand: #0f766e;
+            --brand-strong: #0b5f59;
+            --brand-soft: #d8f1ec;
+            --assistant: #f8fbfa;
+            --user: linear-gradient(135deg, #0f766e 0%, #136f63 100%);
+            --warning: #fff3d8;
+            --warning-line: #f3d08b;
+            --danger: #b42318;
+            --danger-soft: #fdecec;
+            --success-soft: #e7f6ef;
+            --shadow: 0 22px 60px rgba(20, 37, 33, 0.12);
+            --radius-xl: 28px;
+            --radius-lg: 22px;
+            --radius-md: 18px;
+            --radius-sm: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            min-height: 100%;
+            font-family: "SF Pro Display", "SF Pro Text", "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 28rem),
+                radial-gradient(circle at top right, rgba(57, 116, 96, 0.12), transparent 24rem),
+                linear-gradient(180deg, var(--bg) 0%, #f7faf9 100%);
+            color: var(--text);
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            padding: 14px;
+        }
+
+        .app-shell {
+            width: min(100%, 980px);
+            min-height: calc(100vh - 28px);
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            border: 1px solid rgba(255, 255, 255, 0.65);
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(24px);
+            box-shadow: var(--shadow);
+            border-radius: 32px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .app-shell::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(120deg, rgba(255, 255, 255, 0.28), transparent 32%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 26%);
+            pointer-events: none;
+        }
+
+        .topbar {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 18px 18px 14px;
+            border-bottom: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.54));
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .brand-badge {
+            width: 44px;
+            height: 44px;
+            border-radius: 15px;
+            background:
+                radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), transparent 34%),
+                linear-gradient(135deg, #0f766e 0%, #0a5c56 100%);
+            color: white;
+            display: grid;
+            place-items: center;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.22);
+        }
+
+        .brand-text {
+            min-width: 0;
+        }
+
+        .eyebrow {
+            margin: 0 0 4px;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: var(--brand);
+            font-weight: 700;
+        }
+
+        .brand-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .brand-subtitle {
+            margin: 2px 0 0;
+            color: var(--muted);
+            font-size: 0.84rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .status-pill {
+            flex-shrink: 0;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .content {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            padding: 14px;
+            gap: 12px;
+        }
+
+        .hero-card {
+            border-radius: var(--radius-lg);
+            padding: 16px 16px 14px;
+            background:
+                linear-gradient(135deg, rgba(216, 241, 236, 0.92), rgba(255, 255, 255, 0.92)),
+                var(--surface);
+            border: 1px solid rgba(15, 118, 110, 0.12);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: opacity 180ms ease, transform 180ms ease, max-height 180ms ease, margin 180ms ease, padding 180ms ease;
+            overflow: hidden;
+            max-height: 240px;
+        }
+
+        .hero-card.hidden {
+            opacity: 0;
+            transform: translateY(-6px);
+            max-height: 0;
+            margin: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            border-width: 0;
+        }
+
+        .hero-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .hero-copy {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.5;
+            font-size: 0.92rem;
+        }
+
+        .hero-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(15, 118, 110, 0.12);
+            color: var(--brand-strong);
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .session-banner {
+            display: none;
+            border-radius: var(--radius-md);
+            padding: 16px;
+            background: var(--warning);
+            border: 1px solid var(--warning-line);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        }
+
+        .session-banner p {
+            margin: 0;
+            color: #745108;
+            font-size: 0.94rem;
+            line-height: 1.45;
+        }
+
+        .session-banner-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .chat-panel {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 6px 4px 18px;
+            scroll-behavior: smooth;
+        }
+
+        .chat-panel::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .chat-panel::-webkit-scrollbar-thumb {
+            background: rgba(20, 37, 33, 0.14);
+            border-radius: 999px;
+        }
+
+        .message-row {
+            display: flex;
+            margin-bottom: 14px;
+        }
+
+        .message-row.assistant {
+            justify-content: flex-start;
+        }
+
+        .message-row.user {
+            justify-content: flex-end;
+        }
+
+        .message-stack {
+            max-width: min(100%, 760px);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            animation: riseIn 180ms ease-out;
+        }
+
+        .message-frame {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+        }
+
+        .message-row.user .message-frame {
+            flex-direction: row-reverse;
+        }
+
+        .avatar {
+            width: 34px;
+            height: 34px;
+            flex-shrink: 0;
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            font-size: 0.84rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            border: 1px solid var(--line);
+            color: var(--brand-strong);
+            background: rgba(255, 255, 255, 0.94);
+        }
+
+        .assistant-avatar {
+            background: linear-gradient(135deg, #e6f6f2 0%, #ffffff 100%);
+        }
+
+        .user-avatar {
+            background: linear-gradient(135deg, rgba(15, 118, 110, 0.18) 0%, rgba(255, 255, 255, 0.96) 100%);
+        }
+
+        .message-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 0 6px;
+        }
+
+        .message-row.user .message-label {
+            text-align: right;
+        }
+
+        .bubble {
+            border-radius: 24px;
+            padding: 14px 15px;
+            line-height: 1.55;
+            font-size: 0.96rem;
+            word-break: break-word;
+            border: 1px solid var(--line);
+            background: var(--assistant);
+            color: var(--text);
+        }
+
+        .bubble p {
+            margin: 0;
+        }
+
+        .bubble p + p {
+            margin-top: 12px;
+        }
+
+        .bubble strong,
+        .bubble b {
+            font-weight: 700;
+        }
+
+        .message-row.user .bubble {
+            background: var(--user);
+            border-color: transparent;
+            color: white;
+            border-bottom-right-radius: 10px;
+            box-shadow: 0 16px 32px rgba(15, 118, 110, 0.18);
+        }
+
+        .message-row.assistant .bubble {
+            background: rgba(255, 255, 255, 0.88);
+            border-bottom-left-radius: 10px;
+        }
+
+        .bubble.system {
+            background: var(--surface-soft);
+        }
+
+        .bubble.error {
+            background: var(--danger-soft);
+            color: var(--danger);
+            border-color: rgba(180, 35, 24, 0.18);
+        }
+
+        .bubble.thinking {
+            min-width: 112px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .thinking-dots {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .thinking-dots span {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(15, 118, 110, 0.72);
+            animation: pulseDot 1s infinite ease-in-out;
+        }
+
+        .thinking-dots span:nth-child(2) {
+            animation-delay: 120ms;
+        }
+
+        .thinking-dots span:nth-child(3) {
+            animation-delay: 240ms;
+        }
+
+        .utility-card,
+        .feedback-card {
+            align-self: flex-start;
+            max-width: min(100%, 760px);
+            border-radius: 18px;
+            padding: 12px 14px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.78);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            animation: riseIn 180ms ease-out;
+        }
+
+        .utility-card {
+            background: var(--success-soft);
+            border-color: rgba(16, 129, 88, 0.15);
+        }
+
+        .utility-text,
+        .feedback-text {
+            margin: 0;
+            font-size: 0.9rem;
+            color: var(--text);
+        }
+
+        .feedback-actions,
+        .utility-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .composer-shell {
+            position: relative;
+            z-index: 1;
+            padding: 12px 14px 14px;
+            background: linear-gradient(180deg, rgba(247, 250, 249, 0), rgba(247, 250, 249, 0.96) 34%);
+        }
+
+        .composer-card {
+            border-radius: 26px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: 0 16px 36px rgba(20, 37, 33, 0.08);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .composer-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            padding: 2px 6px 0;
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+
+        .composer-main {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+        }
+
+        .composer-input {
+            flex: 1;
+            resize: none;
+            border: none;
+            outline: none;
+            background: transparent;
+            color: var(--text);
+            font: inherit;
+            font-size: 0.98rem;
+            line-height: 1.45;
+            min-height: 54px;
+            max-height: 180px;
+            padding: 10px 10px 8px;
+        }
+
+        .composer-input::placeholder {
+            color: #92a39f;
+        }
+
+        .primary-button,
+        .secondary-button,
+        .ghost-button,
+        .small-button {
+            border: none;
+            outline: none;
+            cursor: pointer;
+            transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease, opacity 120ms ease;
+            font: inherit;
+        }
+
+        .primary-button:active,
+        .secondary-button:active,
+        .ghost-button:active,
+        .small-button:active {
+            transform: translateY(1px);
+        }
+
+        .primary-button {
+            border-radius: 18px;
+            padding: 14px 16px;
+            min-width: 64px;
+            background: var(--user);
+            color: white;
+            font-weight: 700;
+            box-shadow: 0 12px 28px rgba(15, 118, 110, 0.24);
+        }
+
+        .primary-button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .secondary-button,
+        .ghost-button,
+        .small-button {
+            border-radius: 14px;
+            padding: 10px 13px;
+            font-size: 0.88rem;
+            font-weight: 600;
+        }
+
+        .secondary-button {
+            background: white;
+            color: var(--brand-strong);
+            border: 1px solid rgba(15, 118, 110, 0.16);
+        }
+
+        .ghost-button {
+            background: rgba(255, 255, 255, 0.65);
+            color: var(--text);
+            border: 1px solid var(--line);
+        }
+
+        .small-button {
+            background: rgba(255, 255, 255, 0.92);
+            color: var(--text);
+            border: 1px solid var(--line);
+        }
+
+        .small-button.selected-up {
+            background: #dff5ea;
+            border-color: #85d5ae;
+            color: #0f6b47;
+        }
+
+        .small-button.selected-down {
+            background: #fdeaea;
+            border-color: #f0a8a8;
+            color: #a23232;
+        }
+
+        @keyframes riseIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulseDot {
+            0%, 80%, 100% {
+                transform: translateY(0);
+                opacity: 0.35;
+            }
+            40% {
+                transform: translateY(-4px);
+                opacity: 1;
+            }
+        }
+
+        @media (min-width: 820px) {
+            body {
+                padding: 24px;
+            }
+
+            .app-shell {
+                min-height: calc(100vh - 48px);
+            }
+
+            .topbar {
+                padding: 22px 24px 18px;
+            }
+
+            .content {
+                padding: 18px 20px;
+            }
+
+            .hero-card {
+                padding: 18px 20px 16px;
+            }
+
+            .chat-panel {
+                padding: 10px 10px 26px;
+            }
+
+            .composer-shell {
+                padding: 14px 20px 18px;
+            }
+        }
+    </style>
 </head>
-<body style="font-family: Arial; max-width: 700px; margin: auto; padding: 20px;">
-    <h2>Clinical Assistant</h2>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-badge">CA</div>
+                <div class="brand-text">
+                    <p class="eyebrow">Clinical Reasoning</p>
+                    <h1 class="brand-title">Clinical Assistant</h1>
+                    <p class="brand-subtitle">Fast OB-GYN support with a calmer clinical workflow.</p>
+                </div>
+            </div>
+            <div id="status-pill" class="status-pill">Connecting</div>
+        </header>
 
-    <div id="chat" style="border:1px solid #ccc; padding:10px; height:400px; overflow-y:auto; margin-bottom:10px;">
-    </div>
+        <section class="content">
+            <div id="hero-card" class="hero-card">
+                <h2 class="hero-title">Focused guidance, without the clutter.</h2>
+                <p class="hero-copy">
+                    Built for quick case thinking on mobile, but still comfortable on desktop when you need to slow down and review.
+                </p>
+                <div class="hero-chips">
+                    <span class="chip">Mobile-first</span>
+                    <span class="chip">Structured replies</span>
+                    <span class="chip">Session-aware</span>
+                </div>
+            </div>
 
-    <input id="input" style="width:80%; padding:10px;" placeholder="Type your message..." />
-    <button onclick="sendMessage()">Send</button>
+            <div id="session-banner" class="session-banner">
+                <p id="session-banner-text"></p>
+                <div id="session-banner-actions" class="session-banner-actions"></div>
+            </div>
+
+            <section id="chat" class="chat-panel" aria-live="polite"></section>
+        </section>
+
+        <footer class="composer-shell">
+            <div class="composer-card">
+                <div class="composer-meta">
+                    <span id="composer-state">Ready for a new case</span>
+                    <span>Enter to send</span>
+                </div>
+                <div class="composer-main">
+                    <textarea id="input" class="composer-input" placeholder="Type your message..." rows="1"></textarea>
+                    <button id="send-button" class="primary-button" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </footer>
+    </main>
 
     <script>
         let sessionId = localStorage.getItem("session_id");
+        let chatReady = false;
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
             localStorage.setItem("session_id", sessionId);
         }
 
-        async function sendMessage() {
+        function autoResizeInput() {
             const input = document.getElementById("input");
-            const chat = document.getElementById("chat");
+            input.style.height = "auto";
+            input.style.height = Math.min(input.scrollHeight, 180) + "px";
+        }
 
+        function scrollChatToBottom() {
+            const chat = document.getElementById("chat");
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function setStatus(text) {
+            document.getElementById("status-pill").textContent = text;
+        }
+
+        function setComposerState(text) {
+            document.getElementById("composer-state").textContent = text;
+        }
+
+        function setComposerEnabled(enabled) {
+            const input = document.getElementById("input");
+            const sendButton = document.getElementById("send-button");
+            input.disabled = !enabled;
+            sendButton.disabled = !enabled;
+            chatReady = enabled;
+            setStatus(enabled ? "Ready" : "Waiting");
+            setComposerState(enabled ? "Ready for a new case" : "Choose how to continue");
+        }
+
+        function syncHeroState() {
+            const heroCard = document.getElementById("hero-card");
+            const chat = document.getElementById("chat");
+            const hasChatContent = chat.childElementCount > 0;
+            heroCard.classList.toggle("hidden", hasChatContent);
+        }
+
+        function createMessageRow(role, html, variant = "") {
+            const row = document.createElement("div");
+            row.className = `message-row ${role}`;
+
+            const stack = document.createElement("div");
+            stack.className = "message-stack";
+
+            const label = document.createElement("div");
+            label.className = "message-label";
+            label.textContent = role === "user" ? "You" : "Assistant";
+
+            const bubble = document.createElement("div");
+            bubble.className = "bubble" + (variant ? ` ${variant}` : "");
+            bubble.innerHTML = html;
+
+            const frame = document.createElement("div");
+            frame.className = "message-frame";
+
+            const avatar = document.createElement("div");
+            avatar.className = `avatar ${role === "user" ? "user-avatar" : "assistant-avatar"}`;
+            avatar.textContent = role === "user" ? "You" : "AI";
+
+            frame.appendChild(avatar);
+            frame.appendChild(bubble);
+
+            stack.appendChild(label);
+            stack.appendChild(frame);
+            row.appendChild(stack);
+            return row;
+        }
+
+        function appendMessage(role, html, variant = "") {
+            if (!html) return null;
+            const chat = document.getElementById("chat");
+            const row = createMessageRow(role, html, variant);
+            chat.appendChild(row);
+            syncHeroState();
+            scrollChatToBottom();
+            return row;
+        }
+
+        function appendAssistantMessage(message, variant = "") {
+            return appendMessage("assistant", message, variant);
+        }
+
+        function appendUserMessage(message) {
+            return appendMessage("user", escapeHtml(message));
+        }
+
+        function appendUtilityCard(text, undoType) {
+            const chat = document.getElementById("chat");
+            const card = document.createElement("div");
+            card.className = "utility-card";
+            card.innerHTML = `
+                <p class="utility-text">${text}</p>
+                <div class="utility-actions">
+                    <button class="secondary-button" onclick="undoSavedItem()">${undoType ? "Undo" : "Dismiss"}</button>
+                </div>
+            `;
+            chat.appendChild(card);
+            syncHeroState();
+            scrollChatToBottom();
+        }
+
+        function appendFeedbackCard(messageId) {
+            const chat = document.getElementById("chat");
+            const card = document.createElement("div");
+            card.className = "feedback-card";
+            card.id = `feedback-${messageId}`;
+            card.innerHTML = `
+                <p class="feedback-text">Was this reply useful?</p>
+                <div class="feedback-actions">
+                    <button id="up-${messageId}" class="small-button" onclick="sendFeedback('${messageId}', 'up')">Useful</button>
+                    <button id="down-${messageId}" class="small-button" onclick="sendFeedback('${messageId}', 'down')">Off</button>
+                </div>
+            `;
+            chat.appendChild(card);
+            syncHeroState();
+            scrollChatToBottom();
+        }
+
+        function escapeHtml(value) {
+            const div = document.createElement("div");
+            div.textContent = value;
+            return div.innerHTML;
+        }
+
+        function hideSessionBanner() {
+            document.getElementById("session-banner").style.display = "none";
+            document.getElementById("session-banner-text").textContent = "";
+            document.getElementById("session-banner-actions").innerHTML = "";
+        }
+
+        function showSessionBanner(text, actionsHtml) {
+            document.getElementById("session-banner-text").textContent = text;
+            document.getElementById("session-banner-actions").innerHTML = actionsHtml;
+            document.getElementById("session-banner").style.display = "block";
+        }
+
+        function setThinkingState(active) {
+            const existing = document.getElementById("thinking-row");
+            if (!active) {
+                if (existing) existing.remove();
+                syncHeroState();
+                setStatus(chatReady ? "Ready" : "Waiting");
+                setComposerState(chatReady ? "Ready for a new case" : "Choose how to continue");
+                return;
+            }
+
+            if (existing) return;
+            const row = createMessageRow(
+                "assistant",
+                `<div class="thinking-dots"><span></span><span></span><span></span></div><span>Thinking</span>`,
+                "system thinking"
+            );
+            row.id = "thinking-row";
+            document.getElementById("chat").appendChild(row);
+            syncHeroState();
+            scrollChatToBottom();
+            setStatus("Thinking");
+            setComposerState("Generating reply");
+        }
+
+        async function bootstrapSession() {
+            setComposerEnabled(false);
+            setStatus("Checking");
+
+            try {
+                const response = await fetch("/session-state", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.state === "new_onboarding") {
+                    appendAssistantMessage(data.reply);
+                    hideSessionBanner();
+                    setComposerEnabled(true);
+                    return;
+                }
+
+                if (data.state === "incomplete_onboarding") {
+                    showSessionBanner(
+                        "You didn’t finish onboarding last time.",
+                        `
+                            <button class="secondary-button" onclick="continueOnboarding()">Continue onboarding</button>
+                            <button class="ghost-button" onclick="startChatMode()">Chat mode</button>
+                        `
+                    );
+                    return;
+                }
+
+                hideSessionBanner();
+                setComposerEnabled(true);
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+                setComposerEnabled(true);
+                setStatus("Error");
+            }
+        }
+
+        async function continueOnboarding() {
+            setStatus("Resuming");
+
+            try {
+                const response = await fetch("/continue-onboarding", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+                hideSessionBanner();
+                appendAssistantMessage(data.reply);
+                setComposerEnabled(true);
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+                setComposerEnabled(true);
+                setStatus("Error");
+            }
+        }
+
+        async function startChatMode() {
+            setStatus("Resetting");
+
+            try {
+                const response = await fetch("/chat-mode", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+                document.getElementById("chat").innerHTML = "";
+                syncHeroState();
+                hideSessionBanner();
+                appendAssistantMessage(data.reply);
+                setComposerEnabled(true);
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+                setComposerEnabled(true);
+                setStatus("Error");
+            }
+        }
+
+        async function sendMessage() {
+            if (!chatReady) return;
+
+            const input = document.getElementById("input");
             const message = input.value.trim();
             if (!message) return;
 
-            chat.innerHTML += "<p><b>You:</b> " + message + "</p>";
+            appendUserMessage(message);
             input.value = "";
-            chat.innerHTML += "<p id='thinking'><b>Assistant:</b> Thinking...</p>";
-            chat.scrollTop = chat.scrollHeight;
+            autoResizeInput();
+            setThinkingState(true);
 
             try {
                 const response = await fetch("/message", {
@@ -45,78 +953,60 @@
 
                 const data = await response.json();
 
-                const thinking = document.getElementById("thinking");
-                if (thinking) thinking.remove();
-
-                chat.innerHTML += "<p><b>Assistant:</b> " + data.reply + "</p>";
+                setThinkingState(false);
+                appendAssistantMessage(data.reply);
 
                 if (data.undo) {
                     const label = data.undo_type === "protocol"
-                        ? "Saved as protocol"
+                        ? "Saved as protocol."
                         : data.undo_type === "knowledge"
-                        ? "Saved in knowledge"
-                        : "Saved for future responses";
+                        ? "Saved in knowledge."
+                        : "Saved for future responses.";
 
-                    chat.innerHTML += `
-                        <p style="color:green;">
-                            ${label}
-                            <button onclick="undoSavedItem()">Undo</button>
-                        </p>
-                    `;
+                    appendUtilityCard(label, data.undo_type);
                 }
 
                 if (data.show_feedback && data.assistant_message_id) {
-                    chat.innerHTML += `
-                        <div id="feedback-${data.assistant_message_id}" style="margin-top:6px;">
-                            <button id="up-${data.assistant_message_id}" onclick="sendFeedback('${data.assistant_message_id}', 'up')">👍 Useful</button>
-                            <button id="down-${data.assistant_message_id}" onclick="sendFeedback('${data.assistant_message_id}', 'down')">👎 Off</button>
-                        </div>
-                    `;
+                    appendFeedbackCard(data.assistant_message_id);
                 }
-
-                chat.scrollTop = chat.scrollHeight;
-
             } catch (error) {
-                const thinking = document.getElementById("thinking");
-                if (thinking) thinking.remove();
-
-                chat.innerHTML += "<p style='color:red;'><b>Error:</b> " + error + "</p>";
-                chat.scrollTop = chat.scrollHeight;
+                setThinkingState(false);
+                appendAssistantMessage("Error: " + error, "error");
+                setStatus("Error");
             }
         }
 
         async function undoSavedItem() {
-            const chat = document.getElementById("chat");
-
             try {
                 const response = await fetch("/undo", {
-                    method: "POST"
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
                 });
 
                 const data = await response.json();
 
                 if (data.status === "undone protocol") {
-                    chat.innerHTML += "<p style='color:orange;'><b>Assistant:</b> Last saved protocol removed.</p>";
+                    appendAssistantMessage("Last saved protocol removed.", "system");
                 } else if (data.status === "undone knowledge") {
-                    chat.innerHTML += "<p style='color:orange;'><b>Assistant:</b> Last saved knowledge item removed.</p>";
+                    appendAssistantMessage("Last saved knowledge item removed.", "system");
                 } else if (data.status === "undone principle") {
-                    chat.innerHTML += "<p style='color:orange;'><b>Assistant:</b> Last saved principle removed.</p>";
+                    appendAssistantMessage("Last saved principle removed.", "system");
                 } else if (data.status === "nothing to undo") {
-                    chat.innerHTML += "<p style='color:orange;'><b>Assistant:</b> Nothing to undo.</p>";
+                    appendAssistantMessage("Nothing to undo.", "system");
                 } else {
-                    chat.innerHTML += "<p style='color:red;'><b>Error:</b> " + data.status + "</p>";
+                    appendAssistantMessage("Error: " + data.status, "error");
                 }
-
-                chat.scrollTop = chat.scrollHeight;
-
             } catch (error) {
-                chat.innerHTML += "<p style='color:red;'><b>Error:</b> " + error + "</p>";
-                chat.scrollTop = chat.scrollHeight;
+                appendAssistantMessage("Error: " + error, "error");
             }
         }
 
         async function sendFeedback(messageId, direction) {
-            const chat = document.getElementById("chat");
             const upBtn = document.getElementById(`up-${messageId}`);
             const downBtn = document.getElementById(`down-${messageId}`);
 
@@ -135,34 +1025,30 @@
                 const data = await response.json();
 
                 if (data.status === "marked useful") {
-                    upBtn.style.backgroundColor = "#d1fae5";
-                    upBtn.style.border = "1px solid #10b981";
-                    upBtn.style.fontWeight = "bold";
+                    upBtn.classList.add("selected-up");
                     downBtn.disabled = true;
-                    downBtn.style.opacity = "0.5";
                 } else if (data.status === "marked off") {
-                    downBtn.style.backgroundColor = "#fee2e2";
-                    downBtn.style.border = "1px solid #ef4444";
-                    downBtn.style.fontWeight = "bold";
+                    downBtn.classList.add("selected-down");
                     upBtn.disabled = true;
-                    upBtn.style.opacity = "0.5";
                 } else {
-                    chat.innerHTML += "<p style='color:red;'><b>Error:</b> " + data.status + "</p>";
+                    appendAssistantMessage("Error: " + data.status, "error");
                 }
-
-                chat.scrollTop = chat.scrollHeight;
-
             } catch (error) {
-                chat.innerHTML += "<p style='color:red;'><b>Error:</b> " + error + "</p>";
-                chat.scrollTop = chat.scrollHeight;
+                appendAssistantMessage("Error: " + error, "error");
             }
         }
 
-        document.getElementById("input").addEventListener("keypress", function(e) {
-            if (e.key === "Enter") {
+        document.getElementById("input").addEventListener("input", autoResizeInput);
+        document.getElementById("input").addEventListener("keypress", function(event) {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
                 sendMessage();
             }
         });
+
+        autoResizeInput();
+        syncHeroState();
+        bootstrapSession();
     </script>
 </body>
 </html>
