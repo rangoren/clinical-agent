@@ -20,10 +20,16 @@ from services.profile_service import (
     build_onboarding_intro,
     build_onboarding_question,
     delete_user_profile,
+    extract_profile_updates_from_message,
+    finalize_onboarding_profile,
     get_user_profile,
-    handle_onboarding_step,
+    is_core_profile_complete,
+    is_general_greeting_message,
+    is_profile_only_message,
     start_onboarding,
     touch_user_profile,
+    update_user_profile,
+    build_soft_onboarding_followup,
 )
 from services.prompt_service import build_basic_clinical_system_prompt, build_clinical_system_prompt, build_general_system_prompt
 from services.response_service import generate_reply
@@ -162,27 +168,57 @@ def _handle_new_user_onboarding(session_id):
 def _handle_onboarding_message(session_id, user_profile, user_message):
     touch_user_profile(session_id)
     save_message("user", user_message, session_id, metadata={"intent": "onboarding_answer"})
-    onboarding_result = handle_onboarding_step(session_id, user_profile, user_message)
+    extracted_updates, extracted_fields = extract_profile_updates_from_message(user_message, user_profile)
+    if extracted_updates:
+        update_user_profile(session_id, extracted_updates)
+
+    refreshed_profile = get_user_profile(session_id)
+    profile_only_message = is_profile_only_message(user_message, extracted_fields)
+    greeting_message = is_general_greeting_message(user_message)
+
     log_event(
         "onboarding_step_processed",
         session_id,
         {
-            "step": user_profile.get("onboarding_step"),
-            "intent": onboarding_result["intent"],
-            "completed": onboarding_result["completed"],
+            "extracted_fields": extracted_fields,
+            "profile_only_message": profile_only_message,
+            "greeting_message": greeting_message,
         },
     )
-    assistant_message_id = save_message(
-        "assistant",
-        onboarding_result["reply"],
-        session_id,
-        metadata={"intent": onboarding_result["intent"]},
-    )
-    return _build_message_response(
-        reply=onboarding_result["reply"],
-        assistant_message_id=assistant_message_id,
-        needs_onboarding=not onboarding_result["completed"],
-    )
+
+    if is_core_profile_complete(refreshed_profile):
+        completed_profile = finalize_onboarding_profile(session_id, refreshed_profile)
+        if profile_only_message or greeting_message:
+            reply = "Great, I’ve got what I need.<br><br>I’m ready when you are."
+            assistant_message_id = save_message(
+                "assistant",
+                reply,
+                session_id,
+                metadata={"intent": "onboarding_complete"},
+            )
+            return _build_message_response(
+                reply=reply,
+                assistant_message_id=assistant_message_id,
+                needs_onboarding=False,
+            )
+        return _handle_regular_message(session_id, completed_profile, user_message)
+
+    if profile_only_message or greeting_message:
+        reply = build_soft_onboarding_followup(refreshed_profile)
+        assistant_message_id = save_message(
+            "assistant",
+            reply,
+            session_id,
+            metadata={"intent": "onboarding_followup"},
+        )
+        return _build_message_response(
+            reply=reply,
+            assistant_message_id=assistant_message_id,
+            needs_onboarding=True,
+        )
+
+    completed_profile = finalize_onboarding_profile(session_id, refreshed_profile)
+    return _handle_regular_message(session_id, completed_profile, user_message)
 
 
 def get_session_state(session_id):
@@ -323,20 +359,7 @@ def _handle_memory_save(intent, user_message, session_id, principles, knowledge_
     )
 
 
-def process_message(user_message, session_id):
-    if not user_message:
-        return {"reply": "Empty message."}
-
-    if not session_id:
-        return {"reply": "Missing session_id."}
-
-    user_profile = get_user_profile(session_id)
-    if not user_profile:
-        return _handle_new_user_onboarding(session_id)
-
-    if not user_profile.get("onboarding_done"):
-        return _handle_onboarding_message(session_id, user_profile, user_message)
-
+def _handle_regular_message(session_id, user_profile, user_message):
     touch_user_profile(session_id)
     chat_history = load_chat(session_id)
     principles = load_principles()
@@ -452,3 +475,20 @@ def process_message(user_message, session_id):
         assistant_message_id=assistant_message_id,
         sources=display_sources if intent == "clinical_consult" else [],
     )
+
+
+def process_message(user_message, session_id):
+    if not user_message:
+        return {"reply": "Empty message."}
+
+    if not session_id:
+        return {"reply": "Missing session_id."}
+
+    user_profile = get_user_profile(session_id)
+    if not user_profile:
+        return _handle_new_user_onboarding(session_id)
+
+    if not user_profile.get("onboarding_done"):
+        return _handle_onboarding_message(session_id, user_profile, user_message)
+
+    return _handle_regular_message(session_id, user_profile, user_message)

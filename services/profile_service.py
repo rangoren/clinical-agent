@@ -7,11 +7,17 @@ from db import user_profiles_collection
 TRAINING_STAGE_ALIASES = {
     "resident": "resident",
     "residency": "resident",
+    "מתמחה": "resident",
     "specialist": "specialist",
     "attending": "specialist",
     "consultant": "specialist",
+    "מומחה": "specialist",
+    "מומחית": "specialist",
     "fellowship": "fellowship",
     "fellow": "fellowship",
+    "פלושיפ": "fellowship",
+    "פלואושיפ": "fellowship",
+    "פלו": "fellowship",
 }
 
 ANSWER_STYLE_ALIASES = {
@@ -42,6 +48,38 @@ ONBOARDING_GREETING_WORDS = COUNTRY_PLACEHOLDER_WORDS | {
     "good morning",
     "good afternoon",
     "good evening",
+}
+
+COUNTRY_ALIASES = {
+    "israel": "Israel",
+    "ישראל": "Israel",
+    "uk": "UK",
+    "united kingdom": "UK",
+    "england": "UK",
+    "usa": "USA",
+    "us": "USA",
+    "united states": "USA",
+    "canada": "Canada",
+    "australia": "Australia",
+    "new zealand": "New Zealand",
+    "india": "India",
+    "germany": "Germany",
+    "france": "France",
+    "italy": "Italy",
+    "spain": "Spain",
+}
+
+SUBSPECIALTY_ALIASES = {
+    "mfm": "Maternal-Fetal Medicine",
+    "maternal fetal medicine": "Maternal-Fetal Medicine",
+    "urogyn": "Urogynecology",
+    "urogynecology": "Urogynecology",
+    "fertility": "Reproductive Endocrinology and Infertility",
+    "rei": "Reproductive Endocrinology and Infertility",
+    "oncology": "Gynecologic Oncology",
+    "gyn oncology": "Gynecologic Oncology",
+    "gynaecologic oncology": "Gynecologic Oncology",
+    "ultrasound": "Obstetric and Gynecologic Ultrasound",
 }
 
 
@@ -180,10 +218,9 @@ def start_onboarding(session_id):
 def build_onboarding_intro():
     return (
         "Hi, I’m your OB-GYN clinical assistant.<br><br>"
-        "I’m here to help you think through cases, sharpen risk assessment, and suggest focused next steps.<br><br>"
-        "Before we start, I need a few short details so I can adapt the level and style of my answers to you.<br><br>"
-        "<b>First question:</b><br>"
-        "Which country are you currently working in?"
+        "I can adapt the level and style of answers to your training stage and setting.<br><br>"
+        "You can answer naturally in one sentence, or just start asking your question and I’ll adapt as we go.<br><br>"
+        "To start, tell me where you work and what stage you're in."
     )
 
 
@@ -264,14 +301,135 @@ def _build_onboarding_complete_message(profile):
         residency_line = f"<br>Residency year: {profile['residency_year']}"
 
     return (
-        "Onboarding complete.<br><br>"
-        "I’ll adapt responses using your profile:<br>"
-        f"Country: {country}<br>"
-        f"Stage: {training_stage}{residency_line}<br>"
-        f"Focus: {subspecialty}<br>"
-        f"Style: {answer_style}<br><br>"
-        "You can start with any clinical question."
+        "Great, I’ve got what I need.<br><br>"
+        "I’m ready when you are."
     )
+
+
+def infer_country_from_text(value):
+    cleaned = re.sub(r"\s+", " ", value.strip().lower())
+    for alias, normalized in COUNTRY_ALIASES.items():
+        if re.search(rf"\b{re.escape(alias)}\b", cleaned):
+            return normalized
+    return None
+
+
+def infer_subspecialty_from_text(value):
+    cleaned = re.sub(r"\s+", " ", value.strip().lower())
+    for alias, normalized in SUBSPECIALTY_ALIASES.items():
+        if alias in cleaned:
+            return normalized
+    return None
+
+
+def extract_profile_updates_from_message(user_message, profile):
+    cleaned = user_message.strip()
+    lowered = cleaned.lower()
+    updates = {}
+    extracted_fields = []
+
+    country = infer_country_from_text(cleaned)
+    if country and not profile.get("country"):
+        updates["country"] = country
+        extracted_fields.append("country")
+
+    training_stage = normalize_training_stage(cleaned)
+    if training_stage:
+        updates["training_stage"] = training_stage
+        extracted_fields.append("training_stage")
+
+    residency_year = normalize_residency_year(cleaned)
+    stage_for_year = updates.get("training_stage") or profile.get("training_stage")
+    if residency_year and stage_for_year == "resident":
+        updates["residency_year"] = residency_year
+        extracted_fields.append("residency_year")
+
+    answer_style = normalize_answer_style(cleaned)
+    if answer_style:
+        updates["answer_style"] = answer_style
+        extracted_fields.append("answer_style")
+
+    subspecialty = infer_subspecialty_from_text(cleaned)
+    if subspecialty:
+        updates["subspecialty"] = subspecialty
+        extracted_fields.append("subspecialty")
+    elif any(phrase in lowered for phrase in {"general ob-gyn", "general obgyn", "general gyn", "general ob gyn"}):
+        updates["subspecialty"] = "General OB-GYN"
+        extracted_fields.append("subspecialty")
+
+    if updates.get("training_stage") == "resident" and "subspecialty" not in updates and not profile.get("subspecialty"):
+        updates["subspecialty"] = "General OB-GYN"
+
+    return updates, extracted_fields
+
+
+def is_profile_only_message(user_message, extracted_fields):
+    cleaned = user_message.strip().lower()
+    if not extracted_fields:
+        return False
+    if "?" in cleaned:
+        return False
+
+    non_profile_chat_markers = {
+        "what do you think",
+        "what should i do",
+        "can you help",
+        "patient",
+        "bleeding",
+        "pain",
+        "pregnant",
+        "bp",
+        "blood pressure",
+        "fever",
+    }
+    if any(marker in cleaned for marker in non_profile_chat_markers):
+        return False
+
+    return True
+
+
+def is_general_greeting_message(user_message):
+    cleaned = re.sub(r"\s+", " ", user_message.strip().lower())
+    greeting_phrases = ONBOARDING_GREETING_WORDS | {"how are you", "מה שלומך", "מה נשמע", "שלום"}
+    return any(phrase in cleaned for phrase in greeting_phrases)
+
+
+def is_core_profile_complete(profile):
+    training_stage = profile.get("training_stage")
+    if not training_stage:
+        return False
+    if training_stage == "resident":
+        return bool(profile.get("residency_year"))
+    return True
+
+
+def finalize_onboarding_profile(session_id, profile):
+    updates = {
+        "onboarding_done": True,
+        "onboarding_step": None,
+    }
+    if not profile.get("answer_style"):
+        updates["answer_style"] = "balanced"
+    if profile.get("training_stage") == "resident" and not profile.get("subspecialty"):
+        updates["subspecialty"] = "General OB-GYN"
+
+    update_user_profile(session_id, updates)
+    return get_user_profile(session_id)
+
+
+def build_soft_onboarding_followup(profile):
+    training_stage = profile.get("training_stage")
+    if not training_stage:
+        return "To tailor the level properly, are you currently a resident, specialist, or in fellowship?"
+    if training_stage == "resident" and not profile.get("residency_year"):
+        return "What residency year are you in right now?"
+    if not profile.get("country"):
+        return "Which country are you currently working in?"
+    if not profile.get("answer_style"):
+        return "What answer style do you prefer: concise, balanced, or teaching?"
+    if training_stage != "resident" and not profile.get("subspecialty"):
+        return "What is your subspecialty or main clinical focus?"
+    return "Great, I’ve got what I need. I’m ready when you are."
 
 
 def handle_onboarding_step(session_id, profile, user_message):
