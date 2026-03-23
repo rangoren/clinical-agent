@@ -100,31 +100,25 @@
         }
 
         .brand-badge {
-            width: 44px;
+            min-width: 44px;
             height: 44px;
+            padding: 0 14px;
             border-radius: 15px;
             background:
                 radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), transparent 34%),
                 linear-gradient(135deg, #0f766e 0%, #0a5c56 100%);
             color: white;
-            display: grid;
-            place-items: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             font-weight: 700;
-            letter-spacing: 0.04em;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
             box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.22);
         }
 
         .brand-text {
             min-width: 0;
-        }
-
-        .eyebrow {
-            margin: 0 0 4px;
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.16em;
-            color: var(--brand);
-            font-weight: 700;
         }
 
         .brand-title {
@@ -239,18 +233,21 @@
         }
 
         .avatar {
-            width: 34px;
+            min-width: 34px;
             height: 34px;
+            padding: 0 8px;
             flex-shrink: 0;
             border-radius: 12px;
-            display: grid;
-            place-items: center;
-            font-size: 0.84rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.72rem;
             font-weight: 700;
             letter-spacing: 0.02em;
             border: 1px solid var(--line);
             color: var(--brand-strong);
             background: rgba(255, 255, 255, 0.94);
+            white-space: nowrap;
         }
 
         .assistant-avatar {
@@ -650,16 +647,11 @@
             }
 
             .brand-badge {
-                width: 32px;
+                min-width: 32px;
                 height: 32px;
+                padding: 0 10px;
                 border-radius: 11px;
-                font-size: 0.74rem;
-            }
-
-            .eyebrow {
-                margin-bottom: 2px;
-                font-size: 0.6rem;
-                letter-spacing: 0.12em;
+                font-size: 0.62rem;
             }
 
             .brand-title {
@@ -693,10 +685,11 @@
             }
 
             .avatar {
-                width: 28px;
+                min-width: 28px;
                 height: 28px;
+                padding: 0 6px;
                 border-radius: 10px;
-                font-size: 0.66rem;
+                font-size: 0.56rem;
             }
 
             .message-label {
@@ -784,11 +777,10 @@
     <main class="app-shell">
         <header class="topbar">
             <div class="brand">
-                <div class="brand-badge">CA</div>
+                <div class="brand-badge">Doctor Goren</div>
                 <div class="brand-text">
-                    <p class="eyebrow">Clinical Reasoning</p>
                     <h1 class="brand-title">Clinical Assistant</h1>
-                    <p class="brand-subtitle">Fast OB-GYN support with a calmer clinical workflow.</p>
+                    <p class="brand-subtitle">A focused clinical study and decision-support assistant for OB-GYN training.</p>
                 </div>
             </div>
             <div id="status-pill" class="status-pill">Connecting</div>
@@ -875,7 +867,7 @@
 
             const avatar = document.createElement("div");
             avatar.className = `avatar ${role === "user" ? "user-avatar" : "assistant-avatar"}`;
-            avatar.textContent = role === "user" ? "You" : "AI";
+            avatar.textContent = role === "user" ? "You" : "Dr AI";
 
             frame.appendChild(avatar);
             frame.appendChild(bubble);
