@@ -115,6 +115,12 @@ def _format_exception_line(line):
         body = line.split(":", 1)[1].strip()
         return f"<p><strong>Exception:</strong> {body}</p>"
 
+    if lower_line.startswith("high-risk patients"):
+        return f"<p><strong>Exception:</strong> {line}</p>"
+
+    if lower_line.startswith("high-risk "):
+        return f"<p><strong>Exception:</strong> {line}</p>"
+
     return f"<p><strong>Exception:</strong> {line}</p>"
 
 
