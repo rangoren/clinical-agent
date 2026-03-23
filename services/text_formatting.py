@@ -40,9 +40,7 @@ def format_response(text):
     return text.strip()
 
 
-def format_basic_clinical_response(text):
-    text = text.strip().replace("**", "")
-
+def _clean_basic_lines(text):
     cleaned_lines = []
     for raw_line in text.splitlines():
         stripped = raw_line.strip()
@@ -52,45 +50,99 @@ def format_basic_clinical_response(text):
         if normalized.startswith("most likely context:") or stripped == "---":
             continue
         cleaned_lines.append(stripped)
+    return cleaned_lines
 
-    if not cleaned_lines:
-        return text
 
-    rebuilt_lines = []
-    for line in cleaned_lines:
+def _is_short_labeled_line(line):
+    if ":" not in line:
+        return False
+
+    label, remainder = line.split(":", 1)
+    label_words = label.strip().split()
+    if not remainder.strip():
+        return False
+
+    return 1 <= len(label_words) <= 6
+
+
+def _normalize_basic_lines(lines):
+    normalized = []
+
+    for line in lines:
         if line.startswith("- "):
-            rebuilt_lines.append(line)
+            normalized.append(("bullet", line[2:].strip()))
             continue
 
         if " - " in line and any(token in line for token in [":", "[E", "[P", "[K", "[PR", "[IK"]):
             first_part, *rest = line.split(" - ")
-            rebuilt_lines.append(first_part.strip())
+            normalized.append(("paragraph", first_part.strip()))
             for item in rest:
-                rebuilt_lines.append(f"- {item.strip()}")
+                item = item.strip()
+                if item:
+                    normalized.append(("bullet", item))
             continue
 
-        rebuilt_lines.append(line)
+        lowered = line.lower()
+        if lowered.startswith(("exception:", "exceptions:", "high-risk", "the key exception", "main exception")):
+            normalized.append(("exception", line))
+            continue
 
-    html_parts = []
-    for line in rebuilt_lines:
-        if line.startswith("- "):
-            html_parts.append(f"__LIST_ITEM__{line[2:].strip()}")
-        else:
-            html_parts.append(line)
+        if _is_short_labeled_line(line) and not lowered.startswith(("note:", "answer:", "summary:")):
+            normalized.append(("bullet", line))
+            continue
+
+        normalized.append(("paragraph", line))
+
+    return normalized
+
+
+def _format_exception_line(line):
+    lower_line = line.lower()
+
+    if lower_line.startswith("the key exception is "):
+        body = line[len("The key exception is ") :].strip()
+        return f"<p><strong>Exception:</strong> {body}</p>"
+
+    if lower_line.startswith("main exception:"):
+        body = line.split(":", 1)[1].strip()
+        return f"<p><strong>Exception:</strong> {body}</p>"
+
+    if lower_line.startswith("exceptions:"):
+        body = line.split(":", 1)[1].strip()
+        return f"<p><strong>Exceptions:</strong> {body}</p>"
+
+    if lower_line.startswith("exception:"):
+        body = line.split(":", 1)[1].strip()
+        return f"<p><strong>Exception:</strong> {body}</p>"
+
+    return f"<p><strong>Exception:</strong> {line}</p>"
+
+
+def format_basic_clinical_response(text):
+    text = text.strip().replace("**", "")
+    cleaned_lines = _clean_basic_lines(text)
+
+    if not cleaned_lines:
+        return text
+
+    normalized_parts = _normalize_basic_lines(cleaned_lines)
 
     result = []
     inside_list = False
-    for part in html_parts:
-        if part.startswith("__LIST_ITEM__"):
+    for part_type, content in normalized_parts:
+        if part_type == "bullet":
             if not inside_list:
                 result.append("<ul>")
                 inside_list = True
-            result.append(f"<li>{part.replace('__LIST_ITEM__', '', 1)}</li>")
+            result.append(f"<li>{content}</li>")
         else:
             if inside_list:
                 result.append("</ul>")
                 inside_list = False
-            result.append(f"<p>{part}</p>")
+            if part_type == "exception":
+                result.append(_format_exception_line(content))
+            else:
+                result.append(f"<p>{content}</p>")
 
     if inside_list:
         result.append("</ul>")
