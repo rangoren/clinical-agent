@@ -216,6 +216,8 @@
 
         .message-stack {
             max-width: min(100%, 760px);
+            width: min(100%, 760px);
+            min-width: 0;
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -226,6 +228,7 @@
             display: flex;
             align-items: flex-end;
             gap: 10px;
+            min-width: 0;
         }
 
         .message-row.user .message-frame {
@@ -269,11 +272,14 @@
         }
 
         .bubble {
+            max-width: 100%;
+            min-width: 0;
             border-radius: 24px;
             padding: 14px 15px;
             line-height: 1.55;
             font-size: 0.96rem;
             word-break: break-word;
+            overflow-wrap: anywhere;
             border: 1px solid var(--line);
             background: var(--assistant);
             color: var(--text);
@@ -410,10 +416,12 @@
             display: flex;
             align-items: flex-end;
             gap: 10px;
+            min-width: 0;
         }
 
         .composer-input {
             flex: 1;
+            min-width: 0;
             resize: none;
             border: none;
             outline: none;
@@ -549,6 +557,138 @@
 
             .composer-shell {
                 padding: 14px 20px 18px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 0;
+            }
+
+            .app-shell {
+                width: 100%;
+                min-height: 100vh;
+                border-radius: 0;
+                border-left: none;
+                border-right: none;
+                box-shadow: none;
+            }
+
+            .topbar {
+                gap: 10px;
+                padding: 14px 14px 12px;
+            }
+
+            .brand {
+                gap: 10px;
+            }
+
+            .brand-badge {
+                width: 38px;
+                height: 38px;
+                border-radius: 13px;
+                font-size: 0.82rem;
+            }
+
+            .brand-title {
+                font-size: 0.92rem;
+            }
+
+            .brand-subtitle {
+                font-size: 0.76rem;
+            }
+
+            .status-pill {
+                padding: 8px 10px;
+                font-size: 0.72rem;
+            }
+
+            .content {
+                padding: 10px 10px 0;
+            }
+
+            .chat-panel {
+                padding: 4px 0 14px;
+            }
+
+            .message-row {
+                margin-bottom: 12px;
+            }
+
+            .message-stack {
+                width: 100%;
+            }
+
+            .message-frame {
+                gap: 8px;
+            }
+
+            .avatar {
+                width: 28px;
+                height: 28px;
+                border-radius: 10px;
+                font-size: 0.66rem;
+            }
+
+            .message-label {
+                font-size: 0.64rem;
+                padding: 0 2px;
+            }
+
+            .bubble {
+                padding: 12px 13px;
+                font-size: 0.91rem;
+                border-radius: 20px;
+            }
+
+            .composer-shell {
+                padding: 10px 10px 12px;
+            }
+
+            .composer-card {
+                border-radius: 22px;
+                padding: 8px;
+                gap: 8px;
+            }
+
+            .composer-meta {
+                padding: 0 4px;
+                font-size: 0.72rem;
+            }
+
+            .composer-main {
+                gap: 8px;
+            }
+
+            .composer-input {
+                min-height: 46px;
+                font-size: 0.94rem;
+                padding: 8px 8px 6px;
+            }
+
+            .primary-button {
+                min-width: 56px;
+                padding: 12px 12px;
+                border-radius: 16px;
+                font-size: 0.9rem;
+            }
+
+            .utility-card,
+            .feedback-card {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .feedback-actions,
+            .utility-actions,
+            .session-banner-actions {
+                width: 100%;
+            }
+
+            .feedback-actions button,
+            .utility-actions button,
+            .session-banner-actions button {
+                flex: 1;
             }
         }
     </style>
