@@ -445,20 +445,10 @@
             border: 1px solid var(--line);
             background: rgba(255, 255, 255, 0.92);
             box-shadow: 0 16px 36px rgba(20, 37, 33, 0.08);
-            padding: 10px;
+            padding: 8px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
-        }
-
-        .composer-meta {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            align-items: center;
-            padding: 2px 6px 0;
-            color: var(--muted);
-            font-size: 0.8rem;
+            gap: 0;
         }
 
         .composer-main {
@@ -699,12 +689,8 @@
 
             .composer-card {
                 border-radius: 18px;
-                padding: 5px;
-                gap: 4px;
-            }
-
-            .composer-meta {
-                display: none;
+                padding: 4px;
+                gap: 0;
             }
 
             .composer-main {
@@ -787,10 +773,6 @@
 
         <footer class="composer-shell">
             <div class="composer-card">
-                <div class="composer-meta">
-                    <span id="composer-state">Ready for a new case</span>
-                    <span>Enter to send</span>
-                </div>
                 <div class="composer-main">
                     <textarea id="input" class="composer-input" placeholder="Type your message..." rows="1"></textarea>
                     <button id="send-button" class="primary-button" onclick="sendMessage()">Send</button>
@@ -823,10 +805,6 @@
             document.getElementById("status-pill").textContent = text;
         }
 
-        function setComposerState(text) {
-            document.getElementById("composer-state").textContent = text;
-        }
-
         function setComposerEnabled(enabled) {
             const input = document.getElementById("input");
             const sendButton = document.getElementById("send-button");
@@ -834,7 +812,6 @@
             sendButton.disabled = !enabled;
             chatReady = enabled;
             setStatus(enabled ? "Ready" : "Waiting");
-            setComposerState(enabled ? "Ready for a new case" : "Choose how to continue");
         }
 
         function createMessageRow(role, html, variant = "") {
@@ -965,7 +942,6 @@
             if (!active) {
                 if (existing) existing.remove();
                 setStatus(chatReady ? "Ready" : "Waiting");
-                setComposerState(chatReady ? "Ready for a new case" : "Choose how to continue");
                 return;
             }
 
@@ -979,7 +955,6 @@
             document.getElementById("chat").appendChild(row);
             scrollChatToBottom();
             setStatus("Thinking");
-            setComposerState("Generating reply");
         }
 
         async function bootstrapSession() {
