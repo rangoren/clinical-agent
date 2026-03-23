@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
-APP_VERSION = "v0.1.24"
+APP_VERSION = "v0.1.25"
 
 
 @router.get("/")
