@@ -87,55 +87,70 @@
             align-items: center;
             justify-content: space-between;
             gap: 16px;
-            padding: 18px 18px 14px;
+            padding: 20px 18px 16px;
             border-bottom: 1px solid var(--line);
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.54));
+            background:
+                radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 16rem),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.62));
         }
 
         .brand {
             display: flex;
-            align-items: center;
-            gap: 12px;
+            align-items: flex-start;
+            gap: 14px;
             min-width: 0;
         }
 
         .brand-badge {
-            min-width: 52px;
-            height: 46px;
-            padding: 0 16px;
-            border-radius: 16px;
-            background: linear-gradient(135deg, #0f766e 0%, #0c645d 100%);
-            color: white;
+            min-width: 124px;
+            height: 42px;
+            padding: 0 14px;
+            border-radius: 14px;
+            background: rgba(15, 118, 110, 0.08);
+            color: var(--brand-strong);
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.9rem;
-            font-weight: 680;
+            font-size: 0.92rem;
+            font-weight: 700;
             letter-spacing: 0.01em;
             white-space: nowrap;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: 0 10px 24px rgba(15, 118, 110, 0.16);
+            border: 1px solid rgba(15, 118, 110, 0.12);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
         }
 
         .brand-text {
             min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .brand-kicker {
+            display: block;
+            align-self: flex-start;
+            padding: 0;
+            color: var(--brand-strong);
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .brand-title {
             margin: 0;
-            font-size: 1.02rem;
+            font-size: 1.08rem;
             font-weight: 720;
             letter-spacing: -0.01em;
             color: var(--text);
         }
 
         .brand-subtitle {
-            margin: 4px 0 0;
+            margin: 0;
             color: var(--muted);
-            font-size: 0.85rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-size: 0.9rem;
+            max-width: 42rem;
+            line-height: 1.45;
         }
 
         .status-pill {
@@ -237,32 +252,37 @@
             min-width: 0;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 0;
             animation: riseIn 180ms ease-out;
+            padding: 8px 0 10px;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+            box-shadow: none;
         }
 
         .message-frame {
             display: flex;
-            align-items: flex-end;
+            align-items: flex-start;
             gap: 10px;
             min-width: 0;
         }
 
         .avatar {
-            min-width: 34px;
-            height: 34px;
-            padding: 0 8px;
+            min-width: 30px;
+            height: 30px;
+            padding: 0 7px;
             flex-shrink: 0;
-            border-radius: 12px;
+            border-radius: 8px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.72rem;
+            font-size: 0.56rem;
             font-weight: 700;
-            letter-spacing: 0.02em;
-            border: 1px solid var(--line);
+            letter-spacing: 0.05em;
+            border: 1px solid rgba(29, 58, 52, 0.1);
             color: var(--brand-strong);
-            background: rgba(255, 255, 255, 0.94);
+            background: rgba(255, 255, 255, 0.82);
             white-space: nowrap;
         }
 
@@ -274,28 +294,19 @@
             background: linear-gradient(135deg, rgba(15, 118, 110, 0.18) 0%, rgba(255, 255, 255, 0.96) 100%);
         }
 
-        .message-label {
-            font-size: 0.72rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--muted);
-            padding: 0 6px;
-        }
-
         .bubble {
             max-width: 100%;
             min-width: 0;
-            border-radius: 18px;
-            padding: 15px 16px;
-            line-height: 1.6;
-            font-size: 0.96rem;
+            border-radius: 0;
+            padding: 10px 14px;
+            line-height: 1.58;
+            font-size: 0.95rem;
             word-break: break-word;
             overflow-wrap: anywhere;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(29, 58, 52, 0.08);
+            background: rgba(255, 255, 255, 0.72);
             color: var(--text);
-            box-shadow: 0 8px 22px rgba(20, 37, 33, 0.05);
+            box-shadow: 0 1px 4px rgba(20, 37, 33, 0.03);
         }
 
         .bubble p {
@@ -326,17 +337,14 @@
         }
 
         .message-row.user .bubble {
-            background: linear-gradient(135deg, rgba(15, 118, 110, 0.95) 0%, rgba(16, 111, 101, 0.96) 100%);
-            border-color: rgba(8, 68, 64, 0.08);
-            color: white;
-            border-bottom-left-radius: 12px;
-            box-shadow: 0 12px 28px rgba(15, 118, 110, 0.14);
+            background: rgba(255, 255, 255, 0.72);
+            color: var(--text);
+            border-color: rgba(29, 58, 52, 0.08);
         }
 
         .message-row.assistant .bubble {
-            background: rgba(255, 255, 255, 0.96);
-            border-color: rgba(29, 58, 52, 0.14);
-            border-bottom-left-radius: 12px;
+            background: rgba(255, 255, 255, 0.72);
+            border-color: rgba(29, 58, 52, 0.08);
         }
 
         .bubble.system {
@@ -661,7 +669,7 @@
 
             .topbar {
                 gap: 8px;
-                padding: calc(env(safe-area-inset-top, 0px) + 6px) 10px 8px;
+                padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px 10px;
             }
 
             .brand {
@@ -670,20 +678,27 @@
             }
 
             .brand-badge {
-                min-width: 34px;
+                min-width: 96px;
                 height: 34px;
-                padding: 0 11px;
-                border-radius: 11px;
-                font-size: 0.64rem;
+                padding: 0 10px;
+                border-radius: 12px;
+                font-size: 0.7rem;
+            }
+
+            .brand-kicker {
+                font-size: 0.62rem;
             }
 
             .brand-title {
-                font-size: 0.82rem;
+                font-size: 0.88rem;
                 line-height: 1.1;
             }
 
             .brand-subtitle {
-                display: none;
+                display: block;
+                font-size: 0.74rem;
+                line-height: 1.35;
+                max-width: 15rem;
             }
 
             .content {
@@ -701,6 +716,7 @@
 
             .message-stack {
                 width: 100%;
+                padding: 8px 0 10px;
             }
 
             .message-frame {
@@ -708,22 +724,17 @@
             }
 
             .avatar {
-                min-width: 28px;
-                height: 28px;
-                padding: 0 6px;
-                border-radius: 10px;
-                font-size: 0.56rem;
-            }
-
-            .message-label {
-                font-size: 0.64rem;
-                padding: 0 2px;
+                min-width: 26px;
+                height: 26px;
+                padding: 0 5px;
+                border-radius: 7px;
+                font-size: 0.46rem;
             }
 
             .bubble {
-                padding: 13px 14px;
-                font-size: 0.91rem;
-                border-radius: 16px;
+                padding: 8px 11px;
+                font-size: 0.9rem;
+                border-radius: 0;
             }
 
             .bubble ul {
@@ -811,8 +822,9 @@
             <div class="brand">
                 <div class="brand-badge">Doctor Goren</div>
                 <div class="brand-text">
+                    <div class="brand-kicker">Made for my beautiful wife</div>
                     <h1 class="brand-title">OB-GYN Clinical Assistant</h1>
-                    <p class="brand-subtitle">For the quick questions, second looks, and long on-call shifts.</p>
+                    <p class="brand-subtitle">Built for overnight questions, quick checks, and those moments when a calm second look helps.</p>
                 </div>
             </div>
             <div class="topbar-meta">
@@ -880,10 +892,6 @@
             const stack = document.createElement("div");
             stack.className = "message-stack";
 
-            const label = document.createElement("div");
-            label.className = "message-label";
-            label.textContent = role === "user" ? "You" : "Assistant";
-
             const bubble = document.createElement("div");
             bubble.className = "bubble" + (variant ? ` ${variant}` : "");
             bubble.innerHTML = html;
@@ -893,12 +901,11 @@
 
             const avatar = document.createElement("div");
             avatar.className = `avatar ${role === "user" ? "user-avatar" : "assistant-avatar"}`;
-            avatar.textContent = role === "user" ? "You" : "Dr AI";
+            avatar.textContent = role === "user" ? "You" : "Assistant";
 
             frame.appendChild(avatar);
             frame.appendChild(bubble);
 
-            stack.appendChild(label);
             stack.appendChild(frame);
             row.appendChild(stack);
             return row;
