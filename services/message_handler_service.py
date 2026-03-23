@@ -33,7 +33,7 @@ from services.profile_service import (
 )
 from services.prompt_service import build_basic_clinical_system_prompt, build_clinical_system_prompt, build_general_system_prompt
 from services.response_service import generate_reply
-from services.text_formatting import format_response
+from services.text_formatting import format_basic_clinical_response, format_response
 from services.undo_service import clear_last_saved, record_last_saved
 
 
@@ -201,7 +201,7 @@ def _handle_onboarding_message(session_id, user_profile, user_message):
                 assistant_message_id=assistant_message_id,
                 needs_onboarding=False,
             )
-        return _handle_regular_message(session_id, completed_profile, user_message)
+        return _handle_regular_message(session_id, completed_profile, user_message, save_user_message=False)
 
     if profile_only_message or greeting_message:
         reply = build_soft_onboarding_followup(refreshed_profile)
@@ -218,7 +218,7 @@ def _handle_onboarding_message(session_id, user_profile, user_message):
         )
 
     completed_profile = finalize_onboarding_profile(session_id, refreshed_profile)
-    return _handle_regular_message(session_id, completed_profile, user_message)
+    return _handle_regular_message(session_id, completed_profile, user_message, save_user_message=False)
 
 
 def get_session_state(session_id):
@@ -359,7 +359,7 @@ def _handle_memory_save(intent, user_message, session_id, principles, knowledge_
     )
 
 
-def _handle_regular_message(session_id, user_profile, user_message):
+def _handle_regular_message(session_id, user_profile, user_message, save_user_message=True):
     touch_user_profile(session_id)
     chat_history = load_chat(session_id)
     principles = load_principles()
@@ -440,10 +440,14 @@ def _handle_regular_message(session_id, user_profile, user_message):
         user_message=user_message,
     )
 
-    if intent == "clinical_consult" and not basic_clinical_question:
-        reply = format_response(reply)
+    if intent == "clinical_consult":
+        if basic_clinical_question:
+            reply = format_basic_clinical_response(reply)
+        else:
+            reply = format_response(reply)
 
-    save_message("user", user_message, session_id)
+    if save_user_message:
+        save_message("user", user_message, session_id)
     assistant_message_id = save_message(
         "assistant",
         reply,
