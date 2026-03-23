@@ -1,3 +1,12 @@
+import re
+
+
+def _strip_inline_source_citations(text):
+    cleaned = re.sub(r"\s*\[(?:E|P|K|PR|IK|LP)\d+\]", "", text)
+    cleaned = re.sub(r" {2,}", " ", cleaned)
+    return cleaned.strip()
+
+
 def format_response(text):
     sections = [
         "Most likely:",
@@ -6,7 +15,7 @@ def format_response(text):
         "Next step:",
     ]
 
-    text = text.strip()
+    text = _strip_inline_source_citations(text.strip())
     text = text.replace("**", "")
 
     lines = []
@@ -148,7 +157,8 @@ def _format_exception_line(line):
 
 
 def format_basic_clinical_response(text, user_message=None):
-    text = _soften_basic_clinical_phrasing(text.strip().replace("**", ""))
+    text = _strip_inline_source_citations(text.strip().replace("**", ""))
+    text = _soften_basic_clinical_phrasing(text)
     cleaned_lines = _clean_basic_lines(text)
 
     if not cleaned_lines:
