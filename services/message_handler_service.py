@@ -1,4 +1,5 @@
 from services.chat_service import delete_messages_for_session, load_chat, save_message
+from services.external_sources_service import get_external_sources
 from services.intent_service import classify_message_intent
 from services.logging_service import log_event
 from services.memory_service import (
@@ -24,7 +25,7 @@ from services.profile_service import (
     start_onboarding,
     touch_user_profile,
 )
-from services.prompt_service import build_clinical_system_prompt, build_general_system_prompt
+from services.prompt_service import build_basic_clinical_system_prompt, build_clinical_system_prompt, build_general_system_prompt
 from services.response_service import generate_reply
 from services.text_formatting import format_response
 from services.undo_service import clear_last_saved, record_last_saved
@@ -106,6 +107,39 @@ def _collect_internal_sources(principles, protocol_entries, knowledge_entries):
         knowledge_index += 1
 
     return collected
+
+
+def _looks_like_basic_clinical_question(user_message):
+    cleaned = user_message.strip().lower()
+    acute_markers = (
+        "patient",
+        "weeks",
+        "pregnant",
+        "bleeding",
+        "pain",
+        "fever",
+        "bp",
+        "blood pressure",
+        "unstable",
+        "what should i do",
+        "next step",
+        "management",
+    )
+    basic_markers = (
+        "do women",
+        "should women",
+        "how often",
+        "when should",
+        "what is",
+        "can you explain",
+        "do i need",
+        "screening",
+        "pap smear",
+        "hpv",
+    )
+    if any(marker in cleaned for marker in acute_markers):
+        return False
+    return any(marker in cleaned for marker in basic_markers) or (cleaned.endswith("?") and len(cleaned.split()) <= 14)
 
 
 def _handle_new_user_onboarding(session_id):
@@ -314,11 +348,13 @@ def process_message(user_message, session_id):
     relevant_protocols = [entry["text"] for entry in relevant_protocol_entries]
     linked_sources = _collect_linked_sources(relevant_protocol_entries, relevant_knowledge_entries)
     internal_sources = _collect_internal_sources(principles, relevant_protocol_entries, relevant_knowledge_entries)
-    display_sources = linked_sources + internal_sources
+    external_sources = get_external_sources(user_message)
+    display_sources = linked_sources + external_sources + internal_sources
 
     classifier_result = classify_message_intent(user_message, chat_history)
     intent = classifier_result["label"]
     confidence = classifier_result["confidence"]
+    basic_clinical_question = intent == "clinical_consult" and _looks_like_basic_clinical_question(user_message)
     log_event(
         "intent_classified",
         session_id,
@@ -343,12 +379,22 @@ def process_message(user_message, session_id):
         intent = "general_chat"
 
     if intent == "clinical_consult":
-        system_prompt = build_clinical_system_prompt(
-            principles=principles,
-            knowledge_entries=relevant_knowledge_entries,
-            protocol_entries=relevant_protocol_entries,
-            user_profile=user_profile,
-        )
+        if basic_clinical_question:
+            system_prompt = build_basic_clinical_system_prompt(
+                principles=principles,
+                knowledge_entries=relevant_knowledge_entries,
+                protocol_entries=relevant_protocol_entries,
+                external_sources=external_sources,
+                user_profile=user_profile,
+            )
+        else:
+            system_prompt = build_clinical_system_prompt(
+                principles=principles,
+                knowledge_entries=relevant_knowledge_entries,
+                protocol_entries=relevant_protocol_entries,
+                external_sources=external_sources,
+                user_profile=user_profile,
+            )
     else:
         system_prompt = build_general_system_prompt(user_profile)
 
@@ -359,8 +405,10 @@ def process_message(user_message, session_id):
             "knowledge_count": len(relevant_knowledge),
             "protocol_count": len(relevant_protocols),
             "source_count": len(linked_sources),
+            "external_source_count": len(external_sources),
             "internal_source_count": len(internal_sources),
             "intent": intent,
+            "basic_clinical_question": basic_clinical_question,
         },
     )
     reply = generate_reply(
@@ -369,7 +417,7 @@ def process_message(user_message, session_id):
         user_message=user_message,
     )
 
-    if intent == "clinical_consult":
+    if intent == "clinical_consult" and not basic_clinical_question:
         reply = format_response(reply)
 
     save_message("user", user_message, session_id)
@@ -394,6 +442,7 @@ def process_message(user_message, session_id):
             "reply_length": len(reply),
             "feedback_enabled": intent == "clinical_consult" and len(reply) > 80,
             "source_count": len(display_sources),
+            "basic_clinical_question": basic_clinical_question,
         },
     )
 

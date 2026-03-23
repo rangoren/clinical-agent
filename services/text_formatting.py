@@ -7,6 +7,19 @@ def format_response(text):
     ]
 
     text = text.strip()
+    text = text.replace("**", "")
+
+    lines = []
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        normalized = stripped.lower().strip("*").strip()
+        if normalized.startswith("most likely context:") or stripped == "---":
+            continue
+        lines.append(stripped)
+
+    text = "\n".join(lines)
 
     for section in sections:
         text = text.replace(section, f"\n{section}")

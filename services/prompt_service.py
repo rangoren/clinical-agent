@@ -44,12 +44,19 @@ def _format_internal_context(principles, knowledge_entries, protocol_entries):
     return "\n".join(lines) or "- No internal context labels available"
 
 
-def build_clinical_system_prompt(principles, knowledge_entries, protocol_entries, user_profile):
+def _format_external_catalog(external_sources):
+    return "\n".join(
+        f"- [{source['source_id']}] {source['title']} ({source['url']})" for source in external_sources
+    ) or "- No external references available"
+
+
+def build_clinical_system_prompt(principles, knowledge_entries, protocol_entries, external_sources, user_profile):
     principles_text = "\n".join(f"- {item}" for item in principles) or "- No saved principles yet"
     knowledge_text = _format_memory_entries(knowledge_entries)
     protocols_text = _format_memory_entries(protocol_entries)
     source_catalog = _format_source_catalog(knowledge_entries, protocol_entries)
     internal_catalog = _format_internal_context(principles, knowledge_entries, protocol_entries)
+    external_catalog = _format_external_catalog(external_sources)
     profile_text = build_user_profile_context(user_profile)
 
     return f"""
@@ -74,6 +81,9 @@ Available linked sources:
 
 Internal context labels:
 {internal_catalog}
+
+External references:
+{external_catalog}
 
 Core behavior:
 - Be sharp
@@ -132,7 +142,10 @@ Output discipline:
 - No dense paragraphs
 - Prefer one clear path
 - Avoid vague language
+- Do not add prefacing labels like "Most likely context" or any extra section outside the required format
+- Do not use markdown bold markers like ** in the final answer
 - If a linked source is directly relevant, cite it inline using its source id, for example [P1] or [K2]
+- If an external reference is directly relevant, cite it inline using its source id, for example [E1]
 - If internal user-provided context is directly relevant, cite it inline using its provided label, for example [PR1] or [IK1]
 - Never invent a citation id that was not provided
 - If no linked sources were provided, do not fabricate sources
@@ -150,6 +163,56 @@ What changes management now:
 
 Next step:
 <1-2 short lines>
+"""
+
+
+def build_basic_clinical_system_prompt(principles, knowledge_entries, protocol_entries, external_sources, user_profile):
+    principles_text = "\n".join(f"- {item}" for item in principles) or "- No saved principles yet"
+    knowledge_text = _format_memory_entries(knowledge_entries)
+    protocols_text = _format_memory_entries(protocol_entries)
+    source_catalog = _format_source_catalog(knowledge_entries, protocol_entries)
+    internal_catalog = _format_internal_context(principles, knowledge_entries, protocol_entries)
+    external_catalog = _format_external_catalog(external_sources)
+    profile_text = build_user_profile_context(user_profile)
+
+    return f"""
+You are a senior OB-GYN consultant answering a straightforward clinical knowledge question.
+
+User profile:
+{profile_text}
+
+Saved user principles:
+{principles_text}
+
+Relevant clinical knowledge:
+{knowledge_text}
+
+Department protocols:
+{protocols_text}
+
+Available linked sources:
+{source_catalog}
+
+Internal context labels:
+{internal_catalog}
+
+External references:
+{external_catalog}
+
+Behavior:
+- Answer briefly and directly
+- Use plain clinical language
+- Do not use case-discussion section headers
+- Do not add extra framing or prefacing labels
+- If the question is basic, answer it like a knowledgeable senior quickly teaching a junior
+- Mention exceptions only if they truly matter
+- If a source was used, cite it inline with [E1], [P1], [K1], [PR1], or [IK1]
+- Never invent citation ids
+- Do not use markdown bold markers like **
+
+Output:
+- 2-5 short sentences
+- Optional short bullet list only if it improves clarity
 """
 
 
