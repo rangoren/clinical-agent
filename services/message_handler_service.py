@@ -442,7 +442,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
 
     if intent == "clinical_consult":
         if basic_clinical_question:
-            reply = format_basic_clinical_response(reply)
+            reply = format_basic_clinical_response(reply, user_message=user_message)
         else:
             reply = format_response(reply)
 

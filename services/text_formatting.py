@@ -76,6 +76,18 @@ def _soften_basic_clinical_phrasing(text):
     return softened
 
 
+def _looks_like_cervical_screening_question(user_message):
+    cleaned = user_message.strip().lower()
+    markers = (
+        "pap smear",
+        "pap",
+        "hpv screening",
+        "cervical screening",
+        "cervical cancer screening",
+    )
+    return any(marker in cleaned for marker in markers)
+
+
 def _is_short_labeled_line(line):
     if ":" not in line:
         return False
@@ -147,7 +159,34 @@ def _format_exception_line(line):
     return f"<p><strong>Exception:</strong> {line}</p>"
 
 
-def format_basic_clinical_response(text):
+def _ensure_cervical_screening_coverage(normalized_parts):
+    existing_bullets = [content.lower() for part_type, content in normalized_parts if part_type == "bullet"]
+    existing_exceptions = [content.lower() for part_type, content in normalized_parts if part_type == "exception"]
+
+    additions = []
+
+    if not any("under 21" in bullet for bullet in existing_bullets):
+        additions.append(("bullet", "Under 21: No screening"))
+
+    if not any("over 65" in bullet for bullet in existing_bullets):
+        additions.append(("bullet", "Over 65: Can usually stop if prior screening has been normal"))
+
+    if not any("high-risk" in exception for exception in existing_exceptions):
+        additions.append(("exception", "High-risk patients need more frequent screening, and these routine intervals do not apply [E3]."))
+
+    if not additions:
+        return normalized_parts
+
+    insert_at = len(normalized_parts)
+    for index, (part_type, _) in enumerate(normalized_parts):
+        if part_type == "exception":
+            insert_at = index
+            break
+
+    return normalized_parts[:insert_at] + additions + normalized_parts[insert_at:]
+
+
+def format_basic_clinical_response(text, user_message=None):
     text = _soften_basic_clinical_phrasing(text.strip().replace("**", ""))
     cleaned_lines = _clean_basic_lines(text)
 
@@ -155,6 +194,8 @@ def format_basic_clinical_response(text):
         return text
 
     normalized_parts = _normalize_basic_lines(cleaned_lines)
+    if user_message and _looks_like_cervical_screening_question(user_message):
+        normalized_parts = _ensure_cervical_screening_coverage(normalized_parts)
 
     result = []
     inside_list = False
