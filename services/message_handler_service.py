@@ -166,11 +166,20 @@ def _looks_like_basic_clinical_question(user_message):
         "how often",
         "when should",
         "what is",
+        "what's the difference",
+        "whats the difference",
+        "difference between",
+        "diffrece between",
+        "diff between",
+        "vs",
         "can you explain",
         "do i need",
         "screening",
+        "pap",
         "pap smear",
+        "paps smear",
         "hpv",
+        "hpv typing",
     )
     if any(marker in cleaned for marker in acute_markers):
         return False

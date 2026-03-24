@@ -31,6 +31,14 @@ CLINICAL_HINTS = (
     "management",
     "next step",
     "differential",
+    "pap",
+    "pap smear",
+    "paps smear",
+    "hpv",
+    "screening",
+    "cervix",
+    "cervical",
+    "smear",
 )
 
 

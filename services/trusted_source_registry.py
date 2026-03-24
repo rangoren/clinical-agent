@@ -31,6 +31,10 @@ COUNTRY_SOURCE_DOMAINS = {
         "me.health.gov.il",
         "iscpc.org.il",
         "isuog.ima.org.il",
+        "clalit.co.il",
+        "maccabi4u.co.il",
+        "leumit.co.il",
+        "meuhedet.co.il",
     ],
     "USA": [
         "acog.org",
