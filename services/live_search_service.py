@@ -1,5 +1,6 @@
 from html import unescape
 import re
+import time
 from urllib.parse import parse_qs, urlparse
 
 import requests
@@ -9,7 +10,9 @@ from services.trusted_source_registry import get_candidate_domains
 
 
 SEARCH_URL = "https://html.duckduckgo.com/html/"
-REQUEST_TIMEOUT = 6
+REQUEST_TIMEOUT = 1.8
+SEARCH_BUDGET_SECONDS = 4.0
+MAX_DOMAIN_ATTEMPTS = 3
 MAX_EXCERPT_CHARS = 360
 USER_AGENT = "Mozilla/5.0 (compatible; ClinicalAssistant/1.0; +https://example.local)"
 
@@ -128,12 +131,19 @@ def _search_domain(query, domain):
 
 def get_live_trusted_sources(user_message, user_profile=None, limit=3):
     collected = []
+    started_at = time.monotonic()
+    attempted_domains = 0
 
     for domain in get_candidate_domains(user_message, user_profile=user_profile):
         if len(collected) >= limit:
             break
+        if attempted_domains >= MAX_DOMAIN_ATTEMPTS:
+            break
+        if time.monotonic() - started_at >= SEARCH_BUDGET_SECONDS:
+            break
 
         try:
+            attempted_domains += 1
             result = _search_domain(user_message, domain)
         except Exception:
             continue
