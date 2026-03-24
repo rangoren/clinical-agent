@@ -976,6 +976,38 @@
             scrollChatToBottom();
         }
 
+        function appendSuggestedSaveCard(suggestedSave) {
+            if (!suggestedSave || !suggestedSave.message) return;
+
+            const chat = document.getElementById("chat");
+            const card = document.createElement("div");
+            card.className = "utility-card";
+
+            const text = document.createElement("p");
+            text.className = "utility-text";
+            text.textContent = "Save this for future responses?";
+
+            const actions = document.createElement("div");
+            actions.className = "utility-actions";
+
+            const saveButton = document.createElement("button");
+            saveButton.className = "secondary-button";
+            saveButton.textContent = suggestedSave.label || "Save";
+            saveButton.addEventListener("click", () => saveSuggestedItem(suggestedSave.message, card));
+
+            const dismissButton = document.createElement("button");
+            dismissButton.className = "ghost-button";
+            dismissButton.textContent = "Dismiss";
+            dismissButton.addEventListener("click", () => card.remove());
+
+            actions.appendChild(saveButton);
+            actions.appendChild(dismissButton);
+            card.appendChild(text);
+            card.appendChild(actions);
+            chat.appendChild(card);
+            scrollChatToBottom();
+        }
+
         function appendFeedbackCard(messageId) {
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
@@ -1035,6 +1067,37 @@
             document.getElementById("session-banner-text").textContent = text;
             document.getElementById("session-banner-actions").innerHTML = actionsHtml;
             document.getElementById("session-banner").style.display = "block";
+        }
+
+        async function saveSuggestedItem(message, card) {
+            try {
+                const response = await fetch("/message", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        session_id: sessionId
+                    })
+                });
+
+                const data = await response.json();
+                if (card) card.remove();
+                appendAssistantMessage(data.reply);
+
+                if (data.undo) {
+                    const label = data.undo_type === "protocol"
+                        ? "Saved as protocol."
+                        : data.undo_type === "knowledge"
+                        ? "Saved in knowledge."
+                        : "Saved for future responses.";
+                    appendUtilityCard(label, data.undo_type);
+                }
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+                setStatus("Error");
+            }
         }
 
         function setThinkingState(active) {
@@ -1197,6 +1260,10 @@
 
                 if (data.sources && data.sources.length) {
                     appendSourcesCard(data.sources);
+                }
+
+                if (data.suggested_save) {
+                    appendSuggestedSaveCard(data.suggested_save);
                 }
             } catch (error) {
                 setThinkingState(false);

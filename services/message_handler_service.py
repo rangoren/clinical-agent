@@ -38,7 +38,16 @@ from services.undo_service import clear_last_saved, record_last_saved
 import re
 
 
-def _build_message_response(reply, undo=False, undo_type=None, show_feedback=False, assistant_message_id=None, needs_onboarding=False, sources=None):
+def _build_message_response(
+    reply,
+    undo=False,
+    undo_type=None,
+    show_feedback=False,
+    assistant_message_id=None,
+    needs_onboarding=False,
+    sources=None,
+    suggested_save=None,
+):
     return {
         "reply": reply,
         "undo": undo,
@@ -47,6 +56,7 @@ def _build_message_response(reply, undo=False, undo_type=None, show_feedback=Fal
         "assistant_message_id": assistant_message_id,
         "needs_onboarding": needs_onboarding,
         "sources": sources or [],
+        "suggested_save": suggested_save,
     }
 
 
@@ -399,10 +409,32 @@ def _handle_memory_save(intent, user_message, session_id, principles, knowledge_
 
 def _build_memory_confirmation_response(intent):
     if intent == "protocol":
-        return "This sounds like a local protocol. If you want, send it again starting with: save this protocol:"
+        return "This sounds like a local protocol."
     if intent == "principle":
-        return "This sounds like a reply principle. If you want, send it again starting with: remember that"
-    return "This sounds like reusable knowledge. If you want, send it again starting with: save this"
+        return "This sounds like a reply principle."
+    return "This sounds like reusable knowledge."
+
+
+def _build_suggested_save_payload(intent, user_message):
+    prefix_map = {
+        "protocol": "save this protocol: ",
+        "principle": "remember that ",
+        "knowledge": "save this: ",
+    }
+    label_map = {
+        "protocol": "Save as protocol",
+        "principle": "Save as principle",
+        "knowledge": "Save as knowledge",
+    }
+    prefix = prefix_map.get(intent)
+    if not prefix:
+        return None
+
+    return {
+        "intent": intent,
+        "label": label_map.get(intent, "Save"),
+        "message": f"{prefix}{user_message}",
+    }
 
 
 def _handle_regular_message(session_id, user_profile, user_message, save_user_message=True):
@@ -460,6 +492,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         return _build_message_response(
             reply=reply,
             assistant_message_id=assistant_message_id,
+            suggested_save=_build_suggested_save_payload(intent, user_message),
         )
 
     if intent == "clinical_consult":
