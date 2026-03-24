@@ -127,6 +127,23 @@ def _filter_sources_by_citation(reply, sources):
     return [source for source in sources if source["source_id"] in cited_source_ids]
 
 
+def _fallback_display_sources(sources):
+    if not sources:
+        return []
+
+    external_sources = [source for source in sources if str(source.get("source_id", "")).startswith("E")]
+    if external_sources:
+        return external_sources[:3]
+
+    linked_sources = [
+        source for source in sources if str(source.get("source_id", "")).startswith(("P", "K")) and source.get("url")
+    ]
+    if linked_sources:
+        return linked_sources[:3]
+
+    return sources[:3]
+
+
 def _looks_like_basic_clinical_question(user_message):
     cleaned = user_message.strip().lower()
     acute_markers = (
@@ -462,6 +479,8 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             reply = format_response(reply)
 
     display_sources = _filter_sources_by_citation(reply, candidate_sources)
+    if intent == "clinical_consult" and not display_sources:
+        display_sources = _fallback_display_sources(candidate_sources)
 
     if save_user_message:
         save_message("user", user_message, session_id)
