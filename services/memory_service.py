@@ -3,6 +3,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 from db import knowledge_collection, principles_collection, protocols_collection
+from services.source_preference_service import preferred_local_source_bonus
 
 
 URL_PATTERN = re.compile(r"(https?://[^\s)]+)")
@@ -249,7 +250,7 @@ def _prepare_retrieved_entries(docs, prefix):
     return prepared
 
 
-def _score_retrieved_docs(docs, query_tags, query_terms):
+def _score_retrieved_docs(docs, query_tags, query_terms, user_message="", user_profile=None):
     scored_docs = []
     for doc in docs:
         doc_tags = doc.get("tags", [])
@@ -259,7 +260,9 @@ def _score_retrieved_docs(docs, query_tags, query_terms):
         doc_terms = _extract_query_terms(doc.get("text", ""))
         lexical_overlap = len(query_terms & doc_terms)
         use_count_bonus = min(doc.get("use_count", 0), 5)
-        score = (overlap * 12) + (lexical_overlap * 4) + (weight * 2) + feedback_bonus + use_count_bonus
+        source = doc.get("source") or {}
+        locality_bonus = preferred_local_source_bonus(source.get("url"), user_message, user_profile=user_profile)
+        score = (overlap * 12) + (lexical_overlap * 4) + (weight * 2) + feedback_bonus + use_count_bonus + locality_bonus
         scored_docs.append((score, doc))
 
     scored_docs.sort(key=lambda item: (item[0], item[1].get("created_at")), reverse=True)
@@ -267,50 +270,50 @@ def _score_retrieved_docs(docs, query_tags, query_terms):
     return top_docs
 
 
-def get_relevant_knowledge(user_message):
+def get_relevant_knowledge(user_message, user_profile=None):
     tags = extract_tags_from_query(user_message)
     query_terms = _extract_query_terms(user_message)
     if not tags and not query_terms:
         return []
 
     docs = list(knowledge_collection.find())
-    top_docs = _score_retrieved_docs(docs, tags, query_terms)
+    top_docs = _score_retrieved_docs(docs, tags, query_terms, user_message=user_message, user_profile=user_profile)
     _touch_retrieved_docs(knowledge_collection, top_docs)
     return [doc["text"] for doc in top_docs]
 
 
-def get_relevant_knowledge_entries(user_message):
+def get_relevant_knowledge_entries(user_message, user_profile=None):
     tags = extract_tags_from_query(user_message)
     query_terms = _extract_query_terms(user_message)
     if not tags and not query_terms:
         return []
 
     docs = list(knowledge_collection.find())
-    top_docs = _score_retrieved_docs(docs, tags, query_terms)
+    top_docs = _score_retrieved_docs(docs, tags, query_terms, user_message=user_message, user_profile=user_profile)
     _touch_retrieved_docs(knowledge_collection, top_docs)
     return _prepare_retrieved_entries(top_docs, "K")
 
 
-def get_relevant_protocols(user_message):
+def get_relevant_protocols(user_message, user_profile=None):
     tags = extract_tags_from_query(user_message)
     query_terms = _extract_query_terms(user_message)
     if not tags and not query_terms:
         return []
 
     docs = list(protocols_collection.find())
-    top_docs = _score_retrieved_docs(docs, tags, query_terms)
+    top_docs = _score_retrieved_docs(docs, tags, query_terms, user_message=user_message, user_profile=user_profile)
     _touch_retrieved_docs(protocols_collection, top_docs)
     return [doc["text"] for doc in top_docs]
 
 
-def get_relevant_protocol_entries(user_message):
+def get_relevant_protocol_entries(user_message, user_profile=None):
     tags = extract_tags_from_query(user_message)
     query_terms = _extract_query_terms(user_message)
     if not tags and not query_terms:
         return []
 
     docs = list(protocols_collection.find())
-    top_docs = _score_retrieved_docs(docs, tags, query_terms)
+    top_docs = _score_retrieved_docs(docs, tags, query_terms, user_message=user_message, user_profile=user_profile)
     _touch_retrieved_docs(protocols_collection, top_docs)
     return _prepare_retrieved_entries(top_docs, "P")
 

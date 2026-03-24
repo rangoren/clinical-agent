@@ -784,9 +784,43 @@
             }
 
             .utility-card,
-            .feedback-card {
+            .feedback-card,
+            .sources-card {
                 flex-direction: column;
                 align-items: stretch;
+                width: 100%;
+                max-width: 100%;
+            }
+
+            .sources-card {
+                padding: 10px 12px;
+                margin-top: 8px;
+            }
+
+            .sources-title {
+                font-size: 0.84rem;
+                margin-bottom: 8px;
+            }
+
+            .sources-list {
+                gap: 8px;
+            }
+
+            .source-item {
+                gap: 5px;
+                padding-top: 8px;
+            }
+
+            .source-meta {
+                font-size: 0.64rem;
+                letter-spacing: 0.05em;
+            }
+
+            .source-link,
+            .source-text {
+                font-size: 0.88rem;
+                line-height: 1.4;
+                overflow-wrap: anywhere;
             }
 
             .feedback-actions,

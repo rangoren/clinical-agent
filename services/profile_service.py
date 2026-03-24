@@ -172,6 +172,10 @@ def normalize_country(value):
     if lowered in COUNTRY_PLACEHOLDER_WORDS:
         return None
 
+    direct_match = COUNTRY_ALIASES.get(lowered)
+    if direct_match:
+        return direct_match
+
     if not re.fullmatch(r"[A-Za-z][A-Za-z .,'()-]{1,59}", cleaned):
         return None
 

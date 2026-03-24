@@ -45,9 +45,13 @@ def _format_internal_context(principles, knowledge_entries, protocol_entries):
 
 
 def _format_external_catalog(external_sources):
-    return "\n".join(
-        f"- [{source['source_id']}] {source['title']} ({source['url']})" for source in external_sources
-    ) or "- No external references available"
+    lines = []
+    for source in external_sources:
+        line = f"- [{source['source_id']}] {source['title']} ({source['url']})"
+        if source.get("excerpt"):
+            line += f"\n  Excerpt: {source['excerpt']}"
+        lines.append(line)
+    return "\n".join(lines) or "- No external references available"
 
 
 def build_clinical_system_prompt(principles, knowledge_entries, protocol_entries, external_sources, user_profile):
@@ -90,6 +94,7 @@ Core behavior:
 - Be concise
 - Adapt depth to the user's training stage and preferred answer style
 - Respect the user's country and subspecialty context when it affects recommendations
+- If the user's country is known, prefer relevant professional or ministry sources from that country before foreign references whenever available
 - Focus only on what changes management now
 - Ignore anything that does not affect decisions
 - Do not explain basics unless the user's profile suggests a teaching-oriented answer
@@ -206,6 +211,7 @@ Behavior:
 - Sound like a smart senior speaking clearly, not like pasted recommendations
 - Do not use case-discussion section headers
 - Do not add extra framing or prefacing labels
+- If the user's country is known, prefer relevant professional or ministry sources from that country before foreign references whenever available
 - If the question is basic, answer it like a knowledgeable senior quickly teaching a junior
 - Mention exceptions only if they truly matter
 - Start with a direct answer in the first line

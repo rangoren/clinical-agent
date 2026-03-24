@@ -1,24 +1,54 @@
 import re
 
+from services.live_search_service import get_live_trusted_sources
+from services.source_preference_service import is_israel_relevant
+
 
 EXTERNAL_SOURCE_CATALOG = [
+    {
+        "title": "IMA: Cervical Cytology (Pap) Screening in Israel",
+        "url": "https://www.ima.org.il/Main/EditClinicalInstruction.aspx?ClinicalInstructionId=1427",
+        "source_type": "Israeli guideline",
+        "keywords": ["pap smear", "pap", "pap test", "cervical screening", "hpv screening", "cervical cancer screening"],
+        "regions": ["israel"],
+        "priority": 3,
+    },
+    {
+        "title": "IMA: Management of Abnormal Cervical Cytology (Pap Smear)",
+        "url": "https://www.ima.org.il/main/EditClinicalInstruction.aspx?ClinicalInstructionId=1447",
+        "source_type": "Israeli guideline",
+        "keywords": ["abnormal pap", "pap smear", "pap test", "ascus", "lsil", "hsil", "colposcopy", "cervical dysplasia", "cin"],
+        "regions": ["israel"],
+        "priority": 3,
+    },
+    {
+        "title": "Israeli Society of Colposcopy: HPV Position Paper",
+        "url": "https://www.iscpc.org.il/clinical-guidelines/%D7%94%D7%9E%D7%9C%D7%A6%D7%95%D7%AA-%D7%9C%D7%98%D7%99%D7%A4%D7%95%D7%9C-%D7%91%D7%A0%D7%92%D7%A2%D7%99%D7%9D-%D7%98%D7%A8%D7%95%D7%9D-%D7%A1%D7%A8%D7%98%D7%A0%D7%99%D7%99%D7%9D-%D7%A9%D7%9C-%D7%A6-2/",
+        "source_type": "Israeli society guideline",
+        "keywords": ["hpv", "pap smear", "pap test", "cervical screening", "cervical dysplasia"],
+        "regions": ["israel"],
+        "priority": 2,
+    },
     {
         "title": "USPSTF: Cervical Cancer Screening",
         "url": "https://www.uspreventiveservicestaskforce.org/uspstf/recommendation/cervical-cancer-screening",
         "source_type": "external guideline",
         "keywords": ["pap smear", "pap", "cervical screening", "hpv screening", "cervical cancer screening"],
+        "priority": 0,
     },
     {
         "title": "ACOG: Cervical Cancer Screening",
         "url": "https://www.acog.org/womens-health/infographics/cervical-cancer-screening",
         "source_type": "external guideline",
         "keywords": ["pap smear", "pap", "cervical screening", "hpv screening"],
+        "priority": 0,
     },
     {
         "title": "ASCCP Risk-Based Management Guidelines",
         "url": "https://www.asccp.org/guidelines",
         "source_type": "external guideline",
         "keywords": ["asccp", "pap smear", "hpv", "cervical dysplasia", "cin"],
+        "priority": 0,
     },
     {
         "title": "ACOG: Preeclampsia and High Blood Pressure During Pregnancy",
@@ -206,26 +236,54 @@ def _dedupe_sources(sources):
     return deduped
 
 
-def get_external_sources(user_message, limit=3):
+def _assign_source_ids(sources):
+    assigned = []
+    for index, source in enumerate(sources, start=1):
+        assigned.append(
+            {
+                "source_id": f"E{index}",
+                "title": source["title"],
+                "url": source["url"],
+                "source_type": source["source_type"],
+                "excerpt": source.get("excerpt"),
+            }
+        )
+    return assigned
+
+
+def get_external_sources(user_message, user_profile=None, limit=4, include_live=True):
     normalized_message = _normalize_text(user_message)
     scored = []
+    israel_relevant = is_israel_relevant(user_message, user_profile=user_profile)
 
     for source in EXTERNAL_SOURCE_CATALOG:
         overlap = sum(1 for keyword in source["keywords"] if keyword in normalized_message)
-        if overlap:
-            scored.append((overlap, source))
+        if not overlap:
+            continue
+
+        score = overlap * 10
+        if israel_relevant and "israel" in source.get("regions", []):
+            score += 100 + source.get("priority", 0)
+        elif israel_relevant and source.get("regions"):
+            score -= 10
+        elif source.get("regions"):
+            score -= 5
+
+        scored.append((score, source))
 
     scored.sort(key=lambda item: item[0], reverse=True)
 
     selected = []
-    for index, (_, source) in enumerate(scored[:limit], start=1):
+    for _, source in scored[:limit]:
         selected.append(
             {
-                "source_id": f"E{index}",
                 "title": source["title"],
                 "url": source["url"],
                 "source_type": source["source_type"],
             }
         )
 
-    return _dedupe_sources(selected)
+    if include_live:
+        selected = get_live_trusted_sources(user_message, user_profile=user_profile, limit=limit) + selected
+
+    return _assign_source_ids(_dedupe_sources(selected)[:limit])

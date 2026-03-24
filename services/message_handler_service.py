@@ -35,6 +35,7 @@ from services.prompt_service import build_basic_clinical_system_prompt, build_cl
 from services.response_service import generate_reply
 from services.text_formatting import format_basic_clinical_response, format_response
 from services.undo_service import clear_last_saved, record_last_saved
+import re
 
 
 def _build_message_response(reply, undo=False, undo_type=None, show_feedback=False, assistant_message_id=None, needs_onboarding=False, sources=None):
@@ -113,6 +114,17 @@ def _collect_internal_sources(principles, protocol_entries, knowledge_entries):
         knowledge_index += 1
 
     return collected
+
+
+def _extract_cited_source_ids(reply):
+    return set(re.findall(r"\[((?:E|P|K|PR|LP|IK)\d+)\]", reply or ""))
+
+
+def _filter_sources_by_citation(reply, sources):
+    cited_source_ids = _extract_cited_source_ids(reply)
+    if not cited_source_ids:
+        return []
+    return [source for source in sources if source["source_id"] in cited_source_ids]
 
 
 def _looks_like_basic_clinical_question(user_message):
@@ -365,18 +377,21 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
     principles = load_principles()
     knowledge_items = load_knowledge()
     protocol_items = load_protocols()
-    relevant_knowledge_entries = get_relevant_knowledge_entries(user_message)
-    relevant_protocol_entries = get_relevant_protocol_entries(user_message)
+    classifier_result = classify_message_intent(user_message, chat_history)
+    intent = classifier_result["label"]
+    confidence = classifier_result["confidence"]
+    relevant_knowledge_entries = get_relevant_knowledge_entries(user_message, user_profile=user_profile)
+    relevant_protocol_entries = get_relevant_protocol_entries(user_message, user_profile=user_profile)
     relevant_knowledge = [entry["text"] for entry in relevant_knowledge_entries]
     relevant_protocols = [entry["text"] for entry in relevant_protocol_entries]
     linked_sources = _collect_linked_sources(relevant_protocol_entries, relevant_knowledge_entries)
     internal_sources = _collect_internal_sources(principles, relevant_protocol_entries, relevant_knowledge_entries)
-    external_sources = get_external_sources(user_message)
-    display_sources = linked_sources + external_sources + internal_sources
-
-    classifier_result = classify_message_intent(user_message, chat_history)
-    intent = classifier_result["label"]
-    confidence = classifier_result["confidence"]
+    external_sources = get_external_sources(
+        user_message,
+        user_profile=user_profile,
+        include_live=intent == "clinical_consult",
+    )
+    candidate_sources = linked_sources + external_sources + internal_sources
     basic_clinical_question = intent == "clinical_consult" and _looks_like_basic_clinical_question(user_message)
     log_event(
         "intent_classified",
@@ -445,6 +460,8 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             reply = format_basic_clinical_response(reply, user_message=user_message)
         else:
             reply = format_response(reply)
+
+    display_sources = _filter_sources_by_citation(reply, candidate_sources)
 
     if save_user_message:
         save_message("user", user_message, session_id)
