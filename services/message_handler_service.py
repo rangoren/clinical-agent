@@ -397,6 +397,14 @@ def _handle_memory_save(intent, user_message, session_id, principles, knowledge_
     )
 
 
+def _build_memory_confirmation_response(intent):
+    if intent == "protocol":
+        return "This sounds like a local protocol. If you want, send it again starting with: save this protocol:"
+    if intent == "principle":
+        return "This sounds like a reply principle. If you want, send it again starting with: remember that"
+    return "This sounds like reusable knowledge. If you want, send it again starting with: save this"
+
+
 def _handle_regular_message(session_id, user_profile, user_message, save_user_message=True):
     touch_user_profile(session_id)
     chat_history = load_chat(session_id)
@@ -440,7 +448,19 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         )
 
     if intent in {"principle", "knowledge", "protocol"} and confidence != "high":
-        intent = "general_chat"
+        reply = _build_memory_confirmation_response(intent)
+        if save_user_message:
+            save_message("user", user_message, session_id)
+        assistant_message_id = save_message(
+            "assistant",
+            reply,
+            session_id,
+            metadata={"intent": f"{intent}_confirmation"},
+        )
+        return _build_message_response(
+            reply=reply,
+            assistant_message_id=assistant_message_id,
+        )
 
     if intent == "clinical_consult":
         if basic_clinical_question:

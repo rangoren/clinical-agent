@@ -246,6 +246,7 @@ def _assign_source_ids(sources):
                 "url": source["url"],
                 "source_type": source["source_type"],
                 "excerpt": source.get("excerpt"),
+                "updated_at": source.get("updated_at"),
             }
         )
     return assigned

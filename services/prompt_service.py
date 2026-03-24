@@ -48,6 +48,8 @@ def _format_external_catalog(external_sources):
     lines = []
     for source in external_sources:
         line = f"- [{source['source_id']}] {source['title']} ({source['url']})"
+        if source.get("updated_at"):
+            line += f" [updated {source['updated_at']}]"
         if source.get("excerpt"):
             line += f"\n  Excerpt: {source['excerpt']}"
         lines.append(line)
@@ -157,6 +159,7 @@ Output discipline:
 - Never invent a citation id that was not provided
 - If no linked sources were provided, do not fabricate sources
 - Prefer citation ids like [E1] instead of naming the organization in prose when a source is available
+- When an external source includes an update date, treat newer country-specific sources as stronger than older general references
 
 Output format:
 
@@ -225,6 +228,7 @@ Behavior:
 - If a source was used, cite it inline with [E1], [P1], [K1], [PR1], or [IK1]
 - Never invent citation ids
 - Prefer citation ids like [E1] instead of naming the organization in prose when a source is available
+- If a newer trusted source clearly changes the answer, follow the newer source
 - Do not use markdown bold markers like **
 - Avoid stiff phrases like "adequate prior negative history" when simpler wording would be clearer
 - Prefer "prior screening has been normal" over bureaucratic phrasing

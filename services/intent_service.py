@@ -16,6 +16,19 @@ MEMORY_DIRECTIVE_PREFIXES = (
 )
 PROTOCOL_HINTS = ("protocol", "department", "hospital", "our unit", "our practice", "local policy")
 PRINCIPLE_HINTS = ("always", "never", "when i ask", "please answer", "in replies", "respond like")
+LOCAL_PROTOCOL_PATTERNS = (
+    "at our hospital",
+    "in our hospital",
+    "our hospital",
+    "in our department",
+    "our department",
+    "in our unit",
+    "our unit",
+    "our protocol",
+    "we give",
+    "we use",
+    "we do",
+)
 CLINICAL_HINTS = (
     "patient",
     "pregnant",
@@ -118,6 +131,18 @@ def _looks_like_clinical_consult(cleaned_message):
     return any(hint in cleaned_message for hint in CLINICAL_HINTS) or "?" in cleaned_message
 
 
+def _looks_like_local_protocol_statement(cleaned_message):
+    if "?" in cleaned_message:
+        return False
+
+    has_local_marker = any(pattern in cleaned_message for pattern in LOCAL_PROTOCOL_PATTERNS)
+    has_clinical_content = any(
+        marker in cleaned_message
+        for marker in ("mg", "dose", "iv", "txa", "tranexamic", "antibiotic", "bleeding", "cesarean", "c-section", "vaginal")
+    )
+    return has_local_marker and has_clinical_content
+
+
 def _detect_rule_based_intent(user_message):
     cleaned_message = _normalize_message(user_message)
     if not cleaned_message:
@@ -137,6 +162,9 @@ def _detect_rule_based_intent(user_message):
         phrase in cleaned_message for phrase in ("save", "remember", "use")
     ):
         return {"label": "protocol", "confidence": "high", "source": "rule"}
+
+    if _looks_like_local_protocol_statement(cleaned_message):
+        return {"label": "protocol", "confidence": "medium", "source": "rule"}
 
     if any(hint in cleaned_message for hint in PRINCIPLE_HINTS) and any(
         phrase in cleaned_message for phrase in ("save", "remember", "from now on", "always")
