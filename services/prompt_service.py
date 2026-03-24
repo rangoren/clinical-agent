@@ -155,7 +155,7 @@ Output discipline:
 - Do not use markdown bold markers like ** in the final answer
 - If a linked source is directly relevant, cite it inline using its source id, for example [P1] or [K2]
 - If an external reference is directly relevant, cite it inline using its source id, for example [E1]
-- If internal user-provided context is directly relevant, cite it inline using its provided label, for example [PR1] or [IK1]
+- If internal user-provided context is directly relevant, cite it inline using its provided label, for example [PR1], [LP1], or [IK1]
 - Never invent a citation id that was not provided
 - If no linked sources were provided, do not fabricate sources
 - Prefer citation ids like [E1] instead of naming the organization in prose when a source is available
@@ -225,7 +225,7 @@ Behavior:
 - If the answer includes intervals, categories, or age groups, put them on separate short lines
 - Prefer short scan-friendly lines over dense prose
 - Keep the structure visually clean: direct answer, then a short list if needed, then one short exception line if needed
-- If a source was used, cite it inline with [E1], [P1], [K1], [PR1], or [IK1]
+- If a source was used, cite it inline with [E1], [P1], [K1], [PR1], [LP1], or [IK1]
 - Never invent citation ids
 - Prefer citation ids like [E1] instead of naming the organization in prose when a source is available
 - If a newer trusted source clearly changes the answer, follow the newer source
