@@ -179,6 +179,9 @@ def _detect_rule_based_intent(user_message):
 
 def _apply_post_classification_guards(user_message, parsed_result):
     cleaned_message = _normalize_message(user_message)
+    if _looks_like_local_protocol_statement(cleaned_message):
+        return {"label": "protocol", "confidence": "medium", "source": "protocol_guard"}
+
     if parsed_result["label"] in {"protocol", "principle", "knowledge"}:
         explicit_memory_intent = any(prefix in cleaned_message for prefix in MEMORY_DIRECTIVE_PREFIXES) or "save" in cleaned_message
         if not explicit_memory_intent:
