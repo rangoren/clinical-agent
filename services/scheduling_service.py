@@ -123,7 +123,12 @@ def _detect_action(message):
 
 def _is_daily_summary_request(message):
     lowered = _normalize_text(message).lower()
-    return any(keyword in lowered for keyword in SUMMARY_KEYWORDS)
+    if any(keyword in lowered for keyword in SUMMARY_KEYWORDS):
+        return True
+    return "today" in lowered and any(
+        phrase in lowered
+        for phrase in ("do i have", "meetings", "meeting", "schedule", "events", "what do i", "what's on", "whats on")
+    )
 
 
 def _infer_calendar_type(text):
@@ -570,6 +575,16 @@ def _format_bulk_reply(events, conflicts):
     )
 
 
+def _sync_status_suffix(sync_status, *, plural=False):
+    if sync_status == "synced":
+        return " Synced to Google Calendar."
+    if sync_status == "failed":
+        return " Saved locally, but Google Calendar sync failed."
+    if sync_status == "skipped":
+        return " Saved locally only."
+    return ""
+
+
 def _format_event_line(event):
     start_label = event["start_at"].strftime("%H:%M")
     end_label = event["end_at"].strftime("%H:%M")
@@ -821,8 +836,7 @@ def confirm_scheduling_draft(session_id, draft_id):
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
         reply = f"Created {parsed_event['title']} in your {parsed_event['calendar_type']} calendar."
-        if sync_result.get("status") == "synced":
-            reply += " Synced to Google Calendar."
+        reply += _sync_status_suffix(sync_result.get("status"))
         return {
             "status": "confirmed",
             "reply": reply,
@@ -835,6 +849,9 @@ def confirm_scheduling_draft(session_id, draft_id):
             return {"status": "missing", "reply": "I couldn't find those drafted events anymore."}
 
         inserted_count = 0
+        synced_count = 0
+        failed_count = 0
+        skipped_count = 0
         for event in events:
             event_doc = {
                 "session_id": session_id,
@@ -863,16 +880,25 @@ def confirm_scheduling_draft(session_id, draft_id):
                         }
                     },
                 )
+                synced_count += 1
+            elif sync_result.get("status") == "failed":
+                failed_count += 1
+            else:
+                skipped_count += 1
             inserted_count += 1
 
         scheduling_drafts_collection.update_one(
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
-        return {
-            "status": "confirmed",
-            "reply": f"Created {inserted_count} events in your {events[0]['calendar_type']} calendar.",
-        }
+        reply = f"Created {inserted_count} events in your {events[0]['calendar_type']} calendar."
+        if synced_count == inserted_count:
+            reply += " Synced to Google Calendar."
+        elif failed_count:
+            reply += f" {synced_count} synced to Google Calendar, {failed_count} failed, and {skipped_count} stayed local only."
+        elif skipped_count:
+            reply += f" {synced_count} synced to Google Calendar, {skipped_count} stayed local only."
+        return {"status": "confirmed", "reply": reply}
 
     target_event = draft.get("target_event")
     if not target_event or not target_event.get("event_id"):
@@ -914,8 +940,7 @@ def confirm_scheduling_draft(session_id, draft_id):
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
         reply = f"Updated {parsed_event['title']} to {datetime.fromisoformat(parsed_event['start_at']).strftime('%a %d %b at %H:%M')}."
-        if sync_result.get("status") == "synced":
-            reply += " Synced to Google Calendar."
+        reply += _sync_status_suffix(sync_result.get("status"))
         return {
             "status": "confirmed",
             "reply": reply,
@@ -943,6 +968,10 @@ def confirm_scheduling_draft(session_id, draft_id):
         reply = f"Deleted {target_event.get('title', 'the event')}."
         if sync_result.get("status") == "synced":
             reply += " Removed from Google Calendar."
+        elif sync_result.get("status") == "failed":
+            reply += " Removed locally, but Google Calendar deletion failed."
+        elif sync_result.get("status") == "skipped":
+            reply += " Removed locally only."
         return {
             "status": "confirmed",
             "reply": reply,

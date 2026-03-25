@@ -279,7 +279,13 @@ def sync_google_create_event(session_id, event_doc):
         if not created:
             return {"status": "skipped"}
         return {"status": "synced", "provider_event_id": created.get("id"), "provider_calendar_id": created.get("organizer", {}).get("email")}
-    except Exception:
+    except Exception as exc:
+        log_event(
+            "google_calendar_sync_failed",
+            session_id=session_id,
+            payload={"action": "create", "title": event_doc.get("title"), "error": str(exc)},
+            level="error",
+        )
         return {"status": "failed"}
 
 
@@ -304,7 +310,13 @@ def sync_google_update_event(session_id, provider_event_id, event_doc):
         )
         response.raise_for_status()
         return {"status": "synced"}
-    except Exception:
+    except Exception as exc:
+        log_event(
+            "google_calendar_sync_failed",
+            session_id=session_id,
+            payload={"action": "update", "title": event_doc.get("title"), "error": str(exc)},
+            level="error",
+        )
         return {"status": "failed"}
 
 
@@ -322,5 +334,11 @@ def sync_google_delete_event(session_id, provider_event_id, calendar_type):
         if response.status_code not in (200, 204):
             response.raise_for_status()
         return {"status": "synced"}
-    except Exception:
+    except Exception as exc:
+        log_event(
+            "google_calendar_sync_failed",
+            session_id=session_id,
+            payload={"action": "delete", "provider_event_id": provider_event_id, "error": str(exc)},
+            level="error",
+        )
         return {"status": "failed"}
