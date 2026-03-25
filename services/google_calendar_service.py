@@ -459,6 +459,30 @@ def _google_event_is_gone(session_id, calendar_id, provider_event_id):
     return payload.get("status") == "cancelled"
 
 
+def _get_google_event_by_id(session_id, calendar_id, provider_event_id):
+    connection = _get_connection(session_id)
+    if not connection or not calendar_id or not provider_event_id:
+        return None
+
+    response = requests.get(
+        f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+        headers=_auth_headers(connection["access_token"]),
+        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+    )
+    if response.status_code == 401:
+        refreshed_access_token = _refresh_google_access_token(session_id, connection)
+        if refreshed_access_token:
+            response = requests.get(
+                f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+                headers=_auth_headers(refreshed_access_token),
+                timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+            )
+    if response.status_code == 404:
+        return None
+    response.raise_for_status()
+    return response.json()
+
+
 def _delete_google_event_by_id(session_id, calendar_id, provider_event_id):
     connection = _get_connection(session_id)
     if not connection or not calendar_id or not provider_event_id:
@@ -501,12 +525,28 @@ def sync_google_create_event(session_id, event_doc, preferred_calendar_id=None):
         )
         if not created:
             return {"status": "skipped"}
+        created_id = created.get("id")
+        verified_event = _get_google_event_by_id(session_id, calendar_id, created_id)
+        if not verified_event:
+            log_event(
+                "google_calendar_sync_failed",
+                session_id=session_id,
+                payload={
+                    "action": "create_verify",
+                    "title": event_doc.get("title"),
+                    "provider_event_id": created_id,
+                    "provider_calendar_id": calendar_id,
+                    "reason": "event_not_found_after_create",
+                },
+                level="error",
+            )
+            return {"status": "failed"}
         return {
             "status": "synced",
-            "provider_event_id": created.get("id"),
+            "provider_event_id": created_id,
             "provider_calendar_id": calendar_id,
             "provider_calendar_name": get_google_calendar_name(session_id, calendar_id),
-            "html_link": created.get("htmlLink"),
+            "html_link": verified_event.get("htmlLink") or created.get("htmlLink"),
         }
     except Exception as exc:
         response_body = ""

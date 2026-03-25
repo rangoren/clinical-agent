@@ -1036,6 +1036,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
                         "provider": "google",
                         "provider_event_id": sync_result.get("provider_event_id"),
                         "provider_calendar_id": selected_calendar_id or sync_result.get("provider_calendar_id"),
+                        "provider_html_link": sync_result.get("html_link"),
                         "updated_at": now,
                     }
                 },
@@ -1056,6 +1057,8 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             if calendar_name:
                 reply += f" ({calendar_name})"
             reply += "."
+            if sync_result.get("html_link"):
+                reply += f" Open: {sync_result.get('html_link')}"
         else:
             reply += _sync_status_suffix(sync_result.get("status"))
         return {
@@ -1098,6 +1101,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
                             "provider": "google",
                             "provider_event_id": sync_result.get("provider_event_id"),
                             "provider_calendar_id": selected_calendar_id or sync_result.get("provider_calendar_id"),
+                            "provider_html_link": sync_result.get("html_link"),
                             "updated_at": now,
                         }
                     },
