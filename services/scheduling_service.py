@@ -74,7 +74,22 @@ MONTHS = {
     "נובמבר": 11,
     "דצמבר": 12,
 }
-DELETE_KEYWORDS = ("delete", "remove", "cancel", "drop", "תמחק", "תמחקי", "למחוק", "תבטל", "תבטלי", "לבטל", "הסר", "תסיר")
+DELETE_KEYWORDS = (
+    "delete",
+    "remove",
+    "cancel",
+    "drop",
+    "מחק",
+    "תמחק",
+    "תמחקי",
+    "למחוק",
+    "בטל",
+    "תבטל",
+    "תבטלי",
+    "לבטל",
+    "הסר",
+    "תסיר",
+)
 UPDATE_KEYWORDS = ("move", "reschedule", "change", "update", "push", "תעדכן", "תעדכני", "לשנות", "תזיז", "תזיזי", "דחה")
 SUMMARY_KEYWORDS = (
     "daily summary",
@@ -651,9 +666,14 @@ def _find_target_event(session_id, message):
 def _is_bulk_shift_delete_request(message):
     normalized = _normalize_text(message)
     lowered = normalized.lower()
-    return _detect_action(normalized) == "delete" and _is_shift_template(normalized) and (
-        "all" in lowered or "כל" in normalized
-    )
+    if _detect_action(normalized) != "delete" or not _is_shift_template(normalized):
+        return False
+
+    month, year = _extract_month_year(normalized)
+    if month and year:
+        return True
+
+    return "all" in lowered or "כל" in normalized
 
 
 def _find_bulk_target_events(session_id, message):
