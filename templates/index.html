@@ -1116,6 +1116,12 @@
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
             card.className = "draft-card";
+            const actionType = draft.action_type || "create";
+            const confirmLabel = actionType === "delete"
+                ? "Delete event"
+                : actionType === "update"
+                ? "Update event"
+                : "Create event";
 
             const title = document.createElement("p");
             title.className = "draft-title";
@@ -1124,6 +1130,7 @@
             const meta = document.createElement("div");
             meta.className = "draft-meta";
             meta.innerHTML = `
+                ${draft.target_summary ? `<div>Current: ${escapeHtml(draft.target_summary)}</div>` : ""}
                 <div>Calendar: ${escapeHtml(draft.calendar_type || "Personal")}</div>
                 <div>Time: ${escapeHtml(draft.start_at || "")}${draft.end_at ? ` - ${escapeHtml(draft.end_at)}` : ""}</div>
                 <div>Reminders: ${escapeHtml((draft.reminders || []).join(", ") || "None")}</div>
@@ -1153,7 +1160,7 @@
 
             const confirmButton = document.createElement("button");
             confirmButton.className = "secondary-button";
-            confirmButton.textContent = "Create event";
+            confirmButton.textContent = confirmLabel;
             confirmButton.addEventListener("click", () => confirmSchedulingDraft(draft.draft_id, card));
 
             const dismissButton = document.createElement("button");

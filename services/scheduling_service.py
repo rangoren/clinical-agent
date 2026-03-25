@@ -2,6 +2,8 @@ import re
 from datetime import datetime, timedelta
 from uuid import uuid4
 
+from bson import ObjectId
+
 from db import scheduled_events_collection, scheduling_drafts_collection
 
 
@@ -29,6 +31,8 @@ WEEKDAYS = {
     "saturday": 5,
     "sunday": 6,
 }
+DELETE_KEYWORDS = ("delete", "remove", "cancel", "drop")
+UPDATE_KEYWORDS = ("move", "reschedule", "change", "update", "push")
 
 
 def _utcnow():
@@ -37,6 +41,52 @@ def _utcnow():
 
 def _normalize_text(text):
     return re.sub(r"\s+", " ", (text or "").strip())
+
+
+def _tokenize_title(text):
+    return [
+        token
+        for token in re.findall(r"[a-zA-Z0-9]+", (text or "").lower())
+        if token
+        not in {
+            "add",
+            "schedule",
+            "book",
+            "set",
+            "create",
+            "event",
+            "move",
+            "reschedule",
+            "change",
+            "update",
+            "delete",
+            "remove",
+            "cancel",
+            "drop",
+            "to",
+            "from",
+            "at",
+            "on",
+            "for",
+            "my",
+            "our",
+            "the",
+            "a",
+            "an",
+            "next",
+            "today",
+            "tomorrow",
+        }
+    ]
+
+
+def _detect_action(message):
+    lowered = (message or "").lower()
+    if any(keyword in lowered for keyword in DELETE_KEYWORDS):
+        return "delete"
+    if any(keyword in lowered for keyword in UPDATE_KEYWORDS):
+        return "update"
+    return "create"
 
 
 def _infer_calendar_type(text):
@@ -107,6 +157,29 @@ def _extract_date(text):
     return None
 
 
+def _extract_date_phrase(text):
+    lowered = text.lower()
+    if "today" in lowered:
+        return "today"
+    if "tomorrow" in lowered:
+        return "tomorrow"
+    for weekday_name in WEEKDAYS:
+        if f"next {weekday_name}" in lowered:
+            return f"next {weekday_name}"
+        if weekday_name in lowered:
+            return weekday_name
+
+    iso_match = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", text)
+    if iso_match:
+        return iso_match.group(0)
+
+    short_match = re.search(r"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", text)
+    if short_match:
+        return short_match.group(0)
+
+    return None
+
+
 def _clean_title(text):
     cleaned = re.sub(r"\b(today|tomorrow|next\s+\w+)\b", "", text, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b\d{1,2}(?::\d{2})?\s*(am|pm)?\b", "", cleaned, flags=re.IGNORECASE)
@@ -151,6 +224,78 @@ def _build_event_from_message(message):
     }
 
 
+def _find_target_event(session_id, message):
+    normalized = _normalize_text(message)
+    requested_date = _extract_date(normalized)
+    title_tokens = _tokenize_title(_clean_title(normalized))
+    candidates = list(
+        scheduled_events_collection.find({"session_id": session_id, "status": "confirmed"}).sort("start_at", 1)
+    )
+
+    best_match = None
+    best_score = -1
+    for candidate in candidates:
+        score = 0
+        candidate_title = candidate.get("title", "")
+        candidate_tokens = set(_tokenize_title(candidate_title))
+        overlap = len(set(title_tokens) & candidate_tokens)
+        score += overlap * 5
+
+        if requested_date and candidate.get("start_at") and candidate["start_at"].date() == requested_date:
+            score += 4
+
+        if title_tokens and any(token in candidate_title.lower() for token in title_tokens):
+            score += 2
+
+        if not title_tokens and requested_date and candidate.get("start_at") and candidate["start_at"].date() == requested_date:
+            score += 1
+
+        if score > best_score:
+            best_score = score
+            best_match = candidate
+
+    if not best_match or best_score <= 0:
+        return None
+    return best_match
+
+
+def _build_update_from_message(message, existing_event):
+    normalized = _normalize_text(message)
+    existing_start = existing_event["start_at"]
+    existing_end = existing_event["end_at"]
+    requested_date = _extract_date(normalized)
+    requested_time = _extract_time(normalized)
+
+    start_at = existing_start
+    if requested_date:
+        start_at = datetime.combine(requested_date, start_at.time())
+    if requested_time:
+        start_at = start_at.replace(hour=requested_time[0], minute=requested_time[1])
+
+    duration = existing_end - existing_start
+    end_at = start_at + duration
+
+    return {
+        "status": "ready",
+        "title": existing_event.get("title", "Untitled event"),
+        "calendar_type": existing_event.get("calendar_type", "personal"),
+        "reminders": existing_event.get("reminders", _infer_reminders(existing_event.get("calendar_type", "personal"))),
+        "start_at": start_at,
+        "end_at": end_at,
+    }
+
+
+def _serialize_existing_event(existing_event):
+    return {
+        "event_id": str(existing_event.get("_id")),
+        "title": existing_event.get("title", "Existing event"),
+        "calendar_type": existing_event.get("calendar_type", "personal"),
+        "start_at": existing_event["start_at"].isoformat(timespec="minutes"),
+        "end_at": existing_event["end_at"].isoformat(timespec="minutes"),
+        "reminders": existing_event.get("reminders", []),
+    }
+
+
 def _serialize_event(event):
     return {
         "title": event["title"],
@@ -185,15 +330,17 @@ def _find_conflicts(session_id, event):
     return serialized
 
 
-def _save_draft(session_id, raw_message, parsed_event, conflicts):
+def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflicts=None, target_event=None):
     now = _utcnow()
     draft_id = str(uuid4())
     doc = {
         "draft_id": draft_id,
         "session_id": session_id,
         "raw_message": raw_message,
+        "action_type": action_type,
         "parsed_event": parsed_event,
-        "conflicts": conflicts,
+        "conflicts": conflicts or [],
+        "target_event": target_event,
         "status": "pending",
         "created_at": now,
         "updated_at": now,
@@ -220,6 +367,21 @@ def _format_draft_reply(parsed_event, conflicts):
     return f"I drafted this in your {parsed_event['calendar_type']} calendar for {start_label}. Review it before I create it."
 
 
+def _format_update_reply(existing_event, updated_event, conflicts):
+    start_label = updated_event["start_at"].strftime("%a %d %b at %H:%M")
+    if conflicts:
+        return (
+            f"I drafted an update for {existing_event.get('title', 'this event')} to {start_label}. "
+            f"I also found {len(conflicts)} conflict{'s' if len(conflicts) != 1 else ''}. Review before I update it."
+        )
+    return f"I drafted an update for {existing_event.get('title', 'this event')} to {start_label}. Review it before I update it."
+
+
+def _format_delete_reply(existing_event):
+    start_label = existing_event["start_at"].strftime("%a %d %b at %H:%M")
+    return f"I found {existing_event.get('title', 'this event')} on {start_label}. Review it before I delete it."
+
+
 def build_scheduling_welcome():
     return (
         "Scheduling Copilot is active.<br><br>"
@@ -231,6 +393,68 @@ def build_scheduling_welcome():
 
 
 def handle_scheduling_message(session_id, user_message):
+    action_type = _detect_action(user_message)
+    if action_type in {"update", "delete"}:
+        target_event = _find_target_event(session_id, user_message)
+        if not target_event:
+            return {
+                "reply": "I couldn't find a matching scheduled event to update yet. Try including the event name and date.",
+                "scheduling_draft": None,
+            }
+
+        serialized_target = _serialize_existing_event(target_event)
+        if action_type == "delete":
+            draft_id = _save_draft(
+                session_id,
+                user_message,
+                action_type="delete",
+                target_event=serialized_target,
+            )
+            return {
+                "reply": _format_delete_reply(target_event),
+                "scheduling_draft": {
+                    "draft_id": draft_id,
+                    "action_type": "delete",
+                    "title": target_event.get("title", "Existing event"),
+                    "calendar_type": target_event.get("calendar_type", "personal").title(),
+                    "start_at": target_event["start_at"].strftime("%a, %d %b %Y · %H:%M"),
+                    "end_at": target_event["end_at"].strftime("%H:%M"),
+                    "reminders": target_event.get("reminders", []),
+                    "conflicts": [],
+                    "status": "needs_review",
+                },
+            }
+
+        parsed = _build_update_from_message(user_message, target_event)
+        conflicts = [
+            conflict
+            for conflict in _find_conflicts(session_id, parsed)
+            if conflict["start_at"] != serialized_target["start_at"] or conflict["title"] != serialized_target["title"]
+        ]
+        draft_id = _save_draft(
+            session_id,
+            user_message,
+            action_type="update",
+            parsed_event=_serialize_event(parsed),
+            conflicts=conflicts,
+            target_event=serialized_target,
+        )
+        return {
+            "reply": _format_update_reply(target_event, parsed, conflicts),
+            "scheduling_draft": {
+                "draft_id": draft_id,
+                "action_type": "update",
+                "title": parsed["title"],
+                "calendar_type": parsed["calendar_type"].title(),
+                "start_at": parsed["start_at"].strftime("%a, %d %b %Y · %H:%M"),
+                "end_at": parsed["end_at"].strftime("%H:%M"),
+                "reminders": parsed["reminders"],
+                "conflicts": conflicts,
+                "status": "needs_review",
+                "target_summary": f"{target_event.get('title', 'Existing event')} · {target_event['start_at'].strftime('%a, %d %b %Y · %H:%M')}",
+            },
+        }
+
     parsed = _build_event_from_message(user_message)
     if parsed["status"] == "needs_details":
         return {
@@ -239,12 +463,19 @@ def handle_scheduling_message(session_id, user_message):
         }
 
     conflicts = _find_conflicts(session_id, parsed)
-    draft_id = _save_draft(session_id, user_message, _serialize_event(parsed), conflicts)
+    draft_id = _save_draft(
+        session_id,
+        user_message,
+        action_type="create",
+        parsed_event=_serialize_event(parsed),
+        conflicts=conflicts,
+    )
 
     return {
         "reply": _format_draft_reply(parsed, conflicts),
         "scheduling_draft": {
             "draft_id": draft_id,
+            "action_type": "create",
             "title": parsed["title"],
             "calendar_type": parsed["calendar_type"].title(),
             "start_at": parsed["start_at"].strftime("%a, %d %b %Y · %H:%M"),
@@ -261,29 +492,84 @@ def confirm_scheduling_draft(session_id, draft_id):
     if not draft:
         return {"status": "missing"}
 
-    parsed_event = draft["parsed_event"]
+    action_type = draft.get("action_type", "create")
     now = _utcnow()
-    event_doc = {
-        "session_id": session_id,
-        "draft_id": draft_id,
-        "title": parsed_event["title"],
-        "calendar_type": parsed_event["calendar_type"],
-        "start_at": datetime.fromisoformat(parsed_event["start_at"]),
-        "end_at": datetime.fromisoformat(parsed_event["end_at"]),
-        "reminders": parsed_event["reminders"],
-        "status": "confirmed",
-        "created_at": now,
-        "updated_at": now,
-    }
-    scheduled_events_collection.insert_one(event_doc)
-    scheduling_drafts_collection.update_one(
-        {"draft_id": draft_id, "session_id": session_id},
-        {"$set": {"status": "confirmed", "updated_at": now}},
-    )
-    return {
-        "status": "confirmed",
-        "reply": f"Created {parsed_event['title']} in your {parsed_event['calendar_type']} calendar.",
-    }
+    if action_type == "create":
+        parsed_event = draft["parsed_event"]
+        event_doc = {
+            "session_id": session_id,
+            "draft_id": draft_id,
+            "event_id": str(uuid4()),
+            "title": parsed_event["title"],
+            "calendar_type": parsed_event["calendar_type"],
+            "start_at": datetime.fromisoformat(parsed_event["start_at"]),
+            "end_at": datetime.fromisoformat(parsed_event["end_at"]),
+            "reminders": parsed_event["reminders"],
+            "status": "confirmed",
+            "created_at": now,
+            "updated_at": now,
+        }
+        scheduled_events_collection.insert_one(event_doc)
+        scheduling_drafts_collection.update_one(
+            {"draft_id": draft_id, "session_id": session_id},
+            {"$set": {"status": "confirmed", "updated_at": now}},
+        )
+        return {
+            "status": "confirmed",
+            "reply": f"Created {parsed_event['title']} in your {parsed_event['calendar_type']} calendar.",
+        }
+
+    target_event = draft.get("target_event")
+    if not target_event or not target_event.get("event_id"):
+        return {"status": "missing", "reply": "I couldn't find that draft target anymore."}
+
+    target_filter = {"_id": ObjectId(target_event["event_id"]), "session_id": session_id, "status": "confirmed"}
+
+    if action_type == "update":
+        parsed_event = draft["parsed_event"]
+        result = scheduled_events_collection.update_one(
+            target_filter,
+            {
+                "$set": {
+                    "title": parsed_event["title"],
+                    "calendar_type": parsed_event["calendar_type"],
+                    "start_at": datetime.fromisoformat(parsed_event["start_at"]),
+                    "end_at": datetime.fromisoformat(parsed_event["end_at"]),
+                    "reminders": parsed_event["reminders"],
+                    "updated_at": now,
+                }
+            },
+        )
+        if not result.modified_count:
+            return {"status": "missing", "reply": "I couldn't update that event because it no longer exists."}
+
+        scheduling_drafts_collection.update_one(
+            {"draft_id": draft_id, "session_id": session_id},
+            {"$set": {"status": "confirmed", "updated_at": now}},
+        )
+        return {
+            "status": "confirmed",
+            "reply": f"Updated {parsed_event['title']} to {datetime.fromisoformat(parsed_event['start_at']).strftime('%a %d %b at %H:%M')}.",
+        }
+
+    if action_type == "delete":
+        result = scheduled_events_collection.update_one(
+            target_filter,
+            {"$set": {"status": "deleted", "updated_at": now}},
+        )
+        if not result.modified_count:
+            return {"status": "missing", "reply": "I couldn't delete that event because it no longer exists."}
+
+        scheduling_drafts_collection.update_one(
+            {"draft_id": draft_id, "session_id": session_id},
+            {"$set": {"status": "confirmed", "updated_at": now}},
+        )
+        return {
+            "status": "confirmed",
+            "reply": f"Deleted {target_event.get('title', 'the event')}.",
+        }
+
+    return {"status": "missing", "reply": "I couldn't confirm that draft."}
 
 
 def dismiss_scheduling_draft(session_id, draft_id):
