@@ -1139,7 +1139,7 @@
     <script>
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
-        let appMode = localStorage.getItem("app_mode") || "clinical";
+        let appMode = "clinical";
         let googleCalendarConnected = false;
 
         if (!sessionId) {
@@ -1301,7 +1301,6 @@
         function switchAppMode(nextMode) {
             if (appMode === nextMode) return;
             appMode = nextMode;
-            localStorage.setItem("app_mode", appMode);
             renderModeState();
             document.getElementById("chat").innerHTML = "";
             hideSessionBanner();
