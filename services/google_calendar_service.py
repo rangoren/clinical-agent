@@ -32,6 +32,18 @@ def _as_google_utc(dt):
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _normalize_google_datetime(raw_value):
+    if not raw_value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(APP_ZONEINFO).replace(tzinfo=None, second=0, microsecond=0)
+
+
 def google_calendar_enabled():
     return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI)
 
@@ -434,10 +446,9 @@ def _find_matching_google_events(session_id, calendar_id, title, start_at, end_a
         item_end_raw = item.get("end", {}).get("dateTime")
         if not item_start_raw or not item_end_raw:
             continue
-        try:
-            item_start = datetime.fromisoformat(item_start_raw.replace("Z", "+00:00")).replace(tzinfo=None, second=0, microsecond=0)
-            item_end = datetime.fromisoformat(item_end_raw.replace("Z", "+00:00")).replace(tzinfo=None, second=0, microsecond=0)
-        except ValueError:
+        item_start = _normalize_google_datetime(item_start_raw)
+        item_end = _normalize_google_datetime(item_end_raw)
+        if not item_start or not item_end:
             continue
 
         if item_start != target_start or item_end != target_end:
