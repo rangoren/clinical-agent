@@ -48,6 +48,18 @@ MONTHS = {
 }
 DELETE_KEYWORDS = ("delete", "remove", "cancel", "drop")
 UPDATE_KEYWORDS = ("move", "reschedule", "change", "update", "push")
+SUMMARY_KEYWORDS = (
+    "daily summary",
+    "summary for today",
+    "what's on today",
+    "whats on today",
+    "today summary",
+    "today's schedule",
+    "todays schedule",
+    "schedule today",
+    "what do i have today",
+    "what do we have today",
+)
 
 
 def _utcnow():
@@ -102,6 +114,11 @@ def _detect_action(message):
     if any(keyword in lowered for keyword in UPDATE_KEYWORDS):
         return "update"
     return "create"
+
+
+def _is_daily_summary_request(message):
+    lowered = _normalize_text(message).lower()
+    return any(keyword in lowered for keyword in SUMMARY_KEYWORDS)
 
 
 def _infer_calendar_type(text):
@@ -546,6 +563,75 @@ def _format_bulk_reply(events, conflicts):
     )
 
 
+def _format_event_line(event):
+    start_label = event["start_at"].strftime("%H:%M")
+    end_label = event["end_at"].strftime("%H:%M")
+    return f"- {start_label}-{end_label} · {event.get('title', 'Untitled event')} ({event.get('calendar_type', 'personal')})"
+
+
+def _build_daily_summary(session_id):
+    now = _utcnow()
+    start_of_day = datetime.combine(now.date(), datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
+
+    events = list(
+        scheduled_events_collection.find(
+            {
+                "session_id": session_id,
+                "status": "confirmed",
+                "start_at": {"$gte": start_of_day, "$lt": end_of_day},
+            }
+        ).sort("start_at", 1)
+    )
+
+    if not events:
+        return {
+            "reply": "Today looks clear so far. I don’t see any scheduled events yet.",
+            "scheduling_draft": None,
+        }
+
+    lines = [f"Today you have {len(events)} event{'s' if len(events) != 1 else ''}:"]
+    lines.extend(_format_event_line(event) for event in events)
+
+    total_minutes = int(sum((event["end_at"] - event["start_at"]).total_seconds() for event in events) / 60)
+    pressure_points = []
+    for current_event, next_event in zip(events, events[1:]):
+        gap_minutes = int((next_event["start_at"] - current_event["end_at"]).total_seconds() / 60)
+        if gap_minutes < 30:
+            pressure_points.append(
+                f"{current_event.get('title', 'Event')} -> {next_event.get('title', 'Event')} ({max(gap_minutes, 0)} min gap)"
+            )
+
+    upcoming_critical = []
+    for event in events:
+        minutes_until = int((event["start_at"] - now).total_seconds() / 60)
+        if 0 <= minutes_until <= 120 and event.get("calendar_type") in {"work", "kids"}:
+            upcoming_critical.append(f"{event['start_at'].strftime('%H:%M')} · {event.get('title', 'Event')}")
+
+    lines.append("")
+    lines.append(f"Planned time: {total_minutes // 60}h {total_minutes % 60:02d}m")
+
+    if len(events) >= 5 or total_minutes >= 8 * 60:
+        lines.append("Load: heavy")
+    elif len(events) >= 3 or total_minutes >= 4 * 60:
+        lines.append("Load: moderate")
+    else:
+        lines.append("Load: light")
+
+    if pressure_points:
+        lines.append("Pressure points:")
+        lines.extend(f"- {item}" for item in pressure_points[:3])
+
+    if upcoming_critical:
+        lines.append("Critical soon:")
+        lines.extend(f"- {item}" for item in upcoming_critical[:3])
+
+    return {
+        "reply": "\n".join(lines),
+        "scheduling_draft": None,
+    }
+
+
 def build_scheduling_welcome():
     return (
         "Scheduling Copilot is active.<br><br>"
@@ -557,6 +643,9 @@ def build_scheduling_welcome():
 
 
 def handle_scheduling_message(session_id, user_message):
+    if _is_daily_summary_request(user_message):
+        return _build_daily_summary(session_id)
+
     action_type = _detect_action(user_message)
     if action_type in {"update", "delete"}:
         target_event = _find_target_event(session_id, user_message)
