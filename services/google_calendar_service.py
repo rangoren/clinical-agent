@@ -54,7 +54,6 @@ def _upsert_connection(session_id, token_payload, calendars):
         "token_type": token_payload.get("token_type", "Bearer"),
         "expires_at": expiry,
         "updated_at": now,
-        "created_at": now,
         "is_active": True,
     }
     calendar_connections_collection.update_one(
