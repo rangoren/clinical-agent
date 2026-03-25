@@ -96,7 +96,7 @@
 
         .brand {
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             gap: 14px;
             min-width: 0;
         }
@@ -147,20 +147,18 @@
 
         .topbar-meta {
             display: flex;
-            flex-direction: column;
-            align-items: flex-end;
+            align-items: center;
+            justify-content: flex-end;
             gap: 10px;
             flex-shrink: 0;
-            min-width: min(100%, 390px);
+            min-width: 0;
         }
 
         .topbar-row {
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            flex-wrap: wrap;
             gap: 10px;
-            width: 100%;
         }
 
         .mode-switch {
@@ -192,6 +190,7 @@
 
         .version-stamp {
             flex-shrink: 0;
+            min-height: 42px;
             padding: 9px 12px;
             border-radius: 999px;
             background: rgba(255, 255, 255, 0.72);
@@ -200,22 +199,77 @@
             font-size: 0.76rem;
             font-weight: 700;
             letter-spacing: 0.04em;
-        }
-
-        .calendar-pill {
-            display: none;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            width: 100%;
-            padding: 12px 14px;
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.82);
-            border: 1px solid var(--line);
-        }
-
-        .calendar-pill.visible {
             display: inline-flex;
+            align-items: center;
+        }
+
+        .settings-shell {
+            position: relative;
+            display: none;
+            flex-shrink: 0;
+        }
+
+        .settings-shell.visible {
+            display: inline-flex;
+        }
+
+        .settings-trigger {
+            width: 42px;
+            height: 42px;
+            padding: 0;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.82);
+            color: var(--brand-strong);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+        }
+
+        .settings-trigger:hover {
+            background: rgba(15, 118, 110, 0.08);
+        }
+
+        .settings-trigger svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .settings-panel {
+            display: none;
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            min-width: 248px;
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid var(--line);
+            box-shadow: 0 18px 48px rgba(20, 37, 33, 0.14);
+            backdrop-filter: blur(16px);
+            z-index: 20;
+        }
+
+        .settings-panel.open {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .settings-section {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .settings-label {
+            color: var(--muted);
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .calendar-label {
@@ -226,25 +280,23 @@
         }
 
         .calendar-copy {
-            display: inline-flex;
-            align-items: center;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
             min-width: 0;
-        }
-
-        .calendar-kicker {
-            display: none;
         }
 
         .calendar-action {
             border: none;
-            border-radius: 999px;
+            border-radius: 12px;
             background: rgba(15, 118, 110, 0.14);
             color: var(--brand-strong);
-            padding: 8px 12px;
+            padding: 9px 12px;
             font: inherit;
             font-size: 0.76rem;
             font-weight: 700;
             cursor: pointer;
+            width: 100%;
         }
 
         .content {
@@ -811,7 +863,7 @@
             }
 
             .topbar-meta {
-                min-width: 360px;
+                min-width: 0;
             }
 
             .content {
@@ -1009,7 +1061,8 @@
                 width: 100%;
                 min-width: 0;
                 gap: 8px;
-                align-items: stretch;
+                align-items: center;
+                justify-content: space-between;
             }
 
             .topbar-row {
@@ -1018,20 +1071,19 @@
                 gap: 8px;
             }
 
-            .calendar-pill {
-                width: 100%;
-                align-items: center;
-                flex-direction: row;
-                gap: 10px;
-                padding: 10px;
+            .settings-trigger {
+                width: 38px;
+                height: 38px;
             }
 
-            .calendar-action {
-                width: auto;
-                flex: 0 0 auto;
+            .settings-panel {
+                right: 0;
+                left: auto;
+                min-width: 220px;
             }
 
             .version-stamp {
+                min-height: 34px;
                 padding: 6px 8px;
                 font-size: 0.68rem;
             }
@@ -1064,13 +1116,30 @@
                         <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
                     </div>
                     <div class="version-stamp">{{ app_version }}</div>
-                </div>
-                <div id="calendar-pill" class="calendar-pill">
-                    <div class="calendar-copy">
-                        <span class="calendar-kicker">Calendar Sync</span>
-                        <span id="calendar-label" class="calendar-label">Calendar Sync: Not connected</span>
+                    <div id="settings-shell" class="settings-shell">
+                        <button
+                            id="settings-trigger"
+                            class="settings-trigger"
+                            type="button"
+                            aria-label="Scheduling settings"
+                            aria-expanded="false"
+                            onclick="toggleSettingsMenu(event)"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="12" r="3.2"></circle>
+                                <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a1.2 1.2 0 0 1 0 1.7l-1.3 1.3a1.2 1.2 0 0 1-1.7 0l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a1.2 1.2 0 0 1-1.2 1.2h-1.8A1.2 1.2 0 0 1 10.7 20v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a1.2 1.2 0 0 1-1.7 0l-1.3-1.3a1.2 1.2 0 0 1 0-1.7l.1-.1A1 1 0 0 0 6.2 15a1 1 0 0 0-.9-.6H5a1.2 1.2 0 0 1-1.2-1.2v-1.8A1.2 1.2 0 0 1 5 10.2h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a1.2 1.2 0 0 1 0-1.7l1.3-1.3a1.2 1.2 0 0 1 1.7 0l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a1.2 1.2 0 0 1 1.2-1.2h1.8A1.2 1.2 0 0 1 14.9 4v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a1.2 1.2 0 0 1 1.7 0l1.3 1.3a1.2 1.2 0 0 1 0 1.7l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6h.2a1.2 1.2 0 0 1 1.2 1.2v1.8a1.2 1.2 0 0 1-1.2 1.2h-.2a1 1 0 0 0-.9.6z"></path>
+                            </svg>
+                        </button>
+                        <div id="settings-panel" class="settings-panel" role="menu" aria-label="Scheduling settings">
+                            <div class="settings-section">
+                                <span class="settings-label">Calendar Sync</span>
+                                <div class="calendar-copy">
+                                    <span id="calendar-label" class="calendar-label">Calendar Sync: Not connected</span>
+                                </div>
+                            </div>
+                            <button id="calendar-action" class="calendar-action" onclick="toggleGoogleCalendarConnection()">Connect Google</button>
+                        </div>
                     </div>
-                    <button id="calendar-action" class="calendar-action" onclick="toggleGoogleCalendarConnection()">Connect Google</button>
                 </div>
             </div>
         </header>
@@ -1118,10 +1187,31 @@
 
         function setStatus(_text) {}
 
+        function closeSettingsMenu() {
+            const panel = document.getElementById("settings-panel");
+            const trigger = document.getElementById("settings-trigger");
+            if (!panel || !trigger) return;
+            panel.classList.remove("open");
+            trigger.setAttribute("aria-expanded", "false");
+        }
+
+        function toggleSettingsMenu(event) {
+            event.stopPropagation();
+            const panel = document.getElementById("settings-panel");
+            const trigger = document.getElementById("settings-trigger");
+            if (!panel || !trigger) return;
+            const nextOpen = !panel.classList.contains("open");
+            panel.classList.toggle("open", nextOpen);
+            trigger.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        }
+
         function renderModeState() {
             document.getElementById("mode-clinical").classList.toggle("active", appMode === "clinical");
             document.getElementById("mode-scheduling").classList.toggle("active", appMode === "scheduling");
-            document.getElementById("calendar-pill").classList.toggle("visible", appMode === "scheduling");
+            document.getElementById("settings-shell").classList.toggle("visible", appMode === "scheduling");
+            if (appMode !== "scheduling") {
+                closeSettingsMenu();
+            }
         }
 
         function updateCalendarUi(status) {
@@ -1183,6 +1273,7 @@
                     });
                     const data = await response.json();
                     appendAssistantMessage(data.reply || "Google Calendar disconnected.", "system");
+                    closeSettingsMenu();
                     await refreshCalendarStatus();
                 } catch (error) {
                     appendAssistantMessage("Error: " + error, "error");
@@ -1202,6 +1293,7 @@
                 });
                 const data = await response.json();
                 if (data.auth_url) {
+                    closeSettingsMenu();
                     window.location.href = data.auth_url;
                     return;
                 }
@@ -1224,6 +1316,14 @@
 
             window.history.replaceState({}, document.title, window.location.pathname);
         }
+
+        document.addEventListener("click", (event) => {
+            const shell = document.getElementById("settings-shell");
+            if (!shell || !shell.classList.contains("visible")) return;
+            if (!shell.contains(event.target)) {
+                closeSettingsMenu();
+            }
+        });
 
         function switchAppMode(nextMode) {
             if (appMode === nextMode) return;
