@@ -15,8 +15,11 @@ from services.google_calendar_service import (
 
 
 DEFAULT_EVENT_MINUTES = 60
+DEFAULT_SHIFT_START_HOUR = 8
+DEFAULT_SHIFT_START_MINUTE = 0
+DEFAULT_SHIFT_DURATION_HOURS = 25
 CALENDAR_KEYWORDS = {
-    "work": ("work", "shift", "clinic", "ward", "call", "hospital", "meeting"),
+    "work": ("work", "shift", "clinic", "ward", "call", "hospital", "meeting", "on-call", "on call", "night shift", "night shifts", "call shift", "call shifts", "תורנות", "תורנויות", "כוננות", "משמרת לילה", "תורנית"),
     "kids": ("kids", "child", "children", "school", "kindergarten", "pickup", "dropoff", "pediatrician"),
     "family": ("family", "parents", "in-laws", "dinner", "birthday", "shared"),
     "personal": ("gym", "dentist", "doctor", "hair", "friend", "date", "personal"),
@@ -51,6 +54,18 @@ MONTHS = {
     "october": 10,
     "november": 11,
     "december": 12,
+    "ינואר": 1,
+    "פברואר": 2,
+    "מרץ": 3,
+    "אפריל": 4,
+    "מאי": 5,
+    "יוני": 6,
+    "יולי": 7,
+    "אוגוסט": 8,
+    "ספטמבר": 9,
+    "אוקטובר": 10,
+    "נובמבר": 11,
+    "דצמבר": 12,
 }
 DELETE_KEYWORDS = ("delete", "remove", "cancel", "drop")
 UPDATE_KEYWORDS = ("move", "reschedule", "change", "update", "push")
@@ -65,6 +80,21 @@ SUMMARY_KEYWORDS = (
     "schedule today",
     "what do i have today",
     "what do we have today",
+)
+SHIFT_KEYWORDS = (
+    "on-call",
+    "on call",
+    "call shift",
+    "call shifts",
+    "night shift",
+    "night shifts",
+    "night duty",
+    "duty shift",
+    "תורנות",
+    "תורנויות",
+    "תורנית",
+    "כוננות",
+    "משמרת לילה",
 )
 
 
@@ -170,6 +200,20 @@ def _infer_reminders(calendar_type):
     return REMINDER_DEFAULTS.get(calendar_type, ["1 hour before"])
 
 
+def _is_shift_template(text):
+    lowered = (text or "").lower()
+    return any(keyword in lowered for keyword in SHIFT_KEYWORDS)
+
+
+def _build_shift_window(event_date):
+    start_at = datetime.combine(event_date, datetime.min.time()).replace(
+        hour=DEFAULT_SHIFT_START_HOUR,
+        minute=DEFAULT_SHIFT_START_MINUTE,
+    )
+    end_at = start_at + timedelta(hours=DEFAULT_SHIFT_DURATION_HOURS)
+    return start_at, end_at
+
+
 def _extract_time(text):
     match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", text, flags=re.IGNORECASE)
     if not match:
@@ -264,16 +308,13 @@ def _extract_month_year(text):
     if "this month" in lowered:
         return now.month, now.year
 
-    month_match = re.search(
-        r"\b("
-        + "|".join(MONTHS.keys())
-        + r")\b(?:\s+(20\d{2}))?",
-        lowered,
-    )
-    if month_match:
-        month = MONTHS[month_match.group(1)]
-        year = int(month_match.group(2)) if month_match.group(2) else now.year
-        return month, year
+    for alias, month_number in sorted(MONTHS.items(), key=lambda item: len(item[0]), reverse=True):
+        pattern = rf"(?<!\w)[בל]?(?:{re.escape(alias.lower())})(?!\w)"
+        month_match = re.search(pattern, lowered)
+        if month_match:
+            year_match = re.search(r"(20\d{2})", lowered)
+            year = int(year_match.group(1)) if year_match else now.year
+            return month_number, year
 
     slash_match = re.search(r"\b(\d{1,2})/(\d{4})\b", lowered)
     if slash_match:
@@ -285,7 +326,8 @@ def _extract_month_year(text):
 def _clean_title(text):
     cleaned = re.sub(r"\b(today|tomorrow|next\s+\w+)\b", "", text, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bthis month\b|\bnext month\b", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\b(" + "|".join(MONTHS.keys()) + r")\b(?:\s+20\d{2})?", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(" + "|".join(re.escape(key) for key in MONTHS.keys()) + r")\b(?:\s+20\d{2})?", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"[בל](?=(" + "|".join(re.escape(key) for key in MONTHS.keys()) + r"))", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bevery\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+and\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))*\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b\d{1,2}\s*[-–]\s*\d{1,2}\b", "", cleaned)
     cleaned = re.sub(r"\b\d{1,2}(?:\s*,\s*\d{1,2}){1,}\b", "", cleaned)
@@ -313,8 +355,9 @@ def _build_bulk_events_from_message(message):
     reminders = _infer_reminders(calendar_type)
     month, year = _extract_month_year(normalized)
     now = _utcnow()
+    is_shift_template = _is_shift_template(normalized)
 
-    if not event_time:
+    if not event_time and not is_shift_template:
         return None
 
     candidate_dates = []
@@ -370,8 +413,11 @@ def _build_bulk_events_from_message(message):
     title = _clean_title(normalized)
     events = []
     for event_date in candidate_dates:
-        start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
-        end_at = start_at + timedelta(minutes=DEFAULT_EVENT_MINUTES)
+        if is_shift_template:
+            start_at, end_at = _build_shift_window(event_date)
+        else:
+            start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
+            end_at = start_at + timedelta(minutes=DEFAULT_EVENT_MINUTES)
         events.append(
             {
                 "title": title,
@@ -391,11 +437,12 @@ def _build_event_from_message(message):
     reminders = _infer_reminders(calendar_type)
     event_date = _extract_date(normalized)
     event_time = _extract_time(normalized)
+    is_shift_template = _is_shift_template(normalized)
 
     missing = []
     if not event_date:
         missing.append("date")
-    if not event_time:
+    if not event_time and not is_shift_template:
         missing.append("time")
 
     if missing:
@@ -406,8 +453,14 @@ def _build_event_from_message(message):
             "title": _clean_title(normalized),
         }
 
-    start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
-    end_at = start_at + timedelta(minutes=DEFAULT_EVENT_MINUTES)
+    if is_shift_template and not event_time:
+        start_at, end_at = _build_shift_window(event_date)
+    elif is_shift_template and event_time:
+        start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
+        end_at = start_at + timedelta(hours=DEFAULT_SHIFT_DURATION_HOURS)
+    else:
+        start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
+        end_at = start_at + timedelta(minutes=DEFAULT_EVENT_MINUTES)
 
     return {
         "status": "ready",
