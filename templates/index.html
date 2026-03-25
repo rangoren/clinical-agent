@@ -526,6 +526,72 @@
             gap: 8px;
         }
 
+        .draft-inline-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: rgba(15, 118, 110, 0.05);
+            border: 1px solid rgba(15, 118, 110, 0.08);
+        }
+
+        .draft-inline-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .draft-inline-label {
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .draft-inline-value {
+            color: var(--text);
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .draft-change-button {
+            border: none;
+            background: transparent;
+            color: var(--brand-strong);
+            font: inherit;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .draft-calendar-picker {
+            display: none;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: var(--surface-soft);
+            border: 1px solid var(--line);
+        }
+
+        .draft-calendar-picker.visible {
+            display: block;
+        }
+
+        .draft-calendar-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            color: var(--text);
+            font-size: 0.88rem;
+        }
+
+        .draft-calendar-note {
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
+
         .sources-title {
             font-weight: 700;
             margin-bottom: 10px;
@@ -1283,6 +1349,92 @@
             card.appendChild(title);
             card.appendChild(meta);
 
+            let selectedCalendarId = draft.selected_calendar ? draft.selected_calendar.provider_calendar_id : null;
+            let selectedCalendarName = draft.selected_calendar ? draft.selected_calendar.name : "";
+            if (draft.available_calendars && draft.available_calendars.length) {
+                const calendarRow = document.createElement("div");
+                calendarRow.className = "draft-inline-row";
+
+                const calendarCopy = document.createElement("div");
+                calendarCopy.className = "draft-inline-copy";
+
+                const calendarLabel = document.createElement("div");
+                calendarLabel.className = "draft-inline-label";
+                calendarLabel.textContent = "Saving to";
+
+                const calendarValue = document.createElement("div");
+                calendarValue.className = "draft-inline-value";
+                calendarValue.textContent = selectedCalendarName || "Primary calendar";
+
+                calendarCopy.appendChild(calendarLabel);
+                calendarCopy.appendChild(calendarValue);
+
+                calendarRow.appendChild(calendarCopy);
+
+                if (draft.available_calendars.length > 1) {
+                    const changeButton = document.createElement("button");
+                    changeButton.type = "button";
+                    changeButton.className = "draft-change-button";
+                    changeButton.textContent = "Change";
+                    calendarRow.appendChild(changeButton);
+
+                    const picker = document.createElement("div");
+                    picker.className = "draft-calendar-picker";
+
+                    draft.available_calendars.forEach((calendar, index) => {
+                        const option = document.createElement("label");
+                        option.className = "draft-calendar-option";
+
+                        const radio = document.createElement("input");
+                        radio.type = "radio";
+                        radio.name = `calendar-${draft.draft_id}`;
+                        radio.value = calendar.provider_calendar_id || "";
+                        radio.checked = radio.value === selectedCalendarId;
+                        radio.addEventListener("change", () => {
+                            selectedCalendarId = calendar.provider_calendar_id || null;
+                            selectedCalendarName = calendar.name || "Calendar";
+                            calendarValue.textContent = selectedCalendarName;
+                            confirmButton.textContent = actionType === "bulk_create"
+                                ? `Create in ${selectedCalendarName}`
+                                : actionType === "update"
+                                ? `Update in ${selectedCalendarName}`
+                                : actionType === "delete"
+                                ? `Delete from ${selectedCalendarName}`
+                                : `Create in ${selectedCalendarName}`;
+                        });
+
+                        const textWrap = document.createElement("div");
+                        const mainText = document.createElement("div");
+                        mainText.textContent = calendar.name || "Calendar";
+                        const noteText = document.createElement("div");
+                        noteText.className = "draft-calendar-note";
+                        noteText.textContent = calendar.is_primary ? "Primary calendar" : "Secondary calendar";
+
+                        textWrap.appendChild(mainText);
+                        textWrap.appendChild(noteText);
+
+                        option.appendChild(radio);
+                        option.appendChild(textWrap);
+                        picker.appendChild(option);
+
+                        if (!selectedCalendarId && index === 0) {
+                            selectedCalendarId = calendar.provider_calendar_id || null;
+                            selectedCalendarName = calendar.name || "Calendar";
+                            calendarValue.textContent = selectedCalendarName;
+                        }
+                    });
+
+                    changeButton.addEventListener("click", () => {
+                        picker.classList.toggle("visible");
+                    });
+
+                    card.appendChild(calendarRow);
+                    card.appendChild(picker);
+                } else {
+                    card.appendChild(calendarRow);
+                }
+            }
+
             if (draft.conflicts && draft.conflicts.length) {
                 const conflictsTitle = document.createElement("p");
                 conflictsTitle.className = "utility-text";
@@ -1304,8 +1456,18 @@
 
             const confirmButton = document.createElement("button");
             confirmButton.className = "secondary-button";
-            confirmButton.textContent = confirmLabel;
-            confirmButton.addEventListener("click", () => confirmSchedulingDraft(draft.draft_id, card));
+            confirmButton.textContent = selectedCalendarName
+                ? (
+                    actionType === "bulk_create"
+                        ? `Create in ${selectedCalendarName}`
+                        : actionType === "update"
+                        ? `Update in ${selectedCalendarName}`
+                        : actionType === "delete"
+                        ? `Delete from ${selectedCalendarName}`
+                        : `Create in ${selectedCalendarName}`
+                )
+                : confirmLabel;
+            confirmButton.addEventListener("click", () => confirmSchedulingDraft(draft.draft_id, card, selectedCalendarId));
 
             const dismissButton = document.createElement("button");
             dismissButton.className = "ghost-button";
@@ -1623,7 +1785,7 @@
             }
         }
 
-        async function confirmSchedulingDraft(draftId, card) {
+        async function confirmSchedulingDraft(draftId, card, selectedCalendarId = null) {
             try {
                 const response = await fetch("/scheduling/confirm", {
                     method: "POST",
@@ -1632,7 +1794,8 @@
                     },
                     body: JSON.stringify({
                         session_id: sessionId,
-                        draft_id: draftId
+                        draft_id: draftId,
+                        selected_calendar_id: selectedCalendarId
                     })
                 });
                 const data = await response.json();

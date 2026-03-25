@@ -107,6 +107,24 @@ def get_google_calendar_status(session_id):
     }
 
 
+def get_google_calendars(session_id):
+    calendars = list(
+        user_calendars_collection.find({"session_id": session_id, "provider": "google"}).sort(
+            [("is_primary", -1), ("name", 1)]
+        )
+    )
+    return [
+        {
+            "provider_calendar_id": item.get("provider_calendar_id"),
+            "name": item.get("name", "Google Calendar"),
+            "calendar_type": item.get("calendar_type", "personal"),
+            "is_primary": bool(item.get("is_primary")),
+            "is_selected": bool(item.get("is_selected")),
+        }
+        for item in calendars
+    ]
+
+
 def begin_google_calendar_connect(session_id):
     if not google_calendar_enabled():
         return {"status": "unavailable", "reply": "Google Calendar is not configured yet."}
@@ -219,7 +237,18 @@ def _get_connection(session_id):
     return calendar_connections_collection.find_one({"session_id": session_id, "provider": "google", "is_active": True})
 
 
-def _get_selected_google_calendar_id(session_id, calendar_type):
+def _get_selected_google_calendar_id(session_id, calendar_type, preferred_calendar_id=None):
+    if preferred_calendar_id:
+        explicit = user_calendars_collection.find_one(
+            {
+                "session_id": session_id,
+                "provider": "google",
+                "provider_calendar_id": preferred_calendar_id,
+            }
+        )
+        if explicit:
+            return explicit["provider_calendar_id"]
+
     preferred = user_calendars_collection.find_one(
         {
             "session_id": session_id,
@@ -243,12 +272,12 @@ def _get_selected_google_calendar_id(session_id, calendar_type):
     return None
 
 
-def _post_event(session_id, event_payload, calendar_type):
+def _post_event(session_id, event_payload, calendar_type, preferred_calendar_id=None):
     connection = _get_connection(session_id)
     if not connection:
         return None
 
-    calendar_id = _get_selected_google_calendar_id(session_id, calendar_type)
+    calendar_id = _get_selected_google_calendar_id(session_id, calendar_type, preferred_calendar_id=preferred_calendar_id)
     if not calendar_id:
         return None
 
@@ -265,7 +294,7 @@ def _post_event(session_id, event_payload, calendar_type):
     return response.json()
 
 
-def sync_google_create_event(session_id, event_doc):
+def sync_google_create_event(session_id, event_doc, preferred_calendar_id=None):
     if not google_calendar_enabled():
         return {"status": "skipped"}
     try:
@@ -275,7 +304,7 @@ def sync_google_create_event(session_id, event_doc):
             "end": {"dateTime": event_doc["end_at"].isoformat(), "timeZone": APP_TIMEZONE},
             "reminders": {"useDefault": True},
         }
-        created = _post_event(session_id, payload, event_doc["calendar_type"])
+        created = _post_event(session_id, payload, event_doc["calendar_type"], preferred_calendar_id=preferred_calendar_id)
         if not created:
             return {"status": "skipped"}
         return {"status": "synced", "provider_event_id": created.get("id"), "provider_calendar_id": created.get("organizer", {}).get("email")}
@@ -295,9 +324,13 @@ def sync_google_create_event(session_id, event_doc):
         return {"status": "failed"}
 
 
-def sync_google_update_event(session_id, provider_event_id, event_doc):
+def sync_google_update_event(session_id, provider_event_id, event_doc, preferred_calendar_id=None):
     connection = _get_connection(session_id)
-    calendar_id = _get_selected_google_calendar_id(session_id, event_doc["calendar_type"])
+    calendar_id = _get_selected_google_calendar_id(
+        session_id,
+        event_doc["calendar_type"],
+        preferred_calendar_id=preferred_calendar_id,
+    )
     if not connection or not calendar_id or not provider_event_id:
         return {"status": "skipped"}
     try:
@@ -332,9 +365,13 @@ def sync_google_update_event(session_id, provider_event_id, event_doc):
         return {"status": "failed"}
 
 
-def sync_google_delete_event(session_id, provider_event_id, calendar_type):
+def sync_google_delete_event(session_id, provider_event_id, calendar_type, preferred_calendar_id=None):
     connection = _get_connection(session_id)
-    calendar_id = _get_selected_google_calendar_id(session_id, calendar_type)
+    calendar_id = _get_selected_google_calendar_id(
+        session_id,
+        calendar_type,
+        preferred_calendar_id=preferred_calendar_id,
+    )
     if not connection or not calendar_id or not provider_event_id:
         return {"status": "skipped"}
     try:

@@ -5,8 +5,9 @@ from uuid import uuid4
 
 from bson import ObjectId
 
-from db import scheduled_events_collection, scheduling_drafts_collection
+from db import scheduled_events_collection, scheduling_drafts_collection, scheduling_preferences_collection
 from services.google_calendar_service import (
+    get_google_calendars,
     sync_google_create_event,
     sync_google_delete_event,
     sync_google_update_event,
@@ -69,6 +70,32 @@ SUMMARY_KEYWORDS = (
 
 def _utcnow():
     return datetime.utcnow()
+
+
+def _get_scheduling_preferences(session_id):
+    return scheduling_preferences_collection.find_one({"session_id": session_id}) or {}
+
+
+def _get_preferred_google_calendar(session_id, calendar_type):
+    preferences = _get_scheduling_preferences(session_id)
+    preferred_map = preferences.get("google_calendar_preferences", {})
+    return preferred_map.get(calendar_type)
+
+
+def _save_preferred_google_calendar(session_id, calendar_type, provider_calendar_id):
+    if not provider_calendar_id or not calendar_type:
+        return
+    scheduling_preferences_collection.update_one(
+        {"session_id": session_id},
+        {
+            "$set": {
+                f"google_calendar_preferences.{calendar_type}": provider_calendar_id,
+                "updated_at": _utcnow(),
+            },
+            "$setOnInsert": {"created_at": _utcnow()},
+        },
+        upsert=True,
+    )
 
 
 def _normalize_text(text):
@@ -585,6 +612,33 @@ def _sync_status_suffix(sync_status, *, plural=False):
     return ""
 
 
+def _build_calendar_selector_payload(session_id, calendar_type):
+    calendars = get_google_calendars(session_id)
+    if not calendars:
+        return {"available_calendars": [], "selected_calendar": None}
+
+    preferred_calendar_id = _get_preferred_google_calendar(session_id, calendar_type)
+    selected_calendar = None
+
+    if preferred_calendar_id:
+        selected_calendar = next(
+            (item for item in calendars if item["provider_calendar_id"] == preferred_calendar_id),
+            None,
+        )
+
+    if not selected_calendar:
+        selected_calendar = next((item for item in calendars if item.get("is_primary")), None) or calendars[0]
+
+    return {
+        "available_calendars": calendars,
+        "selected_calendar": {
+            "provider_calendar_id": selected_calendar.get("provider_calendar_id"),
+            "name": selected_calendar.get("name", "Primary calendar"),
+            "is_primary": bool(selected_calendar.get("is_primary")),
+        },
+    }
+
+
 def _format_event_line(event):
     start_label = event["start_at"].strftime("%H:%M")
     end_label = event["end_at"].strftime("%H:%M")
@@ -739,6 +793,7 @@ def handle_scheduling_message(session_id, user_message):
             }
 
         conflicts = _find_bulk_conflicts(session_id, bulk_parsed["events"])
+        calendar_selector = _build_calendar_selector_payload(session_id, bulk_parsed["calendar_type"])
         draft_id = _save_draft(
             session_id,
             user_message,
@@ -760,6 +815,7 @@ def handle_scheduling_message(session_id, user_message):
                 "status": "needs_review",
                 "event_count": len(bulk_parsed["events"]),
                 "target_summary": f"{len(bulk_parsed['events'])} events",
+                **calendar_selector,
             },
         }
 
@@ -771,6 +827,7 @@ def handle_scheduling_message(session_id, user_message):
         }
 
     conflicts = _find_conflicts(session_id, parsed)
+    calendar_selector = _build_calendar_selector_payload(session_id, parsed["calendar_type"])
     draft_id = _save_draft(
         session_id,
         user_message,
@@ -791,11 +848,12 @@ def handle_scheduling_message(session_id, user_message):
             "reminders": parsed["reminders"],
             "conflicts": conflicts,
             "status": "needs_review",
+            **calendar_selector,
         },
     }
 
 
-def confirm_scheduling_draft(session_id, draft_id):
+def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
     draft = scheduling_drafts_collection.find_one({"session_id": session_id, "draft_id": draft_id, "status": "pending"})
     if not draft:
         return {"status": "missing"}
@@ -818,7 +876,7 @@ def confirm_scheduling_draft(session_id, draft_id):
             "updated_at": now,
         }
         scheduled_events_collection.insert_one(event_doc)
-        sync_result = sync_google_create_event(session_id, event_doc)
+        sync_result = sync_google_create_event(session_id, event_doc, preferred_calendar_id=selected_calendar_id)
         if sync_result.get("status") == "synced":
             scheduled_events_collection.update_one(
                 {"draft_id": draft_id, "session_id": session_id},
@@ -826,11 +884,13 @@ def confirm_scheduling_draft(session_id, draft_id):
                     "$set": {
                         "provider": "google",
                         "provider_event_id": sync_result.get("provider_event_id"),
-                        "provider_calendar_id": sync_result.get("provider_calendar_id"),
+                        "provider_calendar_id": selected_calendar_id or sync_result.get("provider_calendar_id"),
                         "updated_at": now,
                     }
                 },
             )
+        if selected_calendar_id:
+            _save_preferred_google_calendar(session_id, parsed_event["calendar_type"], selected_calendar_id)
         scheduling_drafts_collection.update_one(
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
@@ -867,7 +927,7 @@ def confirm_scheduling_draft(session_id, draft_id):
                 "updated_at": now,
             }
             insert_result = scheduled_events_collection.insert_one(event_doc)
-            sync_result = sync_google_create_event(session_id, event_doc)
+            sync_result = sync_google_create_event(session_id, event_doc, preferred_calendar_id=selected_calendar_id)
             if sync_result.get("status") == "synced":
                 scheduled_events_collection.update_one(
                     {"_id": insert_result.inserted_id},
@@ -875,7 +935,7 @@ def confirm_scheduling_draft(session_id, draft_id):
                         "$set": {
                             "provider": "google",
                             "provider_event_id": sync_result.get("provider_event_id"),
-                            "provider_calendar_id": sync_result.get("provider_calendar_id"),
+                            "provider_calendar_id": selected_calendar_id or sync_result.get("provider_calendar_id"),
                             "updated_at": now,
                         }
                     },
@@ -886,6 +946,8 @@ def confirm_scheduling_draft(session_id, draft_id):
             else:
                 skipped_count += 1
             inserted_count += 1
+        if selected_calendar_id:
+            _save_preferred_google_calendar(session_id, events[0]["calendar_type"], selected_calendar_id)
 
         scheduling_drafts_collection.update_one(
             {"draft_id": draft_id, "session_id": session_id},
@@ -933,7 +995,20 @@ def confirm_scheduling_draft(session_id, draft_id):
                 "start_at": datetime.fromisoformat(parsed_event["start_at"]),
                 "end_at": datetime.fromisoformat(parsed_event["end_at"]),
             },
+            preferred_calendar_id=selected_calendar_id or target_event.get("provider_calendar_id"),
         )
+        if selected_calendar_id:
+            scheduling_preferences_collection.update_one(
+                {"session_id": session_id},
+                {
+                    "$set": {
+                        "google_calendar_preferences." + parsed_event["calendar_type"]: selected_calendar_id,
+                        "updated_at": now,
+                    },
+                    "$setOnInsert": {"created_at": now},
+                },
+                upsert=True,
+            )
 
         scheduling_drafts_collection.update_one(
             {"draft_id": draft_id, "session_id": session_id},
@@ -959,6 +1034,7 @@ def confirm_scheduling_draft(session_id, draft_id):
             session_id,
             (existing_doc or {}).get("provider_event_id"),
             target_event.get("calendar_type", "personal"),
+            preferred_calendar_id=selected_calendar_id or target_event.get("provider_calendar_id"),
         )
 
         scheduling_drafts_collection.update_one(

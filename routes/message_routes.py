@@ -77,7 +77,14 @@ async def handle_scheduling_confirm(request: Request):
         data = await request.json()
         session_id = data.get("session_id")
         draft_id = data.get("draft_id")
-        return JSONResponse(confirm_scheduling_draft(session_id=session_id, draft_id=draft_id))
+        selected_calendar_id = data.get("selected_calendar_id")
+        return JSONResponse(
+            confirm_scheduling_draft(
+                session_id=session_id,
+                draft_id=draft_id,
+                selected_calendar_id=selected_calendar_id,
+            )
+        )
     except Exception as exc:
         log_event("route_error", payload={"route": "/scheduling/confirm", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
