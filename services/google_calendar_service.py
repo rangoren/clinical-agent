@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import re
 from uuid import uuid4
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from zoneinfo import ZoneInfo
 
 import requests
@@ -30,6 +30,14 @@ def _as_google_utc(dt):
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=APP_ZONEINFO)
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _google_events_url(calendar_id, event_id=None):
+    encoded_calendar_id = quote(calendar_id or "", safe="")
+    base_url = GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=encoded_calendar_id)
+    if not event_id:
+        return base_url
+    return f"{base_url}/{quote(event_id, safe='')}"
 
 
 def _normalize_google_datetime(raw_value):
@@ -372,7 +380,7 @@ def _post_event(session_id, event_payload, calendar_type, preferred_calendar_id=
         "Content-Type": "application/json",
     }
     response = requests.post(
-        GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
+        _google_events_url(calendar_id),
         headers=headers,
         json=event_payload,
         timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
@@ -381,7 +389,7 @@ def _post_event(session_id, event_payload, calendar_type, preferred_calendar_id=
         refreshed_access_token = _refresh_google_access_token(session_id, connection)
         if refreshed_access_token:
             response = requests.post(
-                GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
+                _google_events_url(calendar_id),
                 headers={
                     **_auth_headers(refreshed_access_token),
                     "Content-Type": "application/json",
@@ -406,7 +414,7 @@ def _find_matching_google_events(session_id, calendar_id, title, start_at, end_a
         return []
 
     response = requests.get(
-        GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
+        _google_events_url(calendar_id),
         headers=_auth_headers(connection["access_token"]),
         params={
             "timeMin": _as_google_utc(start_at - timedelta(hours=2)),
@@ -420,7 +428,7 @@ def _find_matching_google_events(session_id, calendar_id, title, start_at, end_a
         refreshed_access_token = _refresh_google_access_token(session_id, connection)
         if refreshed_access_token:
             response = requests.get(
-                GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
+                _google_events_url(calendar_id),
                 headers=_auth_headers(refreshed_access_token),
                 params={
                     "timeMin": _as_google_utc(start_at - timedelta(hours=2)),
@@ -523,7 +531,7 @@ def _google_event_is_gone(session_id, calendar_id, provider_event_id):
         return False
 
     response = requests.get(
-        f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+        _google_events_url(calendar_id, provider_event_id),
         headers=_auth_headers(connection["access_token"]),
         timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
     )
@@ -533,7 +541,7 @@ def _google_event_is_gone(session_id, calendar_id, provider_event_id):
         refreshed_access_token = _refresh_google_access_token(session_id, connection)
         if refreshed_access_token:
             response = requests.get(
-                f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+                _google_events_url(calendar_id, provider_event_id),
                 headers=_auth_headers(refreshed_access_token),
                 timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
             )
@@ -551,7 +559,7 @@ def _get_google_event_by_id(session_id, calendar_id, provider_event_id):
         return None
 
     response = requests.get(
-        f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+        _google_events_url(calendar_id, provider_event_id),
         headers=_auth_headers(connection["access_token"]),
         timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
     )
@@ -559,7 +567,7 @@ def _get_google_event_by_id(session_id, calendar_id, provider_event_id):
         refreshed_access_token = _refresh_google_access_token(session_id, connection)
         if refreshed_access_token:
             response = requests.get(
-                f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+                _google_events_url(calendar_id, provider_event_id),
                 headers=_auth_headers(refreshed_access_token),
                 timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
             )
@@ -574,7 +582,7 @@ def _delete_google_event_by_id(session_id, calendar_id, provider_event_id):
     if not connection or not calendar_id or not provider_event_id:
         return False
 
-    event_url = f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}"
+    event_url = _google_events_url(calendar_id, provider_event_id)
     response = requests.delete(
         event_url,
         headers=_auth_headers(connection["access_token"]),
@@ -690,7 +698,7 @@ def sync_google_update_event(session_id, provider_event_id, event_doc, preferred
             "Content-Type": "application/json",
         }
         response = requests.patch(
-            f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+            _google_events_url(calendar_id, provider_event_id),
             headers=headers,
             json={
                 "summary": event_doc["title"],
@@ -704,7 +712,7 @@ def sync_google_update_event(session_id, provider_event_id, event_doc, preferred
             refreshed_access_token = _refresh_google_access_token(session_id, connection)
             if refreshed_access_token:
                 response = requests.patch(
-                    f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+                    _google_events_url(calendar_id, provider_event_id),
                     headers={
                         **_auth_headers(refreshed_access_token),
                         "Content-Type": "application/json",
