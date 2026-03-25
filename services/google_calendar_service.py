@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 import requests
 
 from db import calendar_connections_collection, oauth_states_collection, user_calendars_collection
+from services.logging_service import log_event
 from settings import APP_BASE_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
 
 
@@ -13,6 +14,7 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
 GOOGLE_EVENTS_URL_TEMPLATE = "https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
 GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar"
+GOOGLE_HTTP_TIMEOUT_SECONDS = 8
 
 
 def _utcnow():
@@ -138,33 +140,74 @@ def begin_google_calendar_connect(session_id):
 def complete_google_calendar_connect(code, state):
     state_doc = oauth_states_collection.find_one({"state": state, "provider": "google"})
     if not state_doc:
+        log_event("google_calendar_connect_failed", payload={"reason": "invalid_state"}, level="error")
         return {"status": "invalid_state", "reply": "Google Calendar connect session expired."}
 
-    token_response = requests.post(
-        GOOGLE_TOKEN_URL,
-        data={
-            "code": code,
-            "client_id": GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "redirect_uri": GOOGLE_REDIRECT_URI,
-            "grant_type": "authorization_code",
-        },
-        timeout=15,
-    )
-    token_response.raise_for_status()
-    token_payload = token_response.json()
+    try:
+        token_response = requests.post(
+            GOOGLE_TOKEN_URL,
+            data={
+                "code": code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": GOOGLE_REDIRECT_URI,
+                "grant_type": "authorization_code",
+            },
+            timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+        )
+        token_response.raise_for_status()
+        token_payload = token_response.json()
 
-    calendar_response = requests.get(
-        GOOGLE_CALENDAR_LIST_URL,
-        headers=_auth_headers(token_payload["access_token"]),
-        timeout=15,
-    )
-    calendar_response.raise_for_status()
-    calendars = calendar_response.json().get("items", [])
+        calendar_response = requests.get(
+            GOOGLE_CALENDAR_LIST_URL,
+            headers=_auth_headers(token_payload["access_token"]),
+            timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+        )
+        calendar_response.raise_for_status()
+        calendars = calendar_response.json().get("items", [])
 
-    _upsert_connection(state_doc["session_id"], token_payload, calendars)
-    oauth_states_collection.delete_one({"state": state})
-    return {"status": "connected", "session_id": state_doc["session_id"]}
+        _upsert_connection(state_doc["session_id"], token_payload, calendars)
+        oauth_states_collection.delete_one({"state": state})
+        log_event(
+            "google_calendar_connected",
+            session_id=state_doc["session_id"],
+            payload={"calendar_count": len(calendars)},
+        )
+        return {"status": "connected", "session_id": state_doc["session_id"]}
+    except requests.HTTPError as exc:
+        response = getattr(exc, "response", None)
+        body = ""
+        try:
+            body = response.text[:500] if response is not None and response.text else ""
+        except Exception:
+            body = ""
+        log_event(
+            "google_calendar_connect_failed",
+            session_id=state_doc["session_id"],
+            payload={
+                "reason": "http_error",
+                "status_code": getattr(response, "status_code", None),
+                "response": body,
+            },
+            level="error",
+        )
+        return {"status": "failed", "reply": "Google Calendar token exchange failed."}
+    except requests.RequestException as exc:
+        log_event(
+            "google_calendar_connect_failed",
+            session_id=state_doc["session_id"],
+            payload={"reason": "request_exception", "error": str(exc)},
+            level="error",
+        )
+        return {"status": "failed", "reply": "Google Calendar request failed."}
+    except Exception as exc:
+        log_event(
+            "google_calendar_connect_failed",
+            session_id=state_doc["session_id"],
+            payload={"reason": "unexpected_exception", "error": str(exc)},
+            level="error",
+        )
+        return {"status": "failed", "reply": "Google Calendar connection failed."}
 
 
 def disconnect_google_calendar(session_id):
@@ -217,7 +260,7 @@ def _post_event(session_id, event_payload, calendar_type):
             "Content-Type": "application/json",
         },
         json=event_payload,
-        timeout=15,
+        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
     return response.json()
@@ -258,7 +301,7 @@ def sync_google_update_event(session_id, provider_event_id, event_doc):
                 "start": {"dateTime": event_doc["start_at"].isoformat()},
                 "end": {"dateTime": event_doc["end_at"].isoformat()},
             },
-            timeout=15,
+            timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         return {"status": "synced"}
@@ -275,7 +318,7 @@ def sync_google_delete_event(session_id, provider_event_id, calendar_type):
         response = requests.delete(
             f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
             headers=_auth_headers(connection["access_token"]),
-            timeout=15,
+            timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
         )
         if response.status_code not in (200, 204):
             response.raise_for_status()
