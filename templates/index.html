@@ -1217,9 +1217,9 @@
             if (!calendarStatus) return;
 
             if (calendarStatus === "connected") {
-                appendAssistantMessage("Google Calendar connected. New scheduling actions can now sync there.", "system");
+                appendAssistantMessage("Google Calendar is connected. New scheduling changes can sync there now.", "system");
             } else if (calendarStatus === "error") {
-                appendAssistantMessage("Google Calendar connection did not complete.", "error");
+                appendAssistantMessage("Google Calendar connection didn’t complete.", "error");
             }
 
             window.history.replaceState({}, document.title, window.location.pathname);
@@ -1234,7 +1234,7 @@
             hideSessionBanner();
             appendAssistantMessage(
                 appMode === "scheduling"
-                    ? "Scheduling Copilot is active. I’ll draft events and ask before creating anything."
+                    ? "Scheduling is on. I’ll prepare changes and ask before saving anything."
                     : "Clinical Assistant is active."
             );
             bootstrapSession();
@@ -1358,16 +1358,19 @@
             title.className = "draft-title";
             title.textContent = draft.title || "Draft event";
 
+            const summaryCalendarName = draft.selected_calendar
+                ? (draft.selected_calendar.is_primary ? "Primary" : (draft.selected_calendar.name || "Primary"))
+                : "Primary";
+
             const meta = document.createElement("div");
             meta.className = "draft-meta";
             meta.innerHTML = `
                 ${draft.target_summary ? `<div>Current: ${escapeHtml(draft.target_summary)}</div>` : ""}
                 ${draft.event_count ? `<div>Events: ${escapeHtml(String(draft.event_count))}</div>` : ""}
-                <div>Calendar: ${escapeHtml(draft.calendar_type || "Personal")}</div>
+                <div>Calendar: ${escapeHtml(summaryCalendarName)}</div>
                 <div>Time: ${escapeHtml(draft.start_at || "")}${draft.end_at ? ` - ${escapeHtml(draft.end_at)}` : ""}</div>
                 ${draft.duration_label ? `<div>Duration: ${escapeHtml(draft.duration_label)}</div>` : ""}
                 ${draft.location ? `<div>Location: ${escapeHtml(draft.location)}</div>` : ""}
-                <div>Reminders: ${escapeHtml((draft.reminders || []).join(", ") || "None")}</div>
             `;
 
             card.appendChild(title);
@@ -1384,11 +1387,11 @@
 
                 const calendarLabel = document.createElement("div");
                 calendarLabel.className = "draft-inline-label";
-                calendarLabel.textContent = "Saving to";
+                calendarLabel.textContent = "Save to";
 
                 const calendarValue = document.createElement("div");
                 calendarValue.className = "draft-inline-value";
-                calendarValue.textContent = selectedCalendarName || "Primary calendar";
+                calendarValue.textContent = selectedCalendarName || "Primary";
 
                 calendarCopy.appendChild(calendarLabel);
                 calendarCopy.appendChild(calendarValue);
@@ -1416,7 +1419,7 @@
                         radio.checked = radio.value === selectedCalendarId;
                         radio.addEventListener("change", () => {
                             selectedCalendarId = calendar.provider_calendar_id || null;
-                            selectedCalendarName = calendar.name || "Calendar";
+                            selectedCalendarName = calendar.is_primary ? "Primary" : (calendar.name || "Calendar");
                             calendarValue.textContent = selectedCalendarName;
                             confirmButton.textContent = actionType === "bulk_create"
                                 ? `Create in ${selectedCalendarName}`
@@ -1431,10 +1434,10 @@
 
                         const textWrap = document.createElement("div");
                         const mainText = document.createElement("div");
-                        mainText.textContent = calendar.name || "Calendar";
+                        mainText.textContent = calendar.is_primary ? "Primary" : (calendar.name || "Calendar");
                         const noteText = document.createElement("div");
                         noteText.className = "draft-calendar-note";
-                        noteText.textContent = calendar.is_primary ? "Primary calendar" : "Secondary calendar";
+                        noteText.textContent = calendar.is_primary ? "Main calendar" : "Secondary calendar";
 
                         textWrap.appendChild(mainText);
                         textWrap.appendChild(noteText);
@@ -1445,7 +1448,7 @@
 
                         if (!selectedCalendarId && index === 0) {
                             selectedCalendarId = calendar.provider_calendar_id || null;
-                            selectedCalendarName = calendar.name || "Calendar";
+                            selectedCalendarName = calendar.is_primary ? "Primary" : (calendar.name || "Calendar");
                             calendarValue.textContent = selectedCalendarName;
                         }
                     });

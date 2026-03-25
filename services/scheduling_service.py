@@ -1136,35 +1136,35 @@ def _format_missing_fields_reply(parsed):
         details.append(f"duration: {parsed['duration_minutes']} minutes")
     details_suffix = f" I understood {', '.join(details)}." if details else ""
     if parsed["missing_fields"] == ["date", "time"]:
-        return "I can draft that, but I still need a date and time before I create anything." + details_suffix
+        return "I can prepare it. I still need the date and time first." + details_suffix
     if "date" in parsed["missing_fields"]:
-        return "I can draft that, but I still need the date." + details_suffix
-    return "I can draft that, but I still need the time." + details_suffix
+        return "I can prepare it. I still need the date first." + details_suffix
+    return "I can prepare it. I still need the time first." + details_suffix
 
 
 def _format_draft_reply(parsed_event, conflicts):
     start_label = parsed_event["start_at"].strftime("%a %d %b at %H:%M")
     if conflicts:
         return (
-            f"I drafted this for {start_label}. "
-            f"I also found {len(conflicts)} conflict{'s' if len(conflicts) != 1 else ''}. Review before creating."
+            f"Here’s the draft for {start_label}. "
+            f"I found {len(conflicts)} conflict{'s' if len(conflicts) != 1 else ''} to review before saving."
         )
-    return f"I drafted this for {start_label}. Review it before I create it."
+    return f"Here’s the draft for {start_label}. Review it before saving."
 
 
 def _format_update_reply(existing_event, updated_event, conflicts):
     start_label = updated_event["start_at"].strftime("%a %d %b at %H:%M")
     if conflicts:
         return (
-            f"I drafted an update for {existing_event.get('title', 'this event')} to {start_label}. "
-            f"I also found {len(conflicts)} conflict{'s' if len(conflicts) != 1 else ''}. Review before I update it."
+            f"I prepared an update for {existing_event.get('title', 'this event')} to {start_label}. "
+            f"I found {len(conflicts)} conflict{'s' if len(conflicts) != 1 else ''} to review before saving."
         )
-    return f"I drafted an update for {existing_event.get('title', 'this event')} to {start_label}. Review it before I update it."
+    return f"I prepared an update for {existing_event.get('title', 'this event')} to {start_label}. Review it before saving."
 
 
 def _format_delete_reply(existing_event):
     start_label = existing_event["start_at"].strftime("%a %d %b at %H:%M")
-    return f"I found {existing_event.get('title', 'this event')} on {start_label}. Review it before I delete it."
+    return f"I found {existing_event.get('title', 'this event')} on {start_label}. Review it before deleting."
 
 
 def _format_bulk_reply(events, conflicts):
@@ -1172,31 +1172,31 @@ def _format_bulk_reply(events, conflicts):
     last_label = events[-1]["start_at"].strftime("%a %d %b at %H:%M")
     if conflicts:
         return (
-            f"I drafted {len(events)} events, "
-            f"from {first_label} through {last_label}. I also found {len(conflicts)} conflict"
-            f"{'s' if len(conflicts) != 1 else ''}. Review before creating."
+            f"I prepared {len(events)} events, "
+            f"from {first_label} through {last_label}. I found {len(conflicts)} conflict"
+            f"{'s' if len(conflicts) != 1 else ''} to review before saving."
         )
     return (
-        f"I drafted {len(events)} events, "
-        f"from {first_label} through {last_label}. Review them before I create them."
+        f"I prepared {len(events)} events, "
+        f"from {first_label} through {last_label}. Review them before saving."
     )
 
 
 def _format_bulk_delete_reply(events):
     if not events:
-        return "I couldn't find any matching events to delete."
+        return "I couldn’t find matching events to delete."
     first_label = events[0]["start_at"].strftime("%a %d %b at %H:%M")
     last_label = events[-1]["start_at"].strftime("%a %d %b at %H:%M")
-    return f"I found {len(events)} events to delete, from {first_label} through {last_label}. Review them before I delete them."
+    return f"I found {len(events)} events to delete, from {first_label} through {last_label}. Review them before deleting."
 
 
 def _sync_status_suffix(sync_status, *, plural=False):
     if sync_status == "synced":
         return " Synced to Google Calendar."
     if sync_status == "failed":
-        return " Saved locally, but Google Calendar sync failed."
+        return " Saved here, but Google Calendar sync failed."
     if sync_status == "skipped":
-        return " Saved locally only."
+        return " Saved here only."
     return ""
 
 
@@ -1311,7 +1311,7 @@ def _build_daily_summary(session_id):
 
 def build_scheduling_welcome():
     return (
-        "Scheduling Copilot is active.<br><br>"
+        "Scheduling is on.<br><br>"
         "Try something like:<br>"
         "- Add dinner with Maya tomorrow at 19:30<br>"
         "- Schedule school pickup next Tuesday at 16:00<br>"
@@ -1327,7 +1327,7 @@ def handle_scheduling_message(session_id, user_message):
         target_events = _find_bulk_target_events(session_id, user_message)
         if not target_events:
             return {
-                "reply": "I couldn't find any scheduled on-call shifts for that month yet.",
+                "reply": "I couldn’t find any saved on-call shifts for that month yet.",
                 "scheduling_draft": None,
             }
         serialized_targets = [_serialize_existing_event(item) for item in target_events]
@@ -1360,7 +1360,7 @@ def handle_scheduling_message(session_id, user_message):
         target_event = _find_target_event(session_id, user_message)
         if not target_event:
             return {
-                "reply": "I couldn't find a matching scheduled event to update yet. Try including the event name and date.",
+                "reply": "I couldn’t find the event yet. Try adding the event name and date.",
                 "scheduling_draft": None,
             }
 
@@ -1425,7 +1425,7 @@ def handle_scheduling_message(session_id, user_message):
     if bulk_parsed:
         if bulk_parsed["status"] == "needs_details":
             return {
-                "reply": "I can draft those events, but I still need the month for the repeated weekdays.",
+                "reply": "I can prepare those events. I still need the month for the repeated weekdays.",
                 "scheduling_draft": None,
             }
 
@@ -1558,7 +1558,6 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
         reply = f'Created {parsed_event["title"]} in your "{reply_calendar_name}" calendar.'
         if sync_result.get("status") == "synced":
             reply += f" Synced to Google Calendar"
-            reply += ". Apple Calendar may take a moment to refresh."
         else:
             reply += _sync_status_suffix(sync_result.get("status"))
         return {
@@ -1570,7 +1569,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
         parsed_event = draft.get("parsed_event", {})
         events = parsed_event.get("events", [])
         if not events:
-            return {"status": "missing", "reply": "I couldn't find those drafted events anymore."}
+            return {"status": "missing", "reply": "I couldn’t find that draft anymore."}
 
         inserted_count = 0
         synced_count = 0
@@ -1638,17 +1637,16 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
         reply = f'Created {inserted_count} events in your "{reply_calendar_name}" calendar.'
         if synced_count == inserted_count:
             reply += " Synced to Google Calendar"
-            reply += ". Apple Calendar may take a moment to refresh."
         elif failed_count:
-            reply += f" {synced_count} synced to Google Calendar, {failed_count} failed, and {skipped_count} stayed local only."
+            reply += f" {synced_count} synced to Google Calendar, {failed_count} failed, and {skipped_count} stayed here only."
         elif skipped_count:
-            reply += f" {synced_count} synced to Google Calendar, {skipped_count} stayed local only."
+            reply += f" {synced_count} synced to Google Calendar, {skipped_count} stayed here only."
         return {"status": "confirmed", "reply": reply}
 
     if action_type == "bulk_delete":
         target_events = draft.get("target_events", [])
         if not target_events:
-            return {"status": "missing", "reply": "I couldn't find those drafted events anymore."}
+            return {"status": "missing", "reply": "I couldn’t find that draft anymore."}
 
         google_connected = has_google_calendar_connection(session_id)
         deleted_count = 0
@@ -1690,7 +1688,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
         if deleted_count == 0:
             return {
                 "status": "blocked",
-                "reply": "I couldn't remove those events from Google Calendar, so I left them unchanged.",
+                "reply": "I couldn’t remove those events from Google Calendar, so I left them unchanged.",
             }
 
         scheduling_drafts_collection.update_one(
@@ -1700,16 +1698,16 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
         reply = f"Deleted {deleted_count} events."
         if google_connected:
             if synced_count == deleted_count:
-                reply += " Removed from Google Calendar. Apple Calendar may take a moment to refresh."
+                reply += " Removed from Google Calendar."
             else:
                 reply += f" Removed {synced_count} from Google Calendar."
         else:
-            reply += " Removed locally only."
+            reply += " Removed here only."
         return {"status": "confirmed", "reply": reply}
 
     target_event = draft.get("target_event")
     if not target_event or not target_event.get("event_id"):
-        return {"status": "missing", "reply": "I couldn't find that draft target anymore."}
+        return {"status": "missing", "reply": "I couldn’t find that draft anymore."}
 
     target_filter = {"_id": ObjectId(target_event["event_id"]), "session_id": session_id, "status": "confirmed"}
 
@@ -1730,7 +1728,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             },
         )
         if not result.modified_count:
-            return {"status": "missing", "reply": "I couldn't update that event because it no longer exists."}
+            return {"status": "missing", "reply": "I couldn’t update that event because it no longer exists."}
 
         sync_result = sync_google_update_event(
             session_id,
@@ -1787,7 +1785,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
         if google_connected and sync_result.get("status") != "synced":
             return {
                 "status": "blocked",
-                "reply": "I couldn't remove that event from Google Calendar, so I left it unchanged.",
+                "reply": "I couldn’t remove that event from Google Calendar, so I left it unchanged.",
             }
 
         result = scheduled_events_collection.update_one(
@@ -1795,7 +1793,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             {"$set": {"status": "deleted", "updated_at": now}},
         )
         if not result.modified_count:
-            return {"status": "missing", "reply": "I couldn't delete that event because it no longer exists."}
+            return {"status": "missing", "reply": "I couldn’t delete that event because it no longer exists."}
 
         scheduling_drafts_collection.update_one(
             {"draft_id": draft_id, "session_id": session_id},
@@ -1803,17 +1801,17 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
         )
         reply = f"Deleted {target_event.get('title', 'the event')}."
         if sync_result.get("status") == "synced":
-            reply += " Removed from Google Calendar. Apple Calendar may take a moment to refresh."
+            reply += " Removed from Google Calendar."
         elif sync_result.get("status") == "failed":
-            reply += " Removed locally, but Google Calendar deletion failed."
+            reply += " Removed here, but Google Calendar deletion failed."
         elif sync_result.get("status") == "skipped":
-            reply += " Removed locally only."
+            reply += " Removed here only."
         return {
             "status": "confirmed",
             "reply": reply,
         }
 
-    return {"status": "missing", "reply": "I couldn't confirm that draft."}
+    return {"status": "missing", "reply": "I couldn’t confirm that draft."}
 
 
 def dismiss_scheduling_draft(session_id, draft_id):
