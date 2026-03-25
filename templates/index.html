@@ -171,6 +171,33 @@
             flex-shrink: 0;
         }
 
+        .mode-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid var(--line);
+        }
+
+        .mode-button {
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            padding: 8px 12px;
+            border-radius: 999px;
+            font: inherit;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .mode-button.active {
+            background: rgba(15, 118, 110, 0.14);
+            color: var(--brand-strong);
+        }
+
         .version-stamp {
             flex-shrink: 0;
             padding: 10px 12px;
@@ -423,6 +450,47 @@
             margin: 0;
             font-size: 0.9rem;
             color: var(--text);
+        }
+
+        .draft-card {
+            align-self: flex-start;
+            max-width: min(100%, 760px);
+            border-radius: 16px;
+            padding: 14px;
+            border: 1px solid rgba(15, 118, 110, 0.14);
+            background: rgba(232, 247, 243, 0.78);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            animation: riseIn 180ms ease-out;
+        }
+
+        .draft-title {
+            margin: 0;
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .draft-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            color: var(--muted);
+            font-size: 0.88rem;
+        }
+
+        .draft-conflicts {
+            margin: 0;
+            padding-left: 1rem;
+            color: var(--text);
+            font-size: 0.88rem;
+        }
+
+        .draft-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         .sources-title {
@@ -847,6 +915,15 @@
                 padding: 6px 8px;
                 font-size: 0.68rem;
             }
+
+            .mode-switch {
+                padding: 3px;
+            }
+
+            .mode-button {
+                padding: 7px 10px;
+                font-size: 0.72rem;
+            }
         }
     </style>
 </head>
@@ -862,6 +939,10 @@
                 </div>
             </div>
             <div class="topbar-meta">
+                <div class="mode-switch" role="tablist" aria-label="Assistant mode">
+                    <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
+                    <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
+                </div>
                 <div class="version-stamp">{{ app_version }}</div>
                 <div id="status-pill" class="status-pill">Connecting</div>
             </div>
@@ -889,6 +970,7 @@
     <script>
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
+        let appMode = localStorage.getItem("app_mode") || "clinical";
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -908,6 +990,26 @@
 
         function setStatus(text) {
             document.getElementById("status-pill").textContent = text;
+        }
+
+        function renderModeState() {
+            document.getElementById("mode-clinical").classList.toggle("active", appMode === "clinical");
+            document.getElementById("mode-scheduling").classList.toggle("active", appMode === "scheduling");
+        }
+
+        function switchAppMode(nextMode) {
+            if (appMode === nextMode) return;
+            appMode = nextMode;
+            localStorage.setItem("app_mode", appMode);
+            renderModeState();
+            document.getElementById("chat").innerHTML = "";
+            hideSessionBanner();
+            appendAssistantMessage(
+                appMode === "scheduling"
+                    ? "Scheduling Copilot is active. I’ll draft events and ask before creating anything."
+                    : "Clinical Assistant is active."
+            );
+            bootstrapSession();
         }
 
         function setComposerEnabled(enabled) {
@@ -1003,6 +1105,64 @@
             actions.appendChild(saveButton);
             actions.appendChild(dismissButton);
             card.appendChild(text);
+            card.appendChild(actions);
+            chat.appendChild(card);
+            scrollChatToBottom();
+        }
+
+        function appendSchedulingDraftCard(draft) {
+            if (!draft || !draft.draft_id) return;
+
+            const chat = document.getElementById("chat");
+            const card = document.createElement("div");
+            card.className = "draft-card";
+
+            const title = document.createElement("p");
+            title.className = "draft-title";
+            title.textContent = draft.title || "Draft event";
+
+            const meta = document.createElement("div");
+            meta.className = "draft-meta";
+            meta.innerHTML = `
+                <div>Calendar: ${escapeHtml(draft.calendar_type || "Personal")}</div>
+                <div>Time: ${escapeHtml(draft.start_at || "")}${draft.end_at ? ` - ${escapeHtml(draft.end_at)}` : ""}</div>
+                <div>Reminders: ${escapeHtml((draft.reminders || []).join(", ") || "None")}</div>
+            `;
+
+            card.appendChild(title);
+            card.appendChild(meta);
+
+            if (draft.conflicts && draft.conflicts.length) {
+                const conflictsTitle = document.createElement("p");
+                conflictsTitle.className = "utility-text";
+                conflictsTitle.textContent = `Conflicts found: ${draft.conflicts.length}`;
+                card.appendChild(conflictsTitle);
+
+                const conflictList = document.createElement("ul");
+                conflictList.className = "draft-conflicts";
+                draft.conflicts.forEach((conflict) => {
+                    const item = document.createElement("li");
+                    item.textContent = `${conflict.title} · ${conflict.start_at}`;
+                    conflictList.appendChild(item);
+                });
+                card.appendChild(conflictList);
+            }
+
+            const actions = document.createElement("div");
+            actions.className = "draft-actions";
+
+            const confirmButton = document.createElement("button");
+            confirmButton.className = "secondary-button";
+            confirmButton.textContent = "Create event";
+            confirmButton.addEventListener("click", () => confirmSchedulingDraft(draft.draft_id, card));
+
+            const dismissButton = document.createElement("button");
+            dismissButton.className = "ghost-button";
+            dismissButton.textContent = "Dismiss";
+            dismissButton.addEventListener("click", () => dismissSchedulingDraft(draft.draft_id, card));
+
+            actions.appendChild(confirmButton);
+            actions.appendChild(dismissButton);
             card.appendChild(actions);
             chat.appendChild(card);
             scrollChatToBottom();
@@ -1131,7 +1291,8 @@
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({
-                        session_id: sessionId
+                        session_id: sessionId,
+                        app_mode: appMode
                     })
                 });
 
@@ -1156,6 +1317,9 @@
                 }
 
                 hideSessionBanner();
+                if (data.reply) {
+                    appendAssistantMessage(data.reply);
+                }
                 setComposerEnabled(true);
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
@@ -1235,7 +1399,8 @@
                     },
                     body: JSON.stringify({
                         message: message,
-                        session_id: sessionId
+                        session_id: sessionId,
+                        app_mode: appMode
                     })
                 });
 
@@ -1264,6 +1429,10 @@
 
                 if (data.suggested_save) {
                     appendSuggestedSaveCard(data.suggested_save);
+                }
+
+                if (data.scheduling_draft) {
+                    appendSchedulingDraftCard(data.scheduling_draft);
                 }
             } catch (error) {
                 setThinkingState(false);
@@ -1297,6 +1466,46 @@
                 } else {
                     appendAssistantMessage("Error: " + data.status, "error");
                 }
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function confirmSchedulingDraft(draftId, card) {
+            try {
+                const response = await fetch("/scheduling/confirm", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        draft_id: draftId
+                    })
+                });
+                const data = await response.json();
+                if (card) card.remove();
+                appendAssistantMessage(data.reply || "Draft confirmed.");
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function dismissSchedulingDraft(draftId, card) {
+            try {
+                const response = await fetch("/scheduling/dismiss", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        draft_id: draftId
+                    })
+                });
+                const data = await response.json();
+                if (card) card.remove();
+                appendAssistantMessage(data.reply || "Draft dismissed.", "system");
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
@@ -1342,6 +1551,7 @@
             }
         });
 
+        renderModeState();
         autoResizeInput();
         bootstrapSession();
     </script>

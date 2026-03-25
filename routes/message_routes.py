@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from services.logging_service import log_event
 from services.message_handler_service import continue_onboarding, get_session_state, process_message, reset_session, start_clean_chat_mode
+from services.scheduling_service import build_scheduling_welcome, confirm_scheduling_draft, dismiss_scheduling_draft, handle_scheduling_message
 
 
 router = APIRouter()
@@ -14,6 +15,9 @@ async def handle_message(request: Request):
         data = await request.json()
         user_message = data.get("message", "").strip()
         session_id = data.get("session_id")
+        app_mode = data.get("app_mode", "clinical")
+        if app_mode == "scheduling":
+            return JSONResponse(handle_scheduling_message(session_id=session_id, user_message=user_message))
         return JSONResponse(process_message(user_message=user_message, session_id=session_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/message", "error": str(exc)}, level="error")
@@ -25,6 +29,9 @@ async def handle_session_state(request: Request):
     try:
         data = await request.json()
         session_id = data.get("session_id")
+        app_mode = data.get("app_mode", "clinical")
+        if app_mode == "scheduling":
+            return JSONResponse({"state": "ready", "needs_onboarding": False, "reply": build_scheduling_welcome()})
         return JSONResponse(get_session_state(session_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/session-state", "error": str(exc)}, level="error")
@@ -61,4 +68,28 @@ async def handle_reset_session(request: Request):
         return JSONResponse(reset_session(session_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/reset-session", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/scheduling/confirm")
+async def handle_scheduling_confirm(request: Request):
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        draft_id = data.get("draft_id")
+        return JSONResponse(confirm_scheduling_draft(session_id=session_id, draft_id=draft_id))
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/scheduling/confirm", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/scheduling/dismiss")
+async def handle_scheduling_dismiss(request: Request):
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        draft_id = data.get("draft_id")
+        return JSONResponse(dismiss_scheduling_draft(session_id=session_id, draft_id=draft_id))
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/scheduling/dismiss", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
