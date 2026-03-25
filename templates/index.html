@@ -1121,6 +1121,8 @@
                 ? "Delete event"
                 : actionType === "update"
                 ? "Update event"
+                : actionType === "bulk_create"
+                ? "Create events"
                 : "Create event";
 
             const title = document.createElement("p");
@@ -1131,6 +1133,7 @@
             meta.className = "draft-meta";
             meta.innerHTML = `
                 ${draft.target_summary ? `<div>Current: ${escapeHtml(draft.target_summary)}</div>` : ""}
+                ${draft.event_count ? `<div>Events: ${escapeHtml(String(draft.event_count))}</div>` : ""}
                 <div>Calendar: ${escapeHtml(draft.calendar_type || "Personal")}</div>
                 <div>Time: ${escapeHtml(draft.start_at || "")}${draft.end_at ? ` - ${escapeHtml(draft.end_at)}` : ""}</div>
                 <div>Reminders: ${escapeHtml((draft.reminders || []).join(", ") || "None")}</div>
@@ -1149,7 +1152,7 @@
                 conflictList.className = "draft-conflicts";
                 draft.conflicts.forEach((conflict) => {
                     const item = document.createElement("li");
-                    item.textContent = `${conflict.title} · ${conflict.start_at}`;
+                    item.textContent = `${conflict.title} · ${conflict.start_at}${conflict.event_start_at ? ` · overlaps ${conflict.event_start_at}` : ""}`;
                     conflictList.appendChild(item);
                 });
                 card.appendChild(conflictList);

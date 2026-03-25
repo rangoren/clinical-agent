@@ -1,4 +1,5 @@
 import re
+from calendar import monthrange
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -30,6 +31,20 @@ WEEKDAYS = {
     "friday": 4,
     "saturday": 5,
     "sunday": 6,
+}
+MONTHS = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
 }
 DELETE_KEYWORDS = ("delete", "remove", "cancel", "drop")
 UPDATE_KEYWORDS = ("move", "reschedule", "change", "update", "push")
@@ -180,14 +195,140 @@ def _extract_date_phrase(text):
     return None
 
 
+def _extract_month_year(text):
+    lowered = text.lower()
+    now = _utcnow()
+
+    if "next month" in lowered:
+        month = now.month + 1
+        year = now.year
+        if month == 13:
+            month = 1
+            year += 1
+        return month, year
+
+    if "this month" in lowered:
+        return now.month, now.year
+
+    month_match = re.search(
+        r"\b("
+        + "|".join(MONTHS.keys())
+        + r")\b(?:\s+(20\d{2}))?",
+        lowered,
+    )
+    if month_match:
+        month = MONTHS[month_match.group(1)]
+        year = int(month_match.group(2)) if month_match.group(2) else now.year
+        return month, year
+
+    slash_match = re.search(r"\b(\d{1,2})/(\d{4})\b", lowered)
+    if slash_match:
+        return int(slash_match.group(1)), int(slash_match.group(2))
+
+    return None, None
+
+
 def _clean_title(text):
     cleaned = re.sub(r"\b(today|tomorrow|next\s+\w+)\b", "", text, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bthis month\b|\bnext month\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(" + "|".join(MONTHS.keys()) + r")\b(?:\s+20\d{2})?", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bevery\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+and\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))*\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b\d{1,2}\s*[-–]\s*\d{1,2}\b", "", cleaned)
+    cleaned = re.sub(r"\b\d{1,2}(?:\s*,\s*\d{1,2}){1,}\b", "", cleaned)
     cleaned = re.sub(r"\b\d{1,2}(?::\d{2})?\s*(am|pm)?\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(20\d{2})-(\d{2})-(\d{2})\b", "", cleaned)
     cleaned = re.sub(r"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", "", cleaned)
     cleaned = re.sub(r"\b(at|on|for|with|schedule|book|set|create|add)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.-")
     return cleaned or "Untitled event"
+
+
+def _serialize_conflict(conflict):
+    return {
+        "title": conflict.get("title", "Existing event"),
+        "calendar_type": conflict.get("calendar_type", "personal"),
+        "start_at": conflict["start_at"].isoformat(timespec="minutes"),
+        "end_at": conflict["end_at"].isoformat(timespec="minutes"),
+    }
+
+
+def _build_bulk_events_from_message(message):
+    normalized = _normalize_text(message)
+    event_time = _extract_time(normalized)
+    calendar_type = _infer_calendar_type(normalized)
+    reminders = _infer_reminders(calendar_type)
+    month, year = _extract_month_year(normalized)
+    now = _utcnow()
+
+    if not event_time:
+        return None
+
+    candidate_dates = []
+
+    weekday_matches = re.findall(r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", normalized, flags=re.IGNORECASE)
+    if "every" in normalized.lower() and weekday_matches:
+        if not month or not year:
+            return {
+                "status": "needs_details",
+                "missing_fields": ["month"],
+                "calendar_type": calendar_type,
+                "title": _clean_title(normalized),
+            }
+        seen = set()
+        for weekday_name in weekday_matches:
+            weekday_index = WEEKDAYS[weekday_name.lower()]
+            days_in_month = monthrange(year, month)[1]
+            for day in range(1, days_in_month + 1):
+                if datetime(year, month, day).weekday() == weekday_index:
+                    date_value = datetime(year, month, day).date()
+                    if date_value >= now.date() and date_value not in seen:
+                        candidate_dates.append(date_value)
+                        seen.add(date_value)
+    else:
+        if not month:
+            month = now.month
+            year = now.year
+
+        range_match = re.search(r"\b(\d{1,2})\s*[-–]\s*(\d{1,2})\b", normalized)
+        if range_match:
+            start_day = int(range_match.group(1))
+            end_day = int(range_match.group(2))
+            if start_day <= end_day:
+                candidate_dates.extend(
+                    [
+                        datetime(year, month, day).date()
+                        for day in range(start_day, end_day + 1)
+                        if day <= monthrange(year, month)[1]
+                    ]
+                )
+        else:
+            list_match = re.search(r"\b(\d{1,2}(?:\s*,\s*\d{1,2}){1,})\b", normalized)
+            if list_match:
+                for part in list_match.group(1).split(","):
+                    day = int(part.strip())
+                    if day <= monthrange(year, month)[1]:
+                        candidate_dates.append(datetime(year, month, day).date())
+
+    candidate_dates = sorted({date_value for date_value in candidate_dates if date_value >= now.date()})
+    if len(candidate_dates) < 2:
+        return None
+
+    title = _clean_title(normalized)
+    events = []
+    for event_date in candidate_dates:
+        start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
+        end_at = start_at + timedelta(minutes=DEFAULT_EVENT_MINUTES)
+        events.append(
+            {
+                "title": title,
+                "calendar_type": calendar_type,
+                "reminders": reminders,
+                "start_at": start_at,
+                "end_at": end_at,
+            }
+        )
+
+    return {"status": "ready", "events": events, "calendar_type": calendar_type, "title": title}
 
 
 def _build_event_from_message(message):
@@ -306,6 +447,10 @@ def _serialize_event(event):
     }
 
 
+def _serialize_events(events):
+    return [_serialize_event(event) for event in events]
+
+
 def _find_conflicts(session_id, event):
     conflicts = list(
         scheduled_events_collection.find(
@@ -317,17 +462,21 @@ def _find_conflicts(session_id, event):
             }
         ).sort("start_at", 1)
     )
-    serialized = []
-    for conflict in conflicts:
-        serialized.append(
-            {
-                "title": conflict.get("title", "Existing event"),
-                "calendar_type": conflict.get("calendar_type", "personal"),
-                "start_at": conflict["start_at"].isoformat(timespec="minutes"),
-                "end_at": conflict["end_at"].isoformat(timespec="minutes"),
-            }
-        )
-    return serialized
+    return [_serialize_conflict(conflict) for conflict in conflicts]
+
+
+def _find_bulk_conflicts(session_id, events):
+    all_conflicts = []
+    for event in events:
+        for conflict in _find_conflicts(session_id, event):
+            all_conflicts.append(
+                {
+                    "event_start_at": event["start_at"].isoformat(timespec="minutes"),
+                    "event_title": event["title"],
+                    **conflict,
+                }
+            )
+    return all_conflicts
 
 
 def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflicts=None, target_event=None):
@@ -380,6 +529,21 @@ def _format_update_reply(existing_event, updated_event, conflicts):
 def _format_delete_reply(existing_event):
     start_label = existing_event["start_at"].strftime("%a %d %b at %H:%M")
     return f"I found {existing_event.get('title', 'this event')} on {start_label}. Review it before I delete it."
+
+
+def _format_bulk_reply(events, conflicts):
+    first_label = events[0]["start_at"].strftime("%a %d %b at %H:%M")
+    last_label = events[-1]["start_at"].strftime("%a %d %b at %H:%M")
+    if conflicts:
+        return (
+            f"I drafted {len(events)} events in your {events[0]['calendar_type']} calendar, "
+            f"from {first_label} through {last_label}. I also found {len(conflicts)} conflict"
+            f"{'s' if len(conflicts) != 1 else ''}. Review before creating."
+        )
+    return (
+        f"I drafted {len(events)} events in your {events[0]['calendar_type']} calendar, "
+        f"from {first_label} through {last_label}. Review them before I create them."
+    )
 
 
 def build_scheduling_welcome():
@@ -455,6 +619,39 @@ def handle_scheduling_message(session_id, user_message):
             },
         }
 
+    bulk_parsed = _build_bulk_events_from_message(user_message)
+    if bulk_parsed:
+        if bulk_parsed["status"] == "needs_details":
+            return {
+                "reply": "I can draft those events, but I still need the month for the repeated weekdays.",
+                "scheduling_draft": None,
+            }
+
+        conflicts = _find_bulk_conflicts(session_id, bulk_parsed["events"])
+        draft_id = _save_draft(
+            session_id,
+            user_message,
+            action_type="bulk_create",
+            parsed_event={"events": _serialize_events(bulk_parsed["events"])},
+            conflicts=conflicts,
+        )
+        return {
+            "reply": _format_bulk_reply(bulk_parsed["events"], conflicts),
+            "scheduling_draft": {
+                "draft_id": draft_id,
+                "action_type": "bulk_create",
+                "title": bulk_parsed["title"],
+                "calendar_type": bulk_parsed["calendar_type"].title(),
+                "start_at": bulk_parsed["events"][0]["start_at"].strftime("%a, %d %b %Y · %H:%M"),
+                "end_at": bulk_parsed["events"][-1]["start_at"].strftime("%a, %d %b %Y · %H:%M"),
+                "reminders": bulk_parsed["events"][0]["reminders"],
+                "conflicts": conflicts,
+                "status": "needs_review",
+                "event_count": len(bulk_parsed["events"]),
+                "target_summary": f"{len(bulk_parsed['events'])} events",
+            },
+        }
+
     parsed = _build_event_from_message(user_message)
     if parsed["status"] == "needs_details":
         return {
@@ -517,6 +714,40 @@ def confirm_scheduling_draft(session_id, draft_id):
         return {
             "status": "confirmed",
             "reply": f"Created {parsed_event['title']} in your {parsed_event['calendar_type']} calendar.",
+        }
+
+    if action_type == "bulk_create":
+        parsed_event = draft.get("parsed_event", {})
+        events = parsed_event.get("events", [])
+        if not events:
+            return {"status": "missing", "reply": "I couldn't find those drafted events anymore."}
+
+        inserted_count = 0
+        for event in events:
+            scheduled_events_collection.insert_one(
+                {
+                    "session_id": session_id,
+                    "draft_id": draft_id,
+                    "event_id": str(uuid4()),
+                    "title": event["title"],
+                    "calendar_type": event["calendar_type"],
+                    "start_at": datetime.fromisoformat(event["start_at"]),
+                    "end_at": datetime.fromisoformat(event["end_at"]),
+                    "reminders": event["reminders"],
+                    "status": "confirmed",
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            )
+            inserted_count += 1
+
+        scheduling_drafts_collection.update_one(
+            {"draft_id": draft_id, "session_id": session_id},
+            {"$set": {"status": "confirmed", "updated_at": now}},
+        )
+        return {
+            "status": "confirmed",
+            "reply": f"Created {inserted_count} events in your {events[0]['calendar_type']} calendar.",
         }
 
     target_event = draft.get("target_event")
