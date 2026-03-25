@@ -1,7 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 from uuid import uuid4
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -16,10 +17,19 @@ GOOGLE_CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/me/cale
 GOOGLE_EVENTS_URL_TEMPLATE = "https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
 GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar"
 GOOGLE_HTTP_TIMEOUT_SECONDS = 8
+APP_ZONEINFO = ZoneInfo(APP_TIMEZONE)
 
 
 def _utcnow():
     return datetime.utcnow()
+
+
+def _as_google_utc(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=APP_ZONEINFO)
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def google_calendar_enabled():
@@ -387,8 +397,8 @@ def _find_matching_google_events(session_id, calendar_id, title, start_at, end_a
         GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
         headers=_auth_headers(connection["access_token"]),
         params={
-            "timeMin": (start_at - timedelta(hours=2)).isoformat() + "Z",
-            "timeMax": (end_at + timedelta(hours=2)).isoformat() + "Z",
+            "timeMin": _as_google_utc(start_at - timedelta(hours=2)),
+            "timeMax": _as_google_utc(end_at + timedelta(hours=2)),
             "singleEvents": "true",
             "orderBy": "startTime",
         },
@@ -401,8 +411,8 @@ def _find_matching_google_events(session_id, calendar_id, title, start_at, end_a
                 GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
                 headers=_auth_headers(refreshed_access_token),
                 params={
-                    "timeMin": (start_at - timedelta(hours=2)).isoformat() + "Z",
-                    "timeMax": (end_at + timedelta(hours=2)).isoformat() + "Z",
+                    "timeMin": _as_google_utc(start_at - timedelta(hours=2)),
+                    "timeMax": _as_google_utc(end_at + timedelta(hours=2)),
                     "singleEvents": "true",
                     "orderBy": "startTime",
                 },
@@ -718,11 +728,11 @@ def sync_google_delete_event(
                 if candidate not in candidate_pairs:
                     candidate_pairs.append(candidate)
 
-        if provider_event_id and not provider_calendar_id:
+        if provider_event_id:
             selected_calendar_id = _get_selected_google_calendar_id(
                 session_id,
                 calendar_type,
-                preferred_calendar_id=preferred_calendar_id,
+                preferred_calendar_id=provider_calendar_id or preferred_calendar_id,
             )
             if selected_calendar_id:
                 candidate = (selected_calendar_id, provider_event_id)
