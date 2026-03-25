@@ -30,13 +30,14 @@ def get_message_by_id(message_id):
     return messages_collection.find_one({"_id": message_id})
 
 
-def save_feedback_log(message_id, direction, used_knowledge, used_protocols):
+def save_feedback_log(message_id, direction, used_knowledge, used_protocols, used_sources=None):
     feedback_logs_collection.insert_one(
         {
             "message_id": message_id,
             "direction": direction,
             "used_knowledge": used_knowledge,
             "used_protocols": used_protocols,
+            "used_sources": used_sources or [],
             "created_at": datetime.utcnow(),
         }
     )

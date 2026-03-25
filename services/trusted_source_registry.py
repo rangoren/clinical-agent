@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urlparse
 
 
 COUNTRY_ALIASES = {
@@ -90,6 +91,64 @@ GLOBAL_CORE_DOMAINS = [
     "figo.org",
     "isuog.org",
 ]
+
+TIER1_REGULATOR_DOMAINS = {
+    "obgyn.org.il",
+    "ima.org.il",
+    "health.gov.il",
+    "me.health.gov.il",
+    "iscpc.org.il",
+    "isuog.ima.org.il",
+    "acog.org",
+    "asccp.org",
+    "smfm.org",
+    "cdc.gov",
+    "uspreventiveservicestaskforce.org",
+    "rcog.org.uk",
+    "nice.org.uk",
+    "nhs.uk",
+    "gov.uk",
+    "sogc.org",
+    "ranzcog.edu.au",
+    "dggg.de",
+    "awmf.org",
+    "cngof.fr",
+    "has-sante.fr",
+    "sigo.it",
+    "salute.gov.it",
+    "sego.es",
+    "sanidad.gob.es",
+    "fogsi.org",
+    "mohfw.gov.in",
+    "who.int",
+    "figo.org",
+    "isuog.org",
+    "eshre.eu",
+    "asrm.org",
+    "esgo.org",
+    "sgo.org",
+    "imsociety.org",
+    "fsrh.org",
+}
+
+TIER2_SYNTHESIS_DOMAINS = {
+    "wikirefua.org.il",
+    "clalit.co.il",
+    "maccabi4u.co.il",
+    "leumit.co.il",
+    "meuhedet.co.il",
+}
+
+TIER3_DRUG_DOMAINS = {
+    "ncbi.nlm.nih.gov",
+    "dailymed.nlm.nih.gov",
+    "fda.gov",
+}
+
+TIER4_LITERATURE_DOMAINS = {
+    "pubmed.ncbi.nlm.nih.gov",
+    "cochrane.org",
+}
 
 SPECIALTY_DOMAIN_GROUPS = {
     "general_obgyn": [
@@ -215,6 +274,37 @@ SPECIALTY_KEYWORDS = {
     ],
 }
 
+DRUG_SAFETY_KEYWORDS = [
+    "lactation",
+    "breastfeeding",
+    "breast feeding",
+    "breast milk",
+    "drug",
+    "medication",
+    "medicine",
+    "dose",
+    "dosing",
+    "interaction",
+    "interactions",
+    "interact",
+    "teratogenic",
+    "teratogen",
+    "safe in pregnancy",
+    "safe while breastfeeding",
+    "can i take",
+    "is it safe to take",
+    "הנקה",
+    "מניקה",
+    "תרופה",
+    "תרופות",
+    "אינטראקציה",
+    "אינטראקציות",
+    "מינון",
+    "בטוח בהריון",
+    "בטוח בהנקה",
+    "מותר לקחת",
+]
+
 PROFILE_SUBSPECIALTY_MAP = {
     "Maternal-Fetal Medicine": "maternal_fetal_medicine",
     "Obstetric and Gynecologic Ultrasound": "ultrasound",
@@ -269,19 +359,14 @@ def infer_specialty_tags(user_message, user_profile=None):
     return tags
 
 
-def get_candidate_domains(user_message, user_profile=None):
-    country = get_active_country(user_message, user_profile=user_profile)
-    specialty_tags = infer_specialty_tags(user_message, user_profile=user_profile)
+def infer_question_route(user_message):
+    normalized = normalize_text(user_message)
+    if any(keyword in normalized for keyword in DRUG_SAFETY_KEYWORDS):
+        return "drug_safety"
+    return "general"
 
-    domains = []
-    if country in COUNTRY_SOURCE_DOMAINS:
-        domains.extend(COUNTRY_SOURCE_DOMAINS[country])
 
-    for specialty in specialty_tags:
-        domains.extend(SPECIALTY_DOMAIN_GROUPS.get(specialty, []))
-
-    domains.extend(GLOBAL_CORE_DOMAINS)
-
+def _dedupe_domains(domains):
     ordered = []
     seen = set()
     for domain in domains:
@@ -290,6 +375,106 @@ def get_candidate_domains(user_message, user_profile=None):
         seen.add(domain)
         ordered.append(domain)
     return ordered
+
+
+def get_domain_tier(domain):
+    normalized = (domain or "").lower().replace("www.", "")
+    if normalized in TIER3_DRUG_DOMAINS:
+        return "tier3"
+    if normalized in TIER2_SYNTHESIS_DOMAINS:
+        return "tier2"
+    if normalized in TIER4_LITERATURE_DOMAINS:
+        return "tier4"
+    if normalized in TIER1_REGULATOR_DOMAINS:
+        return "tier1"
+    return "tier1"
+
+
+def _domains_for_country(country, tier=None):
+    domains = COUNTRY_SOURCE_DOMAINS.get(country, [])
+    if not tier:
+        return domains
+    return [domain for domain in domains if get_domain_tier(domain) == tier]
+
+
+def _specialty_domains_for_tier(tags, tier):
+    domains = []
+    for specialty in tags:
+        domains.extend(SPECIALTY_DOMAIN_GROUPS.get(specialty, []))
+    return [domain for domain in _dedupe_domains(domains) if get_domain_tier(domain) == tier]
+
+
+def _global_domains_for_tier(tags, tier):
+    domains = _specialty_domains_for_tier(tags, tier)
+    if tier == "tier1":
+        domains.extend(domain for domain in GLOBAL_CORE_DOMAINS if get_domain_tier(domain) == "tier1")
+    if tier == "tier3":
+        domains.extend(sorted(TIER3_DRUG_DOMAINS))
+    if tier == "tier4":
+        domains.extend(sorted(TIER4_LITERATURE_DOMAINS))
+    return _dedupe_domains(domains)
+
+
+def build_search_stages(user_message, user_profile=None):
+    country = get_active_country(user_message, user_profile=user_profile)
+    specialty_tags = infer_specialty_tags(user_message, user_profile=user_profile)
+    route = infer_question_route(user_message)
+    stages = []
+
+    if country == "Israel":
+        local_tier1 = _domains_for_country("Israel", "tier1")
+        local_tier2 = _domains_for_country("Israel", "tier2")
+        if local_tier1:
+            stages.append({"name": "israel_tier1", "tier": "tier1", "domains": local_tier1, "stop_if_found": True})
+        if local_tier2:
+            stages.append({"name": "israel_tier2", "tier": "tier2", "domains": local_tier2, "stop_if_found": True})
+    elif country:
+        local_tier1 = _domains_for_country(country, "tier1")
+        local_tier2 = _domains_for_country(country, "tier2")
+        if local_tier1:
+            stages.append({"name": "country_tier1", "tier": "tier1", "domains": local_tier1, "stop_if_found": True})
+        if local_tier2:
+            stages.append({"name": "country_tier2", "tier": "tier2", "domains": local_tier2, "stop_if_found": True})
+
+    if route == "drug_safety":
+        local_tier3 = _domains_for_country(country, "tier3") if country else []
+        global_tier3 = _global_domains_for_tier(specialty_tags, "tier3")
+        if local_tier3:
+            stages.append({"name": "local_drug", "tier": "tier3", "domains": local_tier3, "stop_if_found": True})
+        if global_tier3:
+            stages.append({"name": "global_drug", "tier": "tier3", "domains": global_tier3, "stop_if_found": True})
+
+    global_tier1 = _global_domains_for_tier(specialty_tags, "tier1")
+    global_tier2 = _global_domains_for_tier(specialty_tags, "tier2")
+    global_tier4 = _global_domains_for_tier(specialty_tags, "tier4")
+
+    if global_tier1:
+        stages.append({"name": "global_tier1", "tier": "tier1", "domains": global_tier1, "stop_if_found": True})
+    if global_tier2:
+        stages.append({"name": "global_tier2", "tier": "tier2", "domains": global_tier2, "stop_if_found": True})
+    if global_tier4:
+        stages.append({"name": "global_tier4", "tier": "tier4", "domains": global_tier4, "stop_if_found": True})
+
+    deduped_stages = []
+    seen_stage_domains = set()
+    for stage in stages:
+        filtered = [domain for domain in _dedupe_domains(stage["domains"]) if domain not in seen_stage_domains]
+        if not filtered:
+            continue
+        seen_stage_domains.update(filtered)
+        deduped_stages.append({**stage, "domains": filtered})
+    return deduped_stages
+
+
+def get_candidate_domains(user_message, user_profile=None):
+    domains = []
+    for stage in build_search_stages(user_message, user_profile=user_profile):
+        domains.extend(stage["domains"])
+    return _dedupe_domains(domains)
+
+
+def get_source_domain(url):
+    return urlparse(url).netloc.lower().replace("www.", "")
 
 
 def get_country_domains(country):

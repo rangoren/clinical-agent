@@ -16,12 +16,14 @@ def apply_feedback(message_id, direction):
     metadata = message_doc.get("metadata", {})
     used_knowledge = metadata.get("used_knowledge", [])
     used_protocols = metadata.get("used_protocols", [])
+    used_sources = metadata.get("used_sources", [])
 
     save_feedback_log(
         message_id=str(message_id),
         direction=direction,
         used_knowledge=used_knowledge,
         used_protocols=used_protocols,
+        used_sources=used_sources,
     )
     log_event(
         "feedback_applied",
@@ -30,6 +32,7 @@ def apply_feedback(message_id, direction):
             "direction": direction,
             "knowledge_count": len(used_knowledge),
             "protocol_count": len(used_protocols),
+            "source_count": len(used_sources),
         },
     )
 

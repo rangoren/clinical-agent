@@ -7,20 +7,24 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from bson import ObjectId
 
-from db import search_cache_collection
-from services.trusted_source_registry import get_candidate_domains
+from db import feedback_logs_collection, messages_collection, search_cache_collection
+from services.logging_service import log_event
+from services.trusted_source_registry import build_search_stages, get_domain_tier, get_source_domain
 
 
 SEARCH_URL = "https://html.duckduckgo.com/html/"
 REQUEST_TIMEOUT = 1.8
 SEARCH_BUDGET_SECONDS = 4.0
-MAX_DOMAIN_ATTEMPTS = 3
+MAX_DOMAIN_ATTEMPTS = 8
 MAX_RESULTS_PER_DOMAIN = 3
+MAX_DOMAIN_ATTEMPTS_PER_STAGE = 5
 MAX_EXCERPT_CHARS = 360
 USER_AGENT = "Mozilla/5.0 (compatible; ClinicalAssistant/1.0; +https://example.local)"
 QUERY_CACHE_TTL_SECONDS = 12 * 60 * 60
 PAGE_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
+FEEDBACK_BONUS_CACHE_TTL_SECONDS = 6 * 60 * 60
 CURRENT_YEAR = datetime.now(timezone.utc).year
 DATE_PATTERNS = (
     r"\b(20\d{2})[-/](0[1-9]|1[0-2])[-/](0[1-9]|[12]\d|3[01])\b",
@@ -161,6 +165,62 @@ def _page_cache_store(url, query, preview):
         PAGE_CACHE_TTL_SECONDS,
         metadata={"url": url, "query": query},
     )
+
+
+def _feedback_cache_lookup(domain):
+    key = _cache_key("feedback", domain)
+    doc = _load_cache("feedback_bonus", key)
+    if not doc:
+        return None
+    return (doc.get("payload") or {}).get("bonus")
+
+
+def _feedback_cache_store(domain, bonus):
+    key = _cache_key("feedback", domain)
+    _save_cache(
+        "feedback_bonus",
+        key,
+        {"bonus": bonus},
+        FEEDBACK_BONUS_CACHE_TTL_SECONDS,
+        metadata={"domain": domain},
+    )
+
+
+def _domain_feedback_bonus(domain):
+    cached = _feedback_cache_lookup(domain)
+    if cached is not None:
+        return cached
+
+    score = 0
+    try:
+        feedback_docs = list(feedback_logs_collection.find().sort("created_at", -1).limit(200))
+    except Exception:
+        return 0
+
+    for feedback in feedback_docs:
+        used_sources = feedback.get("used_sources") or []
+        if not used_sources:
+            message_id = feedback.get("message_id")
+            if message_id:
+                try:
+                    message_doc = messages_collection.find_one({"_id": ObjectId(message_id)})
+                except Exception:
+                    message_doc = None
+                if message_doc:
+                    used_sources = (message_doc.get("metadata") or {}).get("used_sources") or []
+        matched = False
+        for source in used_sources:
+            source_domain = get_source_domain(source.get("url"))
+            if source_domain == domain or source_domain.endswith(f".{domain}") or domain.endswith(f".{source_domain}"):
+                matched = True
+                break
+        if not matched:
+            continue
+        score += 2 if feedback.get("direction") == "up" else -2
+
+    bounded = max(-6, min(6, score))
+    _feedback_cache_store(domain, bounded)
+    return bounded
 
 def _request(url, params=None):
     return requests.get(
@@ -386,6 +446,16 @@ def _search_domain(query, domain):
         updated_at = preview.get("updated_at") or _extract_result_date_from_text(result.get("snippet", ""))
         score = _recency_bonus(updated_at, title=preview.get("title") or result["title"], snippet=result.get("snippet", ""))
         score += len(set(_query_terms(query)) & set(_query_terms((preview.get("excerpt") or "") + " " + result.get("snippet", "")))) * 3
+        tier = get_domain_tier(domain)
+        if tier == "tier1":
+            score += 18
+        elif tier == "tier2":
+            score += 10
+        elif tier == "tier3":
+            score += 22
+        elif tier == "tier4":
+            score -= 2
+        score += _domain_feedback_bonus(domain)
         candidates.append(
             {
                 "title": preview["title"] or result["title"],
@@ -407,7 +477,8 @@ def _search_domain(query, domain):
 
 
 def get_live_trusted_sources(user_message, user_profile=None, limit=3):
-    domains = get_candidate_domains(user_message, user_profile=user_profile)
+    stages = build_search_stages(user_message, user_profile=user_profile)
+    domains = [domain for stage in stages for domain in stage["domains"]]
     cached_results = _query_cache_lookup(user_message, domains, limit)
     if cached_results:
         return cached_results[:limit]
@@ -415,23 +486,34 @@ def get_live_trusted_sources(user_message, user_profile=None, limit=3):
     collected = []
     started_at = time.monotonic()
     attempted_domains = 0
+    stage_results = []
 
-    for domain in domains:
-        if len(collected) >= limit:
-            break
-        if attempted_domains >= MAX_DOMAIN_ATTEMPTS:
-            break
-        if time.monotonic() - started_at >= SEARCH_BUDGET_SECONDS:
-            break
+    for stage in stages:
+        local_results = []
+        stage_attempts = 0
+        for domain in stage["domains"]:
+            if len(collected) >= limit:
+                break
+            if attempted_domains >= MAX_DOMAIN_ATTEMPTS:
+                break
+            if stage_attempts >= MAX_DOMAIN_ATTEMPTS_PER_STAGE:
+                break
+            if time.monotonic() - started_at >= SEARCH_BUDGET_SECONDS:
+                break
+            try:
+                attempted_domains += 1
+                stage_attempts += 1
+                result = _search_domain(user_message, domain)
+            except Exception:
+                continue
+            if result:
+                result["tier"] = stage["tier"]
+                local_results.append(result)
+                collected.append(result)
 
-        try:
-            attempted_domains += 1
-            result = _search_domain(user_message, domain)
-        except Exception:
-            continue
-
-        if result:
-            collected.append(result)
+        stage_results.append({"stage": stage["name"], "tier": stage["tier"], "result_count": len(local_results)})
+        if local_results and stage.get("stop_if_found", True):
+            break
 
     deduped = []
     seen_urls = set()
@@ -442,5 +524,13 @@ def get_live_trusted_sources(user_message, user_profile=None, limit=3):
         deduped.append(source)
 
     final_results = deduped[:limit]
+    log_event(
+        "trusted_source_search_plan",
+        payload={
+            "query": user_message,
+            "stages": stage_results,
+            "result_count": len(final_results),
+        },
+    )
     _query_cache_store(user_message, domains, limit, final_results)
     return final_results

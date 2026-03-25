@@ -2,6 +2,7 @@ import re
 
 from services.live_search_service import get_live_trusted_sources
 from services.source_preference_service import is_israel_relevant
+from services.trusted_source_registry import build_search_stages, get_domain_tier, get_source_domain, infer_question_route
 
 
 EXTERNAL_SOURCE_CATALOG = [
@@ -28,6 +29,27 @@ EXTERNAL_SOURCE_CATALOG = [
         "keywords": ["hpv", "pap smear", "pap test", "hpv typing", "cervical screening", "cervical dysplasia"],
         "regions": ["israel"],
         "priority": 2,
+    },
+    {
+        "title": "LactMed Database",
+        "url": "https://www.ncbi.nlm.nih.gov/books/NBK501922/",
+        "source_type": "drug safety reference",
+        "keywords": ["lactation", "breastfeeding", "breast milk", "medication", "drug", "safe in breastfeeding", "הנקה", "מניקה", "תרופה"],
+        "priority": 2,
+    },
+    {
+        "title": "FDA Pregnancy and Lactation Labeling",
+        "url": "https://www.fda.gov/drugs/labeling-information-drug-products/pregnancy-and-lactation-labeling-drugs-final-rule",
+        "source_type": "drug safety reference",
+        "keywords": ["pregnancy medication", "lactation", "drug safety", "teratogenic", "תרופה", "בטוח בהריון", "בטוח בהנקה"],
+        "priority": 1,
+    },
+    {
+        "title": "DailyMed Drug Labeling",
+        "url": "https://dailymed.nlm.nih.gov/dailymed/",
+        "source_type": "drug safety reference",
+        "keywords": ["drug label", "dose", "dosing", "interaction", "medication", "מינון", "אינטראקציה", "תרופה"],
+        "priority": 1,
     },
     {
         "title": "USPSTF: Cervical Cancer Screening",
@@ -256,10 +278,20 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
     normalized_message = _normalize_text(user_message)
     scored = []
     israel_relevant = is_israel_relevant(user_message, user_profile=user_profile)
+    stages = build_search_stages(user_message, user_profile=user_profile)
+    stage_rank = {}
+    for index, stage in enumerate(stages):
+        for domain in stage["domains"]:
+            stage_rank[domain] = index
+    question_route = infer_question_route(user_message)
 
     for source in EXTERNAL_SOURCE_CATALOG:
         overlap = sum(1 for keyword in source["keywords"] if keyword in normalized_message)
         if not overlap:
+            continue
+
+        domain = get_source_domain(source["url"])
+        if domain not in stage_rank:
             continue
 
         score = overlap * 10
@@ -270,12 +302,30 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
         elif source.get("regions"):
             score -= 5
 
-        scored.append((score, source))
+        tier = get_domain_tier(domain)
+        if tier == "tier1":
+            score += 20
+        elif tier == "tier2":
+            score += 10
+        elif tier == "tier3":
+            score += 24 if question_route == "drug_safety" else 4
+        elif tier == "tier4":
+            score -= 4
+
+        score += max(0, 40 - (stage_rank[domain] * 10))
+
+        scored.append((score, source, domain))
 
     scored.sort(key=lambda item: item[0], reverse=True)
 
     selected = []
-    for _, source in scored[:limit]:
+    best_stage_rank = None
+    for _, source, domain in scored:
+        current_stage_rank = stage_rank.get(domain, 999)
+        if best_stage_rank is None:
+            best_stage_rank = current_stage_rank
+        if best_stage_rank is not None and current_stage_rank > best_stage_rank and selected:
+            break
         selected.append(
             {
                 "title": source["title"],
@@ -283,6 +333,8 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
                 "source_type": source["source_type"],
             }
         )
+        if len(selected) >= limit:
+            break
 
     if include_live:
         selected = get_live_trusted_sources(user_message, user_profile=user_profile, limit=limit) + selected
