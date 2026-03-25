@@ -1035,6 +1035,11 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             (existing_doc or {}).get("provider_event_id"),
             target_event.get("calendar_type", "personal"),
             preferred_calendar_id=selected_calendar_id or target_event.get("provider_calendar_id"),
+            event_doc={
+                "title": (existing_doc or {}).get("title", target_event.get("title")),
+                "start_at": (existing_doc or {}).get("start_at"),
+                "end_at": (existing_doc or {}).get("end_at"),
+            },
         )
 
         scheduling_drafts_collection.update_one(

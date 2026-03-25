@@ -291,7 +291,46 @@ def _post_event(session_id, event_payload, calendar_type, preferred_calendar_id=
         timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
-    return response.json()
+    return response.json(), calendar_id
+
+
+def _find_matching_google_event_id(session_id, calendar_id, title, start_at, end_at):
+    connection = _get_connection(session_id)
+    if not connection or not calendar_id:
+        return None
+
+    response = requests.get(
+        GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
+        headers=_auth_headers(connection["access_token"]),
+        params={
+            "timeMin": (start_at - timedelta(hours=2)).isoformat() + "Z",
+            "timeMax": (end_at + timedelta(hours=2)).isoformat() + "Z",
+            "singleEvents": "true",
+            "orderBy": "startTime",
+        },
+        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    items = response.json().get("items", [])
+    normalized_title = (title or "").strip().lower()
+    target_start = start_at.replace(second=0, microsecond=0)
+    target_end = end_at.replace(second=0, microsecond=0)
+
+    for item in items:
+        item_title = (item.get("summary") or "").strip().lower()
+        item_start_raw = item.get("start", {}).get("dateTime")
+        item_end_raw = item.get("end", {}).get("dateTime")
+        if not item_start_raw or not item_end_raw:
+            continue
+        try:
+            item_start = datetime.fromisoformat(item_start_raw.replace("Z", "+00:00")).replace(tzinfo=None, second=0, microsecond=0)
+            item_end = datetime.fromisoformat(item_end_raw.replace("Z", "+00:00")).replace(tzinfo=None, second=0, microsecond=0)
+        except ValueError:
+            continue
+
+        if item_title == normalized_title and item_start == target_start and item_end == target_end:
+            return item.get("id")
+    return None
 
 
 def sync_google_create_event(session_id, event_doc, preferred_calendar_id=None):
@@ -304,10 +343,15 @@ def sync_google_create_event(session_id, event_doc, preferred_calendar_id=None):
             "end": {"dateTime": event_doc["end_at"].isoformat(), "timeZone": APP_TIMEZONE},
             "reminders": {"useDefault": True},
         }
-        created = _post_event(session_id, payload, event_doc["calendar_type"], preferred_calendar_id=preferred_calendar_id)
+        created, calendar_id = _post_event(
+            session_id,
+            payload,
+            event_doc["calendar_type"],
+            preferred_calendar_id=preferred_calendar_id,
+        )
         if not created:
             return {"status": "skipped"}
-        return {"status": "synced", "provider_event_id": created.get("id"), "provider_calendar_id": created.get("organizer", {}).get("email")}
+        return {"status": "synced", "provider_event_id": created.get("id"), "provider_calendar_id": calendar_id}
     except Exception as exc:
         response_body = ""
         if getattr(exc, "response", None) is not None:
@@ -365,16 +409,26 @@ def sync_google_update_event(session_id, provider_event_id, event_doc, preferred
         return {"status": "failed"}
 
 
-def sync_google_delete_event(session_id, provider_event_id, calendar_type, preferred_calendar_id=None):
+def sync_google_delete_event(session_id, provider_event_id, calendar_type, preferred_calendar_id=None, event_doc=None):
     connection = _get_connection(session_id)
     calendar_id = _get_selected_google_calendar_id(
         session_id,
         calendar_type,
         preferred_calendar_id=preferred_calendar_id,
     )
-    if not connection or not calendar_id or not provider_event_id:
+    if not connection or not calendar_id:
         return {"status": "skipped"}
     try:
+        if not provider_event_id and event_doc:
+            provider_event_id = _find_matching_google_event_id(
+                session_id,
+                calendar_id,
+                event_doc.get("title"),
+                event_doc.get("start_at"),
+                event_doc.get("end_at"),
+            )
+        if not provider_event_id:
+            return {"status": "skipped"}
         response = requests.delete(
             f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
             headers=_auth_headers(connection["access_token"]),
