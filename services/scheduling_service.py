@@ -70,8 +70,8 @@ MONTHS = {
     "נובמבר": 11,
     "דצמבר": 12,
 }
-DELETE_KEYWORDS = ("delete", "remove", "cancel", "drop")
-UPDATE_KEYWORDS = ("move", "reschedule", "change", "update", "push")
+DELETE_KEYWORDS = ("delete", "remove", "cancel", "drop", "תמחק", "תמחקי", "למחוק", "תבטל", "תבטלי", "לבטל", "הסר", "תסיר")
+UPDATE_KEYWORDS = ("move", "reschedule", "change", "update", "push", "תעדכן", "תעדכני", "לשנות", "תזיז", "תזיזי", "דחה")
 SUMMARY_KEYWORDS = (
     "daily summary",
     "summary for today",
@@ -221,6 +221,12 @@ def _infer_default_location(text):
     if _is_shift_template(text):
         return DEFAULT_SHIFT_LOCATION
     return None
+
+
+def _normalize_event_title(text):
+    if _is_shift_template(text):
+        return "תורנות"
+    return _clean_title(text)
 
 
 def _extract_time(text):
@@ -419,7 +425,7 @@ def _build_bulk_events_from_message(message):
     if len(candidate_dates) < 2:
         return None
 
-    title = _clean_title(normalized)
+    title = _normalize_event_title(normalized)
     events = []
     for event_date in candidate_dates:
         if is_shift_template:
@@ -474,7 +480,7 @@ def _build_event_from_message(message):
 
     return {
         "status": "ready",
-        "title": _clean_title(normalized),
+        "title": _normalize_event_title(normalized),
         "calendar_type": calendar_type,
         "reminders": reminders,
         "location": _infer_default_location(normalized),
@@ -516,6 +522,40 @@ def _find_target_event(session_id, message):
     if not best_match or best_score <= 0:
         return None
     return best_match
+
+
+def _is_bulk_shift_delete_request(message):
+    normalized = _normalize_text(message)
+    lowered = normalized.lower()
+    return _detect_action(normalized) == "delete" and _is_shift_template(normalized) and (
+        "all" in lowered or "כל" in normalized
+    )
+
+
+def _find_bulk_target_events(session_id, message):
+    month, year = _extract_month_year(message)
+    if not month or not year:
+        return []
+
+    start_of_month = datetime(year, month, 1)
+    end_of_month = datetime(year, month, monthrange(year, month)[1], 23, 59, 59)
+    candidates = list(
+        scheduled_events_collection.find(
+            {
+                "session_id": session_id,
+                "status": "confirmed",
+                "start_at": {"$gte": start_of_month, "$lte": end_of_month},
+            }
+        ).sort("start_at", 1)
+    )
+    targets = []
+    for candidate in candidates:
+        title = (candidate.get("title") or "").strip()
+        location = (candidate.get("location") or "").strip()
+        duration_hours = (candidate.get("end_at") - candidate.get("start_at")).total_seconds() / 3600
+        if title == "תורנות" or location == DEFAULT_SHIFT_LOCATION or abs(duration_hours - DEFAULT_SHIFT_DURATION_HOURS) < 0.1:
+            targets.append(candidate)
+    return targets
 
 
 def _build_update_from_message(message, existing_event):
@@ -600,7 +640,7 @@ def _find_bulk_conflicts(session_id, events):
     return all_conflicts
 
 
-def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflicts=None, target_event=None):
+def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflicts=None, target_event=None, target_events=None):
     now = _utcnow()
     draft_id = str(uuid4())
     doc = {
@@ -611,6 +651,7 @@ def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflic
         "parsed_event": parsed_event,
         "conflicts": conflicts or [],
         "target_event": target_event,
+        "target_events": target_events or [],
         "status": "pending",
         "created_at": now,
         "updated_at": now,
@@ -665,6 +706,14 @@ def _format_bulk_reply(events, conflicts):
         f"I drafted {len(events)} events in your {events[0]['calendar_type']} calendar, "
         f"from {first_label} through {last_label}. Review them before I create them."
     )
+
+
+def _format_bulk_delete_reply(events):
+    if not events:
+        return "I couldn't find any matching events to delete."
+    first_label = events[0]["start_at"].strftime("%a %d %b at %H:%M")
+    last_label = events[-1]["start_at"].strftime("%a %d %b at %H:%M")
+    return f"I found {len(events)} events to delete, from {first_label} through {last_label}. Review them before I delete them."
 
 
 def _sync_status_suffix(sync_status, *, plural=False):
@@ -786,6 +835,38 @@ def build_scheduling_welcome():
 def handle_scheduling_message(session_id, user_message):
     if _is_daily_summary_request(user_message):
         return _build_daily_summary(session_id)
+
+    if _is_bulk_shift_delete_request(user_message):
+        target_events = _find_bulk_target_events(session_id, user_message)
+        if not target_events:
+            return {
+                "reply": "I couldn't find any scheduled on-call shifts for that month yet.",
+                "scheduling_draft": None,
+            }
+        serialized_targets = [_serialize_existing_event(item) for item in target_events]
+        draft_id = _save_draft(
+            session_id,
+            user_message,
+            action_type="bulk_delete",
+            target_events=serialized_targets,
+        )
+        return {
+            "reply": _format_bulk_delete_reply(target_events),
+            "scheduling_draft": {
+                "draft_id": draft_id,
+                "action_type": "bulk_delete",
+                "title": "תורנות",
+                "calendar_type": target_events[0].get("calendar_type", "work").title(),
+                "start_at": target_events[0]["start_at"].strftime("%a, %d %b %Y · %H:%M"),
+                "end_at": target_events[-1]["start_at"].strftime("%a, %d %b %Y · %H:%M"),
+                "reminders": [],
+                "location": target_events[0].get("location"),
+                "conflicts": [],
+                "status": "needs_review",
+                "event_count": len(target_events),
+                "target_summary": f"{len(target_events)} shift events",
+            },
+        }
 
     action_type = _detect_action(user_message)
     if action_type in {"update", "delete"}:
@@ -1047,6 +1128,68 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             reply += f" {synced_count} synced to Google Calendar, {skipped_count} stayed local only."
         return {"status": "confirmed", "reply": reply}
 
+    if action_type == "bulk_delete":
+        target_events = draft.get("target_events", [])
+        if not target_events:
+            return {"status": "missing", "reply": "I couldn't find those drafted events anymore."}
+
+        google_connected = has_google_calendar_connection(session_id)
+        deleted_count = 0
+        synced_count = 0
+        for target in target_events:
+            target_filter = {
+                "_id": ObjectId(target["event_id"]),
+                "session_id": session_id,
+                "status": "confirmed",
+            }
+            existing_doc = scheduled_events_collection.find_one(target_filter)
+            if not existing_doc:
+                continue
+
+            sync_result = sync_google_delete_event(
+                session_id,
+                existing_doc.get("provider_event_id"),
+                target.get("calendar_type", "personal"),
+                preferred_calendar_id=target.get("provider_calendar_id"),
+                provider_calendar_id=target.get("provider_calendar_id"),
+                event_doc={
+                    "title": existing_doc.get("title", target.get("title")),
+                    "start_at": existing_doc.get("start_at"),
+                    "end_at": existing_doc.get("end_at"),
+                },
+            )
+            if google_connected and sync_result.get("status") != "synced":
+                continue
+
+            result = scheduled_events_collection.update_one(
+                target_filter,
+                {"$set": {"status": "deleted", "updated_at": now}},
+            )
+            if result.modified_count:
+                deleted_count += 1
+                if sync_result.get("status") == "synced":
+                    synced_count += 1
+
+        if deleted_count == 0:
+            return {
+                "status": "blocked",
+                "reply": "I couldn't remove those events from Google Calendar, so I left them unchanged.",
+            }
+
+        scheduling_drafts_collection.update_one(
+            {"draft_id": draft_id, "session_id": session_id},
+            {"$set": {"status": "confirmed", "updated_at": now}},
+        )
+        reply = f"Deleted {deleted_count} events."
+        if google_connected:
+            if synced_count == deleted_count:
+                reply += " Removed from Google Calendar."
+            else:
+                reply += f" Removed {synced_count} from Google Calendar."
+        else:
+            reply += " Removed locally only."
+        return {"status": "confirmed", "reply": reply}
+
     target_event = draft.get("target_event")
     if not target_event or not target_event.get("event_id"):
         return {"status": "missing", "reply": "I couldn't find that draft target anymore."}
@@ -1116,6 +1259,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             (existing_doc or {}).get("provider_event_id"),
             target_event.get("calendar_type", "personal"),
             preferred_calendar_id=selected_calendar_id or target_event.get("provider_calendar_id"),
+            provider_calendar_id=target_event.get("provider_calendar_id"),
             event_doc={
                 "title": (existing_doc or {}).get("title", target_event.get("title")),
                 "start_at": (existing_doc or {}).get("start_at"),

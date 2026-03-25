@@ -330,6 +330,11 @@ def _get_selected_google_calendar_id(session_id, calendar_type, preferred_calend
     return None
 
 
+def _get_all_google_calendar_ids(session_id):
+    calendars = get_google_calendars(session_id)
+    return [calendar.get("provider_calendar_id") for calendar in calendars if calendar.get("provider_calendar_id")]
+
+
 def _post_event(session_id, event_payload, calendar_type, preferred_calendar_id=None):
     connection = _get_connection(session_id)
     if not connection:
@@ -402,6 +407,79 @@ def _find_matching_google_event_id(session_id, calendar_id, title, start_at, end
         if item_title == normalized_title and item_start == target_start and item_end == target_end:
             return item.get("id")
     return None
+
+
+def _find_matching_google_event(session_id, title, start_at, end_at, preferred_calendar_id=None, calendar_type=None):
+    candidate_calendar_ids = []
+    if preferred_calendar_id:
+        candidate_calendar_ids.append(preferred_calendar_id)
+    fallback_calendar_id = _get_selected_google_calendar_id(
+        session_id,
+        calendar_type or "personal",
+        preferred_calendar_id=preferred_calendar_id,
+    )
+    if fallback_calendar_id and fallback_calendar_id not in candidate_calendar_ids:
+        candidate_calendar_ids.append(fallback_calendar_id)
+    for calendar_id in _get_all_google_calendar_ids(session_id):
+        if calendar_id not in candidate_calendar_ids:
+            candidate_calendar_ids.append(calendar_id)
+
+    for calendar_id in candidate_calendar_ids:
+        provider_event_id = _find_matching_google_event_id(session_id, calendar_id, title, start_at, end_at)
+        if provider_event_id:
+            return {"provider_event_id": provider_event_id, "provider_calendar_id": calendar_id}
+    return None
+
+
+def _google_event_is_gone(session_id, calendar_id, provider_event_id):
+    connection = _get_connection(session_id)
+    if not connection or not calendar_id or not provider_event_id:
+        return False
+
+    response = requests.get(
+        f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+        headers=_auth_headers(connection["access_token"]),
+        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+    )
+    if response.status_code == 404:
+        return True
+    if response.status_code == 401:
+        refreshed_access_token = _refresh_google_access_token(session_id, connection)
+        if refreshed_access_token:
+            response = requests.get(
+                f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+                headers=_auth_headers(refreshed_access_token),
+                timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+            )
+            if response.status_code == 404:
+                return True
+    if response.status_code != 200:
+        response.raise_for_status()
+    payload = response.json()
+    return payload.get("status") == "cancelled"
+
+
+def _delete_google_event_by_id(session_id, calendar_id, provider_event_id):
+    connection = _get_connection(session_id)
+    if not connection or not calendar_id or not provider_event_id:
+        return False
+
+    response = requests.delete(
+        f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+        headers=_auth_headers(connection["access_token"]),
+        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+    )
+    if response.status_code == 401:
+        refreshed_access_token = _refresh_google_access_token(session_id, connection)
+        if refreshed_access_token:
+            response = requests.delete(
+                f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+                headers=_auth_headers(refreshed_access_token),
+                timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+            )
+    if response.status_code not in (200, 204):
+        response.raise_for_status()
+    return _google_event_is_gone(session_id, calendar_id, provider_event_id)
 
 
 def sync_google_create_event(session_id, event_doc, preferred_calendar_id=None):
@@ -506,42 +584,70 @@ def sync_google_update_event(session_id, provider_event_id, event_doc, preferred
         return {"status": "failed"}
 
 
-def sync_google_delete_event(session_id, provider_event_id, calendar_type, preferred_calendar_id=None, event_doc=None):
+def sync_google_delete_event(
+    session_id,
+    provider_event_id,
+    calendar_type,
+    preferred_calendar_id=None,
+    event_doc=None,
+    provider_calendar_id=None,
+):
     connection = _get_connection(session_id)
-    calendar_id = _get_selected_google_calendar_id(
-        session_id,
-        calendar_type,
-        preferred_calendar_id=preferred_calendar_id,
-    )
-    if not connection or not calendar_id:
+    if not connection:
         return {"status": "skipped"}
     try:
-        if not provider_event_id and event_doc:
-            provider_event_id = _find_matching_google_event_id(
+        candidate_pairs = []
+        if provider_event_id and provider_calendar_id:
+            candidate_pairs.append((provider_calendar_id, provider_event_id))
+
+        if event_doc:
+            matched_event = _find_matching_google_event(
                 session_id,
-                calendar_id,
                 event_doc.get("title"),
                 event_doc.get("start_at"),
                 event_doc.get("end_at"),
+                preferred_calendar_id=provider_calendar_id or preferred_calendar_id,
+                calendar_type=calendar_type,
             )
-        if not provider_event_id:
+            if matched_event:
+                candidate = (matched_event.get("provider_calendar_id"), matched_event.get("provider_event_id"))
+                if candidate not in candidate_pairs:
+                    candidate_pairs.append(candidate)
+
+        if provider_event_id and not provider_calendar_id:
+            selected_calendar_id = _get_selected_google_calendar_id(
+                session_id,
+                calendar_type,
+                preferred_calendar_id=preferred_calendar_id,
+            )
+            if selected_calendar_id:
+                candidate = (selected_calendar_id, provider_event_id)
+                if candidate not in candidate_pairs:
+                    candidate_pairs.append(candidate)
+            for calendar_id in _get_all_google_calendar_ids(session_id):
+                candidate = (calendar_id, provider_event_id)
+                if candidate not in candidate_pairs:
+                    candidate_pairs.append(candidate)
+
+        if not candidate_pairs:
             return {"status": "skipped"}
-        response = requests.delete(
-            f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
-            headers=_auth_headers(connection["access_token"]),
-            timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
-        )
-        if response.status_code == 401:
-            refreshed_access_token = _refresh_google_access_token(session_id, connection)
-            if refreshed_access_token:
-                response = requests.delete(
-                    f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
-                    headers=_auth_headers(refreshed_access_token),
-                    timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
-                )
-        if response.status_code not in (200, 204):
-            response.raise_for_status()
-        return {"status": "synced"}
+
+        for calendar_id, event_id in candidate_pairs:
+            try:
+                if _delete_google_event_by_id(session_id, calendar_id, event_id):
+                    return {
+                        "status": "synced",
+                        "provider_calendar_id": calendar_id,
+                        "provider_event_id": event_id,
+                        "provider_calendar_name": get_google_calendar_name(session_id, calendar_id),
+                    }
+            except requests.HTTPError as exc:
+                response = getattr(exc, "response", None)
+                if response is not None and response.status_code == 404:
+                    continue
+                raise
+
+        return {"status": "failed"}
     except Exception as exc:
         response_body = ""
         if getattr(exc, "response", None) is not None:

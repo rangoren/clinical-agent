@@ -1330,6 +1330,8 @@
                 ? "Update event"
                 : actionType === "bulk_create"
                 ? "Create events"
+                : actionType === "bulk_delete"
+                ? "Delete events"
                 : "Create event";
 
             const title = document.createElement("p");
@@ -1401,6 +1403,8 @@
                                 ? `Update in ${selectedCalendarName}`
                                 : actionType === "delete"
                                 ? `Delete from ${selectedCalendarName}`
+                                : actionType === "bulk_delete"
+                                ? `Delete from ${selectedCalendarName}`
                                 : `Create in ${selectedCalendarName}`;
                         });
 
@@ -1464,6 +1468,8 @@
                         : actionType === "update"
                         ? `Update in ${selectedCalendarName}`
                         : actionType === "delete"
+                        ? `Delete from ${selectedCalendarName}`
+                        : actionType === "bulk_delete"
                         ? `Delete from ${selectedCalendarName}`
                         : `Create in ${selectedCalendarName}`
                 )
