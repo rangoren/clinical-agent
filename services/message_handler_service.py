@@ -144,14 +144,7 @@ def _fallback_display_sources(sources):
     external_sources = [source for source in sources if str(source.get("source_id", "")).startswith("E")]
     if external_sources:
         return external_sources[:3]
-
-    linked_sources = [
-        source for source in sources if str(source.get("source_id", "")).startswith(("P", "K")) and source.get("url")
-    ]
-    if linked_sources:
-        return linked_sources[:3]
-
-    return sources[:3]
+    return []
 
 
 def _looks_like_basic_clinical_question(user_message):
@@ -528,21 +521,22 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             "basic_clinical_question": basic_clinical_question,
         },
     )
-    reply = generate_reply(
+    raw_reply = generate_reply(
         system_prompt=system_prompt,
         chat_history=chat_history,
         user_message=user_message,
     )
 
+    display_sources = _filter_sources_by_citation(raw_reply, candidate_sources)
+    if intent == "clinical_consult" and not display_sources:
+        display_sources = _fallback_display_sources(candidate_sources)
+
+    reply = raw_reply
     if intent == "clinical_consult":
         if basic_clinical_question:
             reply = format_basic_clinical_response(reply, user_message=user_message)
         else:
             reply = format_response(reply)
-
-    display_sources = _filter_sources_by_citation(reply, candidate_sources)
-    if intent == "clinical_consult" and not display_sources:
-        display_sources = _fallback_display_sources(candidate_sources)
 
     if save_user_message:
         save_message("user", user_message, session_id)
