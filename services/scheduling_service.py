@@ -41,12 +41,32 @@ REMINDER_DEFAULTS = {
 }
 WEEKDAYS = {
     "monday": 0,
+    "mon": 0,
+    "שני": 0,
+    "יום שני": 0,
     "tuesday": 1,
+    "tue": 1,
+    "שלישי": 1,
+    "יום שלישי": 1,
     "wednesday": 2,
+    "wed": 2,
+    "רביעי": 2,
+    "יום רביעי": 2,
     "thursday": 3,
+    "thu": 3,
+    "חמישי": 3,
+    "יום חמישי": 3,
     "friday": 4,
+    "fri": 4,
+    "שישי": 4,
+    "יום שישי": 4,
     "saturday": 5,
+    "sat": 5,
+    "שבת": 5,
     "sunday": 6,
+    "sun": 6,
+    "ראשון": 6,
+    "יום ראשון": 6,
 }
 MONTHS = {
     "january": 1,
@@ -90,7 +110,35 @@ DELETE_KEYWORDS = (
     "הסר",
     "תסיר",
 )
-UPDATE_KEYWORDS = ("move", "reschedule", "change", "update", "push", "תעדכן", "תעדכני", "לשנות", "תזיז", "תזיזי", "דחה")
+UPDATE_KEYWORDS = (
+    "move",
+    "reschedule",
+    "change",
+    "update",
+    "push",
+    "switch",
+    "replace",
+    "delay",
+    "postpone",
+    "advance",
+    "bring forward",
+    "move up",
+    "move back",
+    "תעדכן",
+    "תעדכני",
+    "לשנות",
+    "תזיז",
+    "תזיזי",
+    "שנה",
+    "תשנה",
+    "תשני",
+    "תחליף",
+    "תחליפי",
+    "תדחה",
+    "דחה",
+    "תקדים",
+    "תקדימי",
+)
 SUMMARY_KEYWORDS = (
     "daily summary",
     "summary for today",
@@ -412,7 +460,7 @@ def _extract_time(text):
 
 def _extract_time_range(text):
     match = re.search(
-        r"(?:בשעה|בשעות|בין|מ|at)?\s*(\d{1,2})(?::(\d{2}))?\s*(?:עד|to|ל|-)\s*(\d{1,2})(?::(\d{2}))?",
+        r"(?:בשעה|בשעות|בין|מ|at|from)?\s*(\d{1,2})(?::(\d{2}))?\s*(?:עד|to|ל|-)\s*(\d{1,2})(?::(\d{2}))?",
         text,
         flags=re.IGNORECASE,
     )
@@ -488,7 +536,128 @@ def _extract_date(text):
         except ValueError:
             return None
 
+    month_names_pattern = "|".join(sorted((re.escape(name) for name in MONTHS.keys() if name.isascii()), key=len, reverse=True))
+    month_first_match = re.search(rf"\b({month_names_pattern})\s+(\d{{1,2}})(?:,?\s*(20\d{{2}}))?\b", text, flags=re.IGNORECASE)
+    if month_first_match:
+        month = MONTHS[month_first_match.group(1).lower()]
+        day = int(month_first_match.group(2))
+        year = int(month_first_match.group(3) or now.year)
+        try:
+            return datetime(year, month, day).date()
+        except ValueError:
+            return None
+
+    day_first_named_month_match = re.search(rf"\b(\d{{1,2}})\s+({month_names_pattern})(?:\s+(20\d{{2}}))?\b", text, flags=re.IGNORECASE)
+    if day_first_named_month_match:
+        day = int(day_first_named_month_match.group(1))
+        month = MONTHS[day_first_named_month_match.group(2).lower()]
+        year = int(day_first_named_month_match.group(3) or now.year)
+        try:
+            return datetime(year, month, day).date()
+        except ValueError:
+            return None
+
     return None
+
+
+def _extract_all_dates(text):
+    now = _utcnow()
+    found_dates = []
+
+    for pattern, builder in (
+        (r"\b(20\d{2})-(\d{2})-(\d{2})\b", lambda m: datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).date()),
+        (
+            r"\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b",
+            lambda m: datetime(
+                (int(m.group(3)) + 2000) if m.group(3) and int(m.group(3)) < 100 else int(m.group(3) or now.year),
+                int(m.group(2)),
+                int(m.group(1)),
+            ).date(),
+        ),
+        (
+            r"\b(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?\b",
+            lambda m: datetime(
+                (int(m.group(3)) + 2000) if m.group(3) and int(m.group(3)) < 100 else int(m.group(3) or now.year),
+                int(m.group(2)),
+                int(m.group(1)),
+            ).date(),
+        ),
+        (
+            r"\b(\d{1,2})-(\d{1,2})(?:-(\d{2,4}))?\b",
+            lambda m: datetime(
+                (int(m.group(3)) + 2000) if m.group(3) and int(m.group(3)) < 100 else int(m.group(3) or now.year),
+                int(m.group(2)),
+                int(m.group(1)),
+            ).date(),
+        ),
+    ):
+        for match in re.finditer(pattern, text):
+            try:
+                found_dates.append((match.start(), builder(match)))
+            except ValueError:
+                continue
+
+    month_names_pattern = "|".join(sorted((re.escape(name) for name in MONTHS.keys() if name.isascii()), key=len, reverse=True))
+    for match in re.finditer(rf"\b({month_names_pattern})\s+(\d{{1,2}})(?:,?\s*(20\d{{2}}))?\b", text, flags=re.IGNORECASE):
+        try:
+            found_dates.append(
+                (
+                    match.start(),
+                    datetime(int(match.group(3) or now.year), MONTHS[match.group(1).lower()], int(match.group(2))).date(),
+                )
+            )
+        except ValueError:
+            continue
+    for match in re.finditer(rf"\b(\d{{1,2}})\s+({month_names_pattern})(?:\s+(20\d{{2}}))?\b", text, flags=re.IGNORECASE):
+        try:
+            found_dates.append(
+                (
+                    match.start(),
+                    datetime(int(match.group(3) or now.year), MONTHS[match.group(2).lower()], int(match.group(1))).date(),
+                )
+            )
+        except ValueError:
+            continue
+
+    return [value for _, value in sorted(found_dates, key=lambda item: item[0])]
+
+
+def _extract_weekday_mentions(text):
+    lowered = text.lower()
+    mentions = []
+    for weekday_name, weekday_index in WEEKDAYS.items():
+        for match in re.finditer(rf"(?<!\w){re.escape(weekday_name.lower())}(?!\w)", lowered):
+            mentions.append((match.start(), weekday_index))
+    return [value for _, value in sorted(mentions, key=lambda item: item[0])]
+
+
+def _extract_update_target_date(text):
+    explicit_dates = _extract_all_dates(text)
+    if len(explicit_dates) >= 2:
+        return explicit_dates[-1]
+
+    weekday_mentions = _extract_weekday_mentions(text)
+    if len(weekday_mentions) >= 2:
+        return _next_weekday(_utcnow(), weekday_mentions[-1]).date()
+    if len(weekday_mentions) == 1:
+        return _next_weekday(_utcnow(), weekday_mentions[0]).date()
+    return _extract_date(text)
+
+
+def _extract_update_target_time(text):
+    replacement_match = re.search(
+        r"(?:מ(?:שעה)?|from)\s*(\d{1,2}(?::\d{2})?)\s*(?:ל(?:שעה)?|to)\s*(\d{1,2}(?::\d{2})?)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if replacement_match:
+        target = replacement_match.group(2)
+        return _extract_time(target)
+
+    time_range = _extract_time_range(text)
+    if time_range:
+        return time_range[1]
+    return _extract_time(text)
 
 
 def _extract_date_phrase(text):
@@ -518,6 +687,15 @@ def _extract_date_phrase(text):
     dashed_match = re.search(r"\b\d{1,2}-\d{1,2}(?:-\d{2,4})?\b", text)
     if dashed_match:
         return dashed_match.group(0)
+
+    month_names_pattern = "|".join(sorted((re.escape(name) for name in MONTHS.keys() if name.isascii()), key=len, reverse=True))
+    month_first_match = re.search(rf"\b(?:{month_names_pattern})\s+\d{{1,2}}(?:,?\s*20\d{{2}})?\b", text, flags=re.IGNORECASE)
+    if month_first_match:
+        return month_first_match.group(0)
+
+    day_first_named_month_match = re.search(rf"\b\d{{1,2}}\s+(?:{month_names_pattern})(?:\s+20\d{{2}})?\b", text, flags=re.IGNORECASE)
+    if day_first_named_month_match:
+        return day_first_named_month_match.group(0)
 
     return None
 
@@ -813,8 +991,8 @@ def _build_update_from_message(message, existing_event):
     normalized = _normalize_text(message)
     existing_start = existing_event["start_at"]
     existing_end = existing_event["end_at"]
-    requested_date = _extract_date(normalized)
-    requested_time = _extract_time(normalized)
+    requested_date = _extract_update_target_date(normalized)
+    requested_time = _extract_update_target_time(normalized)
 
     start_at = existing_start
     if requested_date:
