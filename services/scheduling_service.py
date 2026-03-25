@@ -702,10 +702,10 @@ def _format_draft_reply(parsed_event, conflicts):
     start_label = parsed_event["start_at"].strftime("%a %d %b at %H:%M")
     if conflicts:
         return (
-            f"I drafted this in your {parsed_event['calendar_type']} calendar for {start_label}. "
+            f"I drafted this for {start_label}. "
             f"I also found {len(conflicts)} conflict{'s' if len(conflicts) != 1 else ''}. Review before creating."
         )
-    return f"I drafted this in your {parsed_event['calendar_type']} calendar for {start_label}. Review it before I create it."
+    return f"I drafted this for {start_label}. Review it before I create it."
 
 
 def _format_update_reply(existing_event, updated_event, conflicts):
@@ -728,12 +728,12 @@ def _format_bulk_reply(events, conflicts):
     last_label = events[-1]["start_at"].strftime("%a %d %b at %H:%M")
     if conflicts:
         return (
-            f"I drafted {len(events)} events in your {events[0]['calendar_type']} calendar, "
+            f"I drafted {len(events)} events, "
             f"from {first_label} through {last_label}. I also found {len(conflicts)} conflict"
             f"{'s' if len(conflicts) != 1 else ''}. Review before creating."
         )
     return (
-        f"I drafted {len(events)} events in your {events[0]['calendar_type']} calendar, "
+        f"I drafted {len(events)} events, "
         f"from {first_label} through {last_label}. Review them before I create them."
     )
 

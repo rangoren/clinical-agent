@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import re
 from uuid import uuid4
 from urllib.parse import urlencode
 
@@ -393,11 +394,28 @@ def _find_matching_google_events(session_id, calendar_id, title, start_at, end_a
         },
         timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
     )
+    if response.status_code == 401:
+        refreshed_access_token = _refresh_google_access_token(session_id, connection)
+        if refreshed_access_token:
+            response = requests.get(
+                GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
+                headers=_auth_headers(refreshed_access_token),
+                params={
+                    "timeMin": (start_at - timedelta(hours=2)).isoformat() + "Z",
+                    "timeMax": (end_at + timedelta(hours=2)).isoformat() + "Z",
+                    "singleEvents": "true",
+                    "orderBy": "startTime",
+                },
+                timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+            )
     response.raise_for_status()
     items = response.json().get("items", [])
     normalized_title = (title or "").strip().lower()
     target_start = start_at.replace(second=0, microsecond=0)
     target_end = end_at.replace(second=0, microsecond=0)
+    target_tokens = {token for token in re.findall(r"[a-zA-Z0-9\u0590-\u05FF]+", normalized_title) if token}
+    exact_matches = []
+    fuzzy_matches = []
     matches = []
 
     for item in items:
@@ -412,8 +430,20 @@ def _find_matching_google_events(session_id, calendar_id, title, start_at, end_a
         except ValueError:
             continue
 
-        if item_title == normalized_title and item_start == target_start and item_end == target_end:
-            matches.append(item)
+        if item_start != target_start or item_end != target_end:
+            continue
+
+        item_tokens = {token for token in re.findall(r"[a-zA-Z0-9\u0590-\u05FF]+", item_title) if token}
+        if item_title == normalized_title:
+            exact_matches.append(item)
+            continue
+
+        overlap = len(target_tokens & item_tokens)
+        if overlap >= max(1, min(2, len(target_tokens))):
+            fuzzy_matches.append(item)
+
+    matches.extend(exact_matches)
+    matches.extend(fuzzy_matches)
     return matches
 
 
