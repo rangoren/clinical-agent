@@ -1327,13 +1327,7 @@ def _build_daily_summary(session_id):
 
 
 def build_scheduling_welcome():
-    return (
-        "Scheduling is on.<br><br>"
-        "Try something like:<br>"
-        "- Add dinner with Maya tomorrow at 19:30<br>"
-        "- Schedule school pickup next Tuesday at 16:00<br>"
-        "- Add clinic meeting next Monday at 08:00"
-    )
+    return ""
 
 
 def handle_scheduling_message(session_id, user_message):
