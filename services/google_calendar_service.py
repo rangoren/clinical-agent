@@ -29,6 +29,41 @@ def _auth_headers(access_token):
     return {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
 
 
+def _refresh_google_access_token(session_id, connection):
+    refresh_token = (connection or {}).get("refresh_token")
+    if not refresh_token:
+        return None
+
+    response = requests.post(
+        GOOGLE_TOKEN_URL,
+        data={
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        },
+        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    token_payload = response.json()
+    new_access_token = token_payload.get("access_token")
+    if not new_access_token:
+        return None
+
+    expires_at = _utcnow() + timedelta(seconds=int(token_payload.get("expires_in", 3600)))
+    calendar_connections_collection.update_one(
+        {"session_id": session_id, "provider": "google"},
+        {
+            "$set": {
+                "access_token": new_access_token,
+                "expires_at": expires_at,
+                "updated_at": _utcnow(),
+            }
+        },
+    )
+    return new_access_token
+
+
 def _guess_calendar_type(name):
     lowered = (name or "").lower()
     if any(token in lowered for token in ("work", "clinic", "hospital", "call", "shift")):
@@ -281,15 +316,28 @@ def _post_event(session_id, event_payload, calendar_type, preferred_calendar_id=
     if not calendar_id:
         return None
 
+    headers = {
+        **_auth_headers(connection["access_token"]),
+        "Content-Type": "application/json",
+    }
     response = requests.post(
         GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
-        headers={
-            **_auth_headers(connection["access_token"]),
-            "Content-Type": "application/json",
-        },
+        headers=headers,
         json=event_payload,
         timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
     )
+    if response.status_code == 401:
+        refreshed_access_token = _refresh_google_access_token(session_id, connection)
+        if refreshed_access_token:
+            response = requests.post(
+                GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
+                headers={
+                    **_auth_headers(refreshed_access_token),
+                    "Content-Type": "application/json",
+                },
+                json=event_payload,
+                timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+            )
     response.raise_for_status()
     return response.json(), calendar_id
 
@@ -379,12 +427,13 @@ def sync_google_update_event(session_id, provider_event_id, event_doc, preferred
     if not connection or not calendar_id or not provider_event_id:
         return {"status": "skipped"}
     try:
+        headers = {
+            **_auth_headers(connection["access_token"]),
+            "Content-Type": "application/json",
+        }
         response = requests.patch(
             f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
-            headers={
-                **_auth_headers(connection["access_token"]),
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             json={
                 "summary": event_doc["title"],
                 "start": {"dateTime": event_doc["start_at"].isoformat(), "timeZone": APP_TIMEZONE},
@@ -393,6 +442,23 @@ def sync_google_update_event(session_id, provider_event_id, event_doc, preferred
             },
             timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
         )
+        if response.status_code == 401:
+            refreshed_access_token = _refresh_google_access_token(session_id, connection)
+            if refreshed_access_token:
+                response = requests.patch(
+                    f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+                    headers={
+                        **_auth_headers(refreshed_access_token),
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "summary": event_doc["title"],
+                        "start": {"dateTime": event_doc["start_at"].isoformat(), "timeZone": APP_TIMEZONE},
+                        "end": {"dateTime": event_doc["end_at"].isoformat(), "timeZone": APP_TIMEZONE},
+                        "location": event_doc.get("location"),
+                    },
+                    timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+                )
         response.raise_for_status()
         return {"status": "synced"}
     except Exception as exc:
@@ -436,6 +502,14 @@ def sync_google_delete_event(session_id, provider_event_id, calendar_type, prefe
             headers=_auth_headers(connection["access_token"]),
             timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
         )
+        if response.status_code == 401:
+            refreshed_access_token = _refresh_google_access_token(session_id, connection)
+            if refreshed_access_token:
+                response = requests.delete(
+                    f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+                    headers=_auth_headers(refreshed_access_token),
+                    timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+                )
         if response.status_code not in (200, 204):
             response.raise_for_status()
         return {"status": "synced"}
