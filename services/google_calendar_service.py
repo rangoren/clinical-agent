@@ -574,8 +574,9 @@ def _delete_google_event_by_id(session_id, calendar_id, provider_event_id):
     if not connection or not calendar_id or not provider_event_id:
         return False
 
+    event_url = f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}"
     response = requests.delete(
-        f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+        event_url,
         headers=_auth_headers(connection["access_token"]),
         timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
     )
@@ -583,12 +584,36 @@ def _delete_google_event_by_id(session_id, calendar_id, provider_event_id):
         refreshed_access_token = _refresh_google_access_token(session_id, connection)
         if refreshed_access_token:
             response = requests.delete(
-                f"{GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id)}/{provider_event_id}",
+                event_url,
                 headers=_auth_headers(refreshed_access_token),
                 timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
             )
-    if response.status_code not in (200, 204):
-        response.raise_for_status()
+    if response.status_code not in (200, 204, 404):
+        patch_response = requests.patch(
+            event_url,
+            headers={
+                **_auth_headers(connection["access_token"]),
+                "Content-Type": "application/json",
+            },
+            json={"status": "cancelled"},
+            timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+        )
+        if patch_response.status_code == 401:
+            refreshed_access_token = _refresh_google_access_token(session_id, connection)
+            if refreshed_access_token:
+                patch_response = requests.patch(
+                    event_url,
+                    headers={
+                        **_auth_headers(refreshed_access_token),
+                        "Content-Type": "application/json",
+                    },
+                    json={"status": "cancelled"},
+                    timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+                )
+        if patch_response.status_code not in (200, 204, 404):
+            patch_response.raise_for_status()
+    elif response.status_code == 404:
+        return True
     return _google_event_is_gone(session_id, calendar_id, provider_event_id)
 
 
@@ -756,6 +781,17 @@ def sync_google_delete_event(
 
         if not candidate_pairs:
             return {"status": "skipped"}
+
+        log_event(
+            "google_calendar_delete_candidates",
+            session_id=session_id,
+            payload={
+                "provider_event_id": provider_event_id,
+                "provider_calendar_id": provider_calendar_id,
+                "candidate_pairs": candidate_pairs,
+                "title": (event_doc or {}).get("title"),
+            },
+        )
 
         deleted_any = False
         deleted_pairs = []
