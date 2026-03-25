@@ -371,9 +371,16 @@ def _post_event(session_id, event_payload, calendar_type, preferred_calendar_id=
 
 
 def _find_matching_google_event_id(session_id, calendar_id, title, start_at, end_at):
+    matches = _find_matching_google_events(session_id, calendar_id, title, start_at, end_at)
+    if not matches:
+        return None
+    return matches[0].get("id")
+
+
+def _find_matching_google_events(session_id, calendar_id, title, start_at, end_at):
     connection = _get_connection(session_id)
     if not connection or not calendar_id:
-        return None
+        return []
 
     response = requests.get(
         GOOGLE_EVENTS_URL_TEMPLATE.format(calendar_id=calendar_id),
@@ -391,6 +398,7 @@ def _find_matching_google_event_id(session_id, calendar_id, title, start_at, end
     normalized_title = (title or "").strip().lower()
     target_start = start_at.replace(second=0, microsecond=0)
     target_end = end_at.replace(second=0, microsecond=0)
+    matches = []
 
     for item in items:
         item_title = (item.get("summary") or "").strip().lower()
@@ -405,8 +413,8 @@ def _find_matching_google_event_id(session_id, calendar_id, title, start_at, end
             continue
 
         if item_title == normalized_title and item_start == target_start and item_end == target_end:
-            return item.get("id")
-    return None
+            matches.append(item)
+    return matches
 
 
 def _find_matching_google_event(session_id, title, start_at, end_at, preferred_calendar_id=None, calendar_type=None):
@@ -429,6 +437,33 @@ def _find_matching_google_event(session_id, title, start_at, end_at, preferred_c
         if provider_event_id:
             return {"provider_event_id": provider_event_id, "provider_calendar_id": calendar_id}
     return None
+
+
+def _find_all_matching_google_event_pairs(session_id, title, start_at, end_at, preferred_calendar_id=None, calendar_type=None):
+    candidate_calendar_ids = []
+    if preferred_calendar_id:
+        candidate_calendar_ids.append(preferred_calendar_id)
+    fallback_calendar_id = _get_selected_google_calendar_id(
+        session_id,
+        calendar_type or "personal",
+        preferred_calendar_id=preferred_calendar_id,
+    )
+    if fallback_calendar_id and fallback_calendar_id not in candidate_calendar_ids:
+        candidate_calendar_ids.append(fallback_calendar_id)
+    for calendar_id in _get_all_google_calendar_ids(session_id):
+        if calendar_id not in candidate_calendar_ids:
+            candidate_calendar_ids.append(calendar_id)
+
+    seen = set()
+    pairs = []
+    for calendar_id in candidate_calendar_ids:
+        for item in _find_matching_google_events(session_id, calendar_id, title, start_at, end_at):
+            event_id = item.get("id")
+            candidate = (calendar_id, event_id)
+            if event_id and candidate not in seen:
+                seen.add(candidate)
+                pairs.append(candidate)
+    return pairs
 
 
 def _google_event_is_gone(session_id, calendar_id, provider_event_id):
@@ -641,7 +676,7 @@ def sync_google_delete_event(
             candidate_pairs.append((provider_calendar_id, provider_event_id))
 
         if event_doc:
-            matched_event = _find_matching_google_event(
+            matched_pairs = _find_all_matching_google_event_pairs(
                 session_id,
                 event_doc.get("title"),
                 event_doc.get("start_at"),
@@ -649,8 +684,7 @@ def sync_google_delete_event(
                 preferred_calendar_id=provider_calendar_id or preferred_calendar_id,
                 calendar_type=calendar_type,
             )
-            if matched_event:
-                candidate = (matched_event.get("provider_calendar_id"), matched_event.get("provider_event_id"))
+            for candidate in matched_pairs:
                 if candidate not in candidate_pairs:
                     candidate_pairs.append(candidate)
 
@@ -672,20 +706,41 @@ def sync_google_delete_event(
         if not candidate_pairs:
             return {"status": "skipped"}
 
+        deleted_any = False
+        deleted_pairs = []
         for calendar_id, event_id in candidate_pairs:
             try:
                 if _delete_google_event_by_id(session_id, calendar_id, event_id):
-                    return {
-                        "status": "synced",
-                        "provider_calendar_id": calendar_id,
-                        "provider_event_id": event_id,
-                        "provider_calendar_name": get_google_calendar_name(session_id, calendar_id),
-                    }
+                    deleted_any = True
+                    deleted_pairs.append((calendar_id, event_id))
             except requests.HTTPError as exc:
                 response = getattr(exc, "response", None)
                 if response is not None and response.status_code == 404:
                     continue
                 raise
+
+        if event_doc:
+            remaining_matches = _find_all_matching_google_event_pairs(
+                session_id,
+                event_doc.get("title"),
+                event_doc.get("start_at"),
+                event_doc.get("end_at"),
+                preferred_calendar_id=provider_calendar_id or preferred_calendar_id,
+                calendar_type=calendar_type,
+            )
+            if remaining_matches:
+                return {"status": "failed"}
+
+        if deleted_any:
+            first_calendar_id = deleted_pairs[0][0]
+            first_event_id = deleted_pairs[0][1]
+            return {
+                "status": "synced",
+                "provider_calendar_id": first_calendar_id,
+                "provider_event_id": first_event_id,
+                "provider_calendar_name": get_google_calendar_name(session_id, first_calendar_id),
+                "deleted_count": len(deleted_pairs),
+            }
 
         return {"status": "failed"}
     except Exception as exc:
