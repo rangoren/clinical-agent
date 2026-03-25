@@ -1178,6 +1178,17 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
                     }
                 },
             )
+            log_event(
+                "scheduling_google_create_confirmed",
+                session_id=session_id,
+                payload={
+                    "title": parsed_event["title"],
+                    "provider_event_id": sync_result.get("provider_event_id"),
+                    "provider_calendar_id": selected_calendar_id or sync_result.get("provider_calendar_id"),
+                    "start_at": parsed_event["start_at"],
+                    "end_at": parsed_event["end_at"],
+                },
+            )
         if selected_calendar_id:
             _save_preferred_google_calendar(session_id, parsed_event["calendar_type"], selected_calendar_id)
         scheduling_drafts_collection.update_one(
@@ -1193,7 +1204,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             reply += f" Synced to Google Calendar"
             if calendar_name:
                 reply += f" ({calendar_name})"
-            reply += "."
+            reply += ". Apple Calendar may take a moment to refresh."
         else:
             reply += _sync_status_suffix(sync_result.get("status"))
         return {
@@ -1242,6 +1253,17 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
                     },
                 )
                 synced_count += 1
+                log_event(
+                    "scheduling_google_bulk_create_confirmed",
+                    session_id=session_id,
+                    payload={
+                        "title": event["title"],
+                        "provider_event_id": sync_result.get("provider_event_id"),
+                        "provider_calendar_id": selected_calendar_id or sync_result.get("provider_calendar_id"),
+                        "start_at": event["start_at"],
+                        "end_at": event["end_at"],
+                    },
+                )
             elif sync_result.get("status") == "failed":
                 failed_count += 1
             else:
@@ -1260,7 +1282,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             reply += " Synced to Google Calendar"
             if calendar_name:
                 reply += f" ({calendar_name})"
-            reply += "."
+            reply += ". Apple Calendar may take a moment to refresh."
         elif failed_count:
             reply += f" {synced_count} synced to Google Calendar, {failed_count} failed, and {skipped_count} stayed local only."
         elif skipped_count:
