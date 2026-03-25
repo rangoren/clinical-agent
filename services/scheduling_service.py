@@ -21,6 +21,13 @@ DEFAULT_SHIFT_START_HOUR = 8
 DEFAULT_SHIFT_START_MINUTE = 0
 DEFAULT_SHIFT_DURATION_HOURS = 25
 DEFAULT_SHIFT_LOCATION = "שיבא"
+KNOWN_LOCATIONS = (
+    "shiba",
+    "sheba",
+    "tel hashomer",
+    "תל השומר",
+    "שיבא",
+)
 CALENDAR_KEYWORDS = {
     "work": ("work", "shift", "clinic", "ward", "call", "hospital", "meeting", "on-call", "on call", "night shift", "night shifts", "call shift", "call shifts", "תורנות", "תורנויות", "כוננות", "משמרת לילה", "תורנית"),
     "kids": ("kids", "child", "children", "school", "kindergarten", "pickup", "dropoff", "pediatrician"),
@@ -220,7 +227,29 @@ def _build_shift_window(event_date):
 def _infer_default_location(text):
     if _is_shift_template(text):
         return DEFAULT_SHIFT_LOCATION
+    return _extract_location(text)
+
+
+def _extract_location(text):
+    normalized = _normalize_text(text)
+    lowered = normalized.lower()
+    for location in KNOWN_LOCATIONS:
+        location_lower = location.lower()
+        if re.search(rf"\bat\s+{re.escape(location_lower)}\b", lowered):
+            return location
+        if re.search(rf"(?<!\w)ב{re.escape(location_lower)}(?!\w)", lowered):
+            return location
+        if location_lower in lowered and lowered.strip().endswith(location_lower):
+            return location
     return None
+
+
+def _strip_location_from_title(text):
+    cleaned = text
+    for location in KNOWN_LOCATIONS:
+        cleaned = re.sub(rf"\bat\s+{re.escape(location)}\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(rf"(?<!\w)ב{re.escape(location)}(?!\w)", "", cleaned, flags=re.IGNORECASE)
+    return cleaned
 
 
 def _normalize_event_title(text):
@@ -339,7 +368,8 @@ def _extract_month_year(text):
 
 
 def _clean_title(text):
-    cleaned = re.sub(r"\b(today|tomorrow|next\s+\w+)\b", "", text, flags=re.IGNORECASE)
+    cleaned = _strip_location_from_title(text)
+    cleaned = re.sub(r"\b(today|tomorrow|next\s+\w+)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bthis month\b|\bnext month\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(" + "|".join(re.escape(key) for key in MONTHS.keys()) + r")\b(?:\s+20\d{2})?", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"[בל](?=(" + "|".join(re.escape(key) for key in MONTHS.keys()) + r"))", "", cleaned, flags=re.IGNORECASE)
