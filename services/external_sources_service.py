@@ -311,6 +311,10 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
             score += 24 if question_route == "drug_safety" else 4
         elif tier == "tier4":
             score -= 4
+        elif tier == "tier45":
+            score -= 8
+        elif tier == "operational":
+            score += 14 if question_route == "local_operational" else -20
 
         score += max(0, 40 - (stage_rank[domain] * 10))
 

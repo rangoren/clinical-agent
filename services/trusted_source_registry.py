@@ -27,20 +27,16 @@ COUNTRY_SOURCE_DOMAINS = {
     "Israel": [
         "obgyn.org.il",
         "ima.org.il",
-        "wikirefua.org.il",
         "health.gov.il",
         "me.health.gov.il",
         "iscpc.org.il",
         "isuog.ima.org.il",
-        "clalit.co.il",
-        "maccabi4u.co.il",
-        "leumit.co.il",
-        "meuhedet.co.il",
     ],
     "USA": [
         "acog.org",
         "asccp.org",
         "smfm.org",
+        "publications.smfm.org",
         "cdc.gov",
         "uspreventiveservicestaskforce.org",
         "nih.gov",
@@ -102,6 +98,7 @@ TIER1_REGULATOR_DOMAINS = {
     "acog.org",
     "asccp.org",
     "smfm.org",
+    "publications.smfm.org",
     "cdc.gov",
     "uspreventiveservicestaskforce.org",
     "rcog.org.uk",
@@ -133,10 +130,6 @@ TIER1_REGULATOR_DOMAINS = {
 
 TIER2_SYNTHESIS_DOMAINS = {
     "wikirefua.org.il",
-    "clalit.co.il",
-    "maccabi4u.co.il",
-    "leumit.co.il",
-    "meuhedet.co.il",
 }
 
 TIER3_DRUG_DOMAINS = {
@@ -148,6 +141,18 @@ TIER3_DRUG_DOMAINS = {
 TIER4_LITERATURE_DOMAINS = {
     "pubmed.ncbi.nlm.nih.gov",
     "cochrane.org",
+    "cochranelibrary.com",
+}
+
+TIER45_CONTROLLED_EXPANSION_DOMAINS = {
+    "societyfp.org",
+}
+
+LOCAL_OPERATIONAL_DOMAINS = {
+    "clalit.co.il",
+    "maccabi4u.co.il",
+    "leumit.co.il",
+    "meuhedet.co.il",
 }
 
 SPECIALTY_DOMAIN_GROUPS = {
@@ -305,6 +310,69 @@ DRUG_SAFETY_KEYWORDS = [
     "מותר לקחת",
 ]
 
+LOCAL_OPERATIONAL_KEYWORDS = [
+    "entitlement",
+    "eligibility",
+    "covered",
+    "coverage",
+    "available through",
+    "how do i get",
+    "where can i book",
+    "where do i book",
+    "how to access",
+    "service workflow",
+    "patient guidance",
+    "test access",
+    "booking",
+    "appointment",
+    "referral",
+    "how do i do the test",
+    "where do i do the test",
+    "זכאות",
+    "הפניה",
+    "איפה עושים",
+    "איך קובעים",
+    "איך מזמינים",
+    "איך ניגשים",
+    "איך מקבלים",
+    "איך עושים את הבדיקה",
+    "קופת חולים",
+]
+
+HIGH_RISK_EXPANSION_KEYWORDS = [
+    "medication in pregnancy",
+    "medication in lactation",
+    "lactation",
+    "breastfeeding",
+    "bleeding in pregnancy",
+    "ectopic",
+    "pregnancy of unknown location",
+    "hypertensive disorders",
+    "preeclampsia",
+    "labor",
+    "rupture of membranes",
+    "prom",
+    "pprom",
+    "abnormal cervical screening",
+    "ascus",
+    "lsil",
+    "hsil",
+    "gynecologic oncology",
+    "ovarian cancer",
+    "fertility treatment",
+    "ivf protocol",
+    "הנקה",
+    "תרופה",
+    "דימום בהריון",
+    "הריון חוץ רחמי",
+    "רעלת",
+    "ירידת מים",
+    "לידה",
+    "קולפוסקופיה",
+    "אונקולוגיה גינקולוגית",
+    "טיפולי פוריות",
+]
+
 PROFILE_SUBSPECIALTY_MAP = {
     "Maternal-Fetal Medicine": "maternal_fetal_medicine",
     "Obstetric and Gynecologic Ultrasound": "ultrasound",
@@ -363,7 +431,14 @@ def infer_question_route(user_message):
     normalized = normalize_text(user_message)
     if any(keyword in normalized for keyword in DRUG_SAFETY_KEYWORDS):
         return "drug_safety"
+    if any(keyword in normalized for keyword in LOCAL_OPERATIONAL_KEYWORDS):
+        return "local_operational"
     return "general"
+
+
+def is_high_risk_expansion_topic(user_message):
+    normalized = normalize_text(user_message)
+    return any(keyword in normalized for keyword in HIGH_RISK_EXPANSION_KEYWORDS)
 
 
 def _dedupe_domains(domains):
@@ -385,6 +460,10 @@ def get_domain_tier(domain):
         return "tier2"
     if normalized in TIER4_LITERATURE_DOMAINS:
         return "tier4"
+    if normalized in TIER45_CONTROLLED_EXPANSION_DOMAINS:
+        return "tier45"
+    if normalized in LOCAL_OPERATIONAL_DOMAINS:
+        return "operational"
     if normalized in TIER1_REGULATOR_DOMAINS:
         return "tier1"
     return "tier1"
@@ -412,6 +491,8 @@ def _global_domains_for_tier(tags, tier):
         domains.extend(sorted(TIER3_DRUG_DOMAINS))
     if tier == "tier4":
         domains.extend(sorted(TIER4_LITERATURE_DOMAINS))
+    if tier == "tier45":
+        domains.extend(sorted(TIER45_CONTROLLED_EXPANSION_DOMAINS))
     return _dedupe_domains(domains)
 
 
@@ -419,7 +500,19 @@ def build_search_stages(user_message, user_profile=None):
     country = get_active_country(user_message, user_profile=user_profile)
     specialty_tags = infer_specialty_tags(user_message, user_profile=user_profile)
     route = infer_question_route(user_message)
+    high_risk = is_high_risk_expansion_topic(user_message)
     stages = []
+
+    if route == "local_operational" and country == "Israel":
+        stages.append(
+            {
+                "name": "israel_operational",
+                "tier": "operational",
+                "domains": sorted(LOCAL_OPERATIONAL_DOMAINS),
+                "stop_if_found": True,
+            }
+        )
+        return stages
 
     if country == "Israel":
         local_tier1 = _domains_for_country("Israel", "tier1")
@@ -454,6 +547,10 @@ def build_search_stages(user_message, user_profile=None):
         stages.append({"name": "global_tier2", "tier": "tier2", "domains": global_tier2, "stop_if_found": True})
     if global_tier4:
         stages.append({"name": "global_tier4", "tier": "tier4", "domains": global_tier4, "stop_if_found": True})
+    if not high_risk:
+        global_tier45 = _global_domains_for_tier(specialty_tags, "tier45")
+        if global_tier45:
+            stages.append({"name": "global_tier45", "tier": "tier45", "domains": global_tier45, "stop_if_found": True})
 
     deduped_stages = []
     seen_stage_domains = set()

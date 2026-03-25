@@ -455,6 +455,10 @@ def _search_domain(query, domain):
             score += 22
         elif tier == "tier4":
             score -= 2
+        elif tier == "tier45":
+            score -= 6
+        elif tier == "operational":
+            score += 8
         score += _domain_feedback_bonus(domain)
         candidates.append(
             {
