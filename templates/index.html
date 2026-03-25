@@ -84,7 +84,7 @@
             position: relative;
             z-index: 1;
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: space-between;
             gap: 16px;
             padding: 20px 18px 16px;
@@ -166,9 +166,19 @@
 
         .topbar-meta {
             display: flex;
-            align-items: center;
-            gap: 8px;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
             flex-shrink: 0;
+            min-width: min(100%, 360px);
+        }
+
+        .topbar-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         .mode-switch {
@@ -213,9 +223,10 @@
         .calendar-pill {
             display: none;
             align-items: center;
-            gap: 8px;
-            padding: 6px;
-            border-radius: 999px;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 18px;
             background: rgba(255, 255, 255, 0.82);
             border: 1px solid var(--line);
         }
@@ -226,9 +237,24 @@
 
         .calendar-label {
             color: var(--muted);
-            font-size: 0.76rem;
+            font-size: 0.84rem;
             font-weight: 700;
-            padding-left: 6px;
+            line-height: 1.35;
+        }
+
+        .calendar-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .calendar-kicker {
+            color: var(--muted);
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .calendar-action {
@@ -806,6 +832,10 @@
                 padding: 22px 24px 18px;
             }
 
+            .topbar-meta {
+                min-width: 330px;
+            }
+
             .content {
                 padding: 18px 20px;
             }
@@ -835,7 +865,9 @@
             }
 
             .topbar {
-                gap: 8px;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
                 padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px 10px;
             }
 
@@ -865,7 +897,7 @@
                 display: block;
                 font-size: 0.74rem;
                 line-height: 1.35;
-                max-width: 15rem;
+                max-width: none;
             }
 
             .content {
@@ -1007,7 +1039,26 @@
             }
 
             .topbar-meta {
-                gap: 0;
+                width: 100%;
+                min-width: 0;
+                gap: 8px;
+            }
+
+            .topbar-row {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .calendar-pill {
+                width: 100%;
+                align-items: stretch;
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px;
+            }
+
+            .calendar-action {
+                width: 100%;
             }
 
             .version-stamp {
@@ -1038,16 +1089,21 @@
                 </div>
             </div>
             <div class="topbar-meta">
-                <div class="mode-switch" role="tablist" aria-label="Assistant mode">
-                    <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
-                    <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
+                <div class="topbar-row">
+                    <div class="mode-switch" role="tablist" aria-label="Assistant mode">
+                        <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
+                        <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
+                    </div>
+                    <div class="version-stamp">{{ app_version }}</div>
+                    <div id="status-pill" class="status-pill">Connecting</div>
                 </div>
                 <div id="calendar-pill" class="calendar-pill">
-                    <span id="calendar-label" class="calendar-label">Google not connected</span>
+                    <div class="calendar-copy">
+                        <span class="calendar-kicker">Calendar Sync</span>
+                        <span id="calendar-label" class="calendar-label">Google not connected</span>
+                    </div>
                     <button id="calendar-action" class="calendar-action" onclick="toggleGoogleCalendarConnection()">Connect Google</button>
                 </div>
-                <div class="version-stamp">{{ app_version }}</div>
-                <div id="status-pill" class="status-pill">Connecting</div>
             </div>
         </header>
 
@@ -1345,6 +1401,7 @@
                 ${draft.event_count ? `<div>Events: ${escapeHtml(String(draft.event_count))}</div>` : ""}
                 <div>Calendar: ${escapeHtml(draft.calendar_type || "Personal")}</div>
                 <div>Time: ${escapeHtml(draft.start_at || "")}${draft.end_at ? ` - ${escapeHtml(draft.end_at)}` : ""}</div>
+                ${draft.duration_label ? `<div>Duration: ${escapeHtml(draft.duration_label)}</div>` : ""}
                 ${draft.location ? `<div>Location: ${escapeHtml(draft.location)}</div>` : ""}
                 <div>Reminders: ${escapeHtml((draft.reminders || []).join(", ") || "None")}</div>
             `;

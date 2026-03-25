@@ -6,6 +6,7 @@ from uuid import uuid4
 from bson import ObjectId
 
 from db import scheduled_events_collection, scheduling_drafts_collection, scheduling_preferences_collection
+from services.logging_service import log_event
 from services.google_calendar_service import (
     get_google_calendar_name,
     get_google_calendars,
@@ -21,13 +22,9 @@ DEFAULT_SHIFT_START_HOUR = 8
 DEFAULT_SHIFT_START_MINUTE = 0
 DEFAULT_SHIFT_DURATION_HOURS = 25
 DEFAULT_SHIFT_LOCATION = "שיבא"
-KNOWN_LOCATIONS = (
-    "shiba",
-    "sheba",
-    "tel hashomer",
-    "תל השומר",
-    "שיבא",
-)
+KNOWN_LOCATIONS = {
+    "שיבא": ("shiba", "sheba", "tel hashomer", "תל השומר", "שיבא"),
+}
 CALENDAR_KEYWORDS = {
     "work": ("work", "shift", "clinic", "ward", "call", "hospital", "meeting", "on-call", "on call", "night shift", "night shifts", "call shift", "call shifts", "תורנות", "תורנויות", "כוננות", "משמרת לילה", "תורנית"),
     "kids": ("kids", "child", "children", "school", "kindergarten", "pickup", "dropoff", "pediatrician"),
@@ -233,29 +230,103 @@ def _infer_default_location(text):
 def _extract_location(text):
     normalized = _normalize_text(text)
     lowered = normalized.lower()
-    for location in KNOWN_LOCATIONS:
-        location_lower = location.lower()
-        if re.search(rf"\bat\s+{re.escape(location_lower)}\b", lowered):
-            return location
-        if re.search(rf"(?<!\w)ב{re.escape(location_lower)}(?!\w)", lowered):
-            return location
-        if location_lower in lowered and lowered.strip().endswith(location_lower):
-            return location
+    for canonical_location, aliases in KNOWN_LOCATIONS.items():
+        for alias in aliases:
+            alias_lower = alias.lower()
+            if re.search(rf"\bat\s+{re.escape(alias_lower)}\b", lowered):
+                return canonical_location
+            if re.search(rf"(?<!\w)ב{re.escape(alias_lower)}(?!\w)", lowered):
+                return canonical_location
+            if alias_lower in lowered and lowered.strip().endswith(alias_lower):
+                return canonical_location
     return None
 
 
 def _strip_location_from_title(text):
     cleaned = text
-    for location in KNOWN_LOCATIONS:
-        cleaned = re.sub(rf"\bat\s+{re.escape(location)}\b", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(rf"(?<!\w)ב{re.escape(location)}(?!\w)", "", cleaned, flags=re.IGNORECASE)
+    for aliases in KNOWN_LOCATIONS.values():
+        for alias in aliases:
+            cleaned = re.sub(rf"\bat\s+{re.escape(alias)}\b", "", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(rf"(?<!\w)ב{re.escape(alias)}(?!\w)", "", cleaned, flags=re.IGNORECASE)
     return cleaned
+
+
+def _extract_duration_minutes(text):
+    normalized = _normalize_text(text)
+    minute_match = re.search(r"\b(\d{1,3})\s*(minutes?|mins?|דקות|דקה)\b", normalized, flags=re.IGNORECASE)
+    if minute_match:
+        return int(minute_match.group(1))
+
+    hour_match = re.search(r"\b(\d{1,2})\s*(hours?|hrs?|שעות|שעה)\b", normalized, flags=re.IGNORECASE)
+    if hour_match:
+        return int(hour_match.group(1)) * 60
+
+    return None
+
+
+def _strip_duration_from_title(text):
+    cleaned = re.sub(r"\bfor\s+\d{1,3}\s*(minutes?|mins?|hours?|hrs?)\b", "", text, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bof\s+\d{1,3}\s*(minutes?|mins?|hours?|hrs?)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bשל\s+\d{1,3}\s*(דקות|דקה|שעות|שעה)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b\d{1,3}\s*(minutes?|mins?|hours?|hrs?|דקות|דקה|שעות|שעה)\b", "", cleaned, flags=re.IGNORECASE)
+    return cleaned
+
+
+def _extract_participant(text):
+    normalized = _normalize_text(text)
+    patterns = [
+        r"\b(?:meeting|appointment|call|dinner)\s+(?:with|about)\s+([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF\s'-]{0,40})",
+        r"(?:פגישה|שיחה)\s+(?:עם|על)\s+([\u0590-\u05FFA-Za-z][\u0590-\u05FFA-Za-z\s'-]{0,40})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, normalized, flags=re.IGNORECASE)
+        if not match:
+            continue
+        participant = re.split(
+            r"\b(?:today|tomorrow|at|for|on|in|של|minutes?|hours?|דקות|דקה|שעות|שעה)\b",
+            match.group(1),
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0].strip(" ,.-")
+        if participant:
+            return participant
+    return None
+
+
+def _build_semantic_title(text):
+    participant = _extract_participant(text)
+    lowered = (text or "").lower()
+    if participant and any(keyword in lowered for keyword in ("meeting", "appointment", "פגישה", "שיחה")):
+        if any(keyword in text for keyword in ("פגישה", "שיחה")):
+            return f"פגישה עם {participant}"
+        return f"Meeting with {participant}"
+    return None
 
 
 def _normalize_event_title(text):
     if _is_shift_template(text):
         return "תורנות"
+    semantic_title = _build_semantic_title(text)
+    if semantic_title:
+        return semantic_title
     return _clean_title(text)
+
+
+def _infer_event_minutes(text, is_shift_template=False):
+    if is_shift_template:
+        return DEFAULT_SHIFT_DURATION_HOURS * 60
+    return _extract_duration_minutes(text) or DEFAULT_EVENT_MINUTES
+
+
+def _duration_label(minutes):
+    if not minutes:
+        return None
+    hours, mins = divmod(minutes, 60)
+    if hours and mins:
+        return f"{hours}h {mins}m"
+    if hours:
+        return f"{hours}h"
+    return f"{mins}m"
 
 
 def _extract_time(text):
@@ -369,6 +440,7 @@ def _extract_month_year(text):
 
 def _clean_title(text):
     cleaned = _strip_location_from_title(text)
+    cleaned = _strip_duration_from_title(cleaned)
     cleaned = re.sub(r"\b(today|tomorrow|next\s+\w+)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bthis month\b|\bnext month\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(" + "|".join(re.escape(key) for key in MONTHS.keys()) + r")\b(?:\s+20\d{2})?", "", cleaned, flags=re.IGNORECASE)
@@ -380,6 +452,8 @@ def _clean_title(text):
     cleaned = re.sub(r"\b(20\d{2})-(\d{2})-(\d{2})\b", "", cleaned)
     cleaned = re.sub(r"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", "", cleaned)
     cleaned = re.sub(r"\b(at|on|for|with|schedule|book|set|create|add)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(appointment|meeting|call)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(פגישה|שיחה|תכניס ליומן|תוסיף ליומן)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.-")
     return cleaned or "Untitled event"
 
@@ -401,6 +475,7 @@ def _build_bulk_events_from_message(message):
     month, year = _extract_month_year(normalized)
     now = _utcnow()
     is_shift_template = _is_shift_template(normalized)
+    duration_minutes = _infer_event_minutes(normalized, is_shift_template=is_shift_template)
 
     if not event_time and not is_shift_template:
         return None
@@ -469,6 +544,7 @@ def _build_bulk_events_from_message(message):
                 "calendar_type": calendar_type,
                 "reminders": reminders,
                 "location": _infer_default_location(normalized),
+                "duration_minutes": duration_minutes,
                 "start_at": start_at,
                 "end_at": end_at,
             }
@@ -484,6 +560,7 @@ def _build_event_from_message(message):
     event_date = _extract_date(normalized)
     event_time = _extract_time(normalized)
     is_shift_template = _is_shift_template(normalized)
+    duration_minutes = _infer_event_minutes(normalized, is_shift_template=is_shift_template)
 
     missing = []
     if not event_date:
@@ -496,7 +573,9 @@ def _build_event_from_message(message):
             "status": "needs_details",
             "missing_fields": missing,
             "calendar_type": calendar_type,
-            "title": _clean_title(normalized),
+            "title": _normalize_event_title(normalized),
+            "location": _infer_default_location(normalized),
+            "duration_minutes": duration_minutes,
         }
 
     if is_shift_template and not event_time:
@@ -506,17 +585,29 @@ def _build_event_from_message(message):
         end_at = start_at + timedelta(hours=DEFAULT_SHIFT_DURATION_HOURS)
     else:
         start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
-        end_at = start_at + timedelta(minutes=DEFAULT_EVENT_MINUTES)
+        end_at = start_at + timedelta(minutes=duration_minutes)
 
-    return {
+    parsed_event = {
         "status": "ready",
         "title": _normalize_event_title(normalized),
         "calendar_type": calendar_type,
         "reminders": reminders,
         "location": _infer_default_location(normalized),
+        "duration_minutes": duration_minutes,
         "start_at": start_at,
         "end_at": end_at,
     }
+    log_event(
+        "scheduling_parse",
+        payload={
+            "raw_message": message,
+            "title": parsed_event["title"],
+            "location": parsed_event.get("location"),
+            "duration_minutes": parsed_event.get("duration_minutes"),
+            "calendar_type": parsed_event["calendar_type"],
+        },
+    )
+    return parsed_event
 
 
 def _find_target_event(session_id, message):
@@ -635,6 +726,7 @@ def _serialize_event(event):
         "end_at": event["end_at"].isoformat(timespec="minutes"),
         "reminders": event["reminders"],
         "location": event.get("location"),
+        "duration_minutes": event.get("duration_minutes"),
     }
 
 
@@ -691,11 +783,19 @@ def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflic
 
 
 def _format_missing_fields_reply(parsed):
+    details = []
+    if parsed.get("title"):
+        details.append(f"title: {parsed['title']}")
+    if parsed.get("location"):
+        details.append(f"location: {parsed['location']}")
+    if parsed.get("duration_minutes"):
+        details.append(f"duration: {parsed['duration_minutes']} minutes")
+    details_suffix = f" I understood {', '.join(details)}." if details else ""
     if parsed["missing_fields"] == ["date", "time"]:
-        return "I can draft that, but I still need a date and time before I create anything."
+        return "I can draft that, but I still need a date and time before I create anything." + details_suffix
     if "date" in parsed["missing_fields"]:
-        return "I can draft that, but I still need the date."
-    return "I can draft that, but I still need the time."
+        return "I can draft that, but I still need the date." + details_suffix
+    return "I can draft that, but I still need the time." + details_suffix
 
 
 def _format_draft_reply(parsed_event, conflicts):
@@ -926,6 +1026,7 @@ def handle_scheduling_message(session_id, user_message):
                 "end_at": target_event["end_at"].strftime("%H:%M"),
                 "reminders": target_event.get("reminders", []),
                 "location": target_event.get("location"),
+                "duration_label": _duration_label(int((target_event["end_at"] - target_event["start_at"]).total_seconds() / 60)),
                 "conflicts": [],
                 "status": "needs_review",
                 },
@@ -956,6 +1057,7 @@ def handle_scheduling_message(session_id, user_message):
                 "end_at": parsed["end_at"].strftime("%H:%M"),
                 "reminders": parsed["reminders"],
                 "location": parsed.get("location"),
+                "duration_label": _duration_label(parsed.get("duration_minutes")),
                 "conflicts": conflicts,
                 "status": "needs_review",
                 "target_summary": f"{target_event.get('title', 'Existing event')} · {target_event['start_at'].strftime('%a, %d %b %Y · %H:%M')}",
@@ -990,6 +1092,7 @@ def handle_scheduling_message(session_id, user_message):
                 "end_at": bulk_parsed["events"][-1]["start_at"].strftime("%a, %d %b %Y · %H:%M"),
                 "reminders": bulk_parsed["events"][0]["reminders"],
                 "location": bulk_parsed["events"][0].get("location"),
+                "duration_label": _duration_label(bulk_parsed["events"][0].get("duration_minutes")),
                 "conflicts": conflicts,
                 "status": "needs_review",
                 "event_count": len(bulk_parsed["events"]),
@@ -1026,6 +1129,7 @@ def handle_scheduling_message(session_id, user_message):
             "end_at": parsed["end_at"].strftime("%H:%M"),
             "reminders": parsed["reminders"],
             "location": parsed.get("location"),
+            "duration_label": _duration_label(parsed.get("duration_minutes")),
             "conflicts": conflicts,
             "status": "needs_review",
             **calendar_selector,
@@ -1087,8 +1191,6 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             if calendar_name:
                 reply += f" ({calendar_name})"
             reply += "."
-            if sync_result.get("html_link"):
-                reply += f" Open: {sync_result.get('html_link')}"
         else:
             reply += _sync_status_suffix(sync_result.get("status"))
         return {
@@ -1217,7 +1319,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
         reply = f"Deleted {deleted_count} events."
         if google_connected:
             if synced_count == deleted_count:
-                reply += " Removed from Google Calendar."
+                reply += " Removed from Google Calendar. Apple Calendar may take a moment to refresh."
             else:
                 reply += f" Removed {synced_count} from Google Calendar."
         else:
@@ -1320,7 +1422,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
         )
         reply = f"Deleted {target_event.get('title', 'the event')}."
         if sync_result.get("status") == "synced":
-            reply += " Removed from Google Calendar."
+            reply += " Removed from Google Calendar. Apple Calendar may take a moment to refresh."
         elif sync_result.get("status") == "failed":
             reply += " Removed locally, but Google Calendar deletion failed."
         elif sync_result.get("status") == "skipped":
