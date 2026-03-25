@@ -431,12 +431,31 @@ def _build_semantic_title(text):
     return None
 
 
+def _extract_explicit_title(text):
+    normalized = _normalize_text(text)
+    patterns = [
+        r"(?:בשם(?: האירוע)?|שם האירוע)\s+(.+?)(?=\s+(?:ביום|בתאריך|בשעה|משעה|מהשעה|היום|מחר|next|today|tomorrow|at|on|from)\b|$)",
+        r"\b(?:event named|event called|named|called)\s+(.+?)(?=\s+(?:on|at|from|today|tomorrow|next)\b|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, normalized, flags=re.IGNORECASE)
+        if not match:
+            continue
+        title = match.group(1).strip(" ,.-")
+        if title:
+            return title
+    return None
+
+
 def _normalize_event_title(text):
     if _is_shift_template(text):
         return "תורנות"
     semantic_title = _build_semantic_title(text)
     if semantic_title:
         return semantic_title
+    explicit_title = _extract_explicit_title(text)
+    if explicit_title:
+        return explicit_title
     return _clean_title(text)
 
 
@@ -1128,18 +1147,16 @@ def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflic
 
 def _format_missing_fields_reply(parsed):
     details = []
-    if parsed.get("title"):
+    if parsed.get("title") and parsed.get("title") != "Untitled event":
         details.append(f"title: {parsed['title']}")
     if parsed.get("location"):
         details.append(f"location: {parsed['location']}")
-    if parsed.get("duration_minutes"):
-        details.append(f"duration: {parsed['duration_minutes']} minutes")
-    details_suffix = f" I understood {', '.join(details)}." if details else ""
+    details_suffix = f" So far I understood {', '.join(details)}." if details else ""
     if parsed["missing_fields"] == ["date", "time"]:
-        return "I can prepare it. I still need the date and time first." + details_suffix
+        return "Still missing the date and time." + details_suffix
     if "date" in parsed["missing_fields"]:
-        return "I can prepare it. I still need the date first." + details_suffix
-    return "I can prepare it. I still need the time first." + details_suffix
+        return "Still missing the date." + details_suffix
+    return "Still missing the time." + details_suffix
 
 
 def _format_draft_reply(parsed_event, conflicts):
