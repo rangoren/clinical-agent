@@ -6,7 +6,7 @@ import requests
 
 from db import calendar_connections_collection, oauth_states_collection, user_calendars_collection
 from services.logging_service import log_event
-from settings import APP_BASE_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
+from settings import APP_BASE_URL, APP_TIMEZONE, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
 
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -271,8 +271,8 @@ def sync_google_create_event(session_id, event_doc):
     try:
         payload = {
             "summary": event_doc["title"],
-            "start": {"dateTime": event_doc["start_at"].isoformat()},
-            "end": {"dateTime": event_doc["end_at"].isoformat()},
+            "start": {"dateTime": event_doc["start_at"].isoformat(), "timeZone": APP_TIMEZONE},
+            "end": {"dateTime": event_doc["end_at"].isoformat(), "timeZone": APP_TIMEZONE},
             "reminders": {"useDefault": True},
         }
         created = _post_event(session_id, payload, event_doc["calendar_type"])
@@ -280,10 +280,16 @@ def sync_google_create_event(session_id, event_doc):
             return {"status": "skipped"}
         return {"status": "synced", "provider_event_id": created.get("id"), "provider_calendar_id": created.get("organizer", {}).get("email")}
     except Exception as exc:
+        response_body = ""
+        if getattr(exc, "response", None) is not None:
+            try:
+                response_body = exc.response.text[:500]
+            except Exception:
+                response_body = ""
         log_event(
             "google_calendar_sync_failed",
             session_id=session_id,
-            payload={"action": "create", "title": event_doc.get("title"), "error": str(exc)},
+            payload={"action": "create", "title": event_doc.get("title"), "error": str(exc), "response": response_body},
             level="error",
         )
         return {"status": "failed"}
@@ -303,18 +309,24 @@ def sync_google_update_event(session_id, provider_event_id, event_doc):
             },
             json={
                 "summary": event_doc["title"],
-                "start": {"dateTime": event_doc["start_at"].isoformat()},
-                "end": {"dateTime": event_doc["end_at"].isoformat()},
+                "start": {"dateTime": event_doc["start_at"].isoformat(), "timeZone": APP_TIMEZONE},
+                "end": {"dateTime": event_doc["end_at"].isoformat(), "timeZone": APP_TIMEZONE},
             },
             timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         return {"status": "synced"}
     except Exception as exc:
+        response_body = ""
+        if getattr(exc, "response", None) is not None:
+            try:
+                response_body = exc.response.text[:500]
+            except Exception:
+                response_body = ""
         log_event(
             "google_calendar_sync_failed",
             session_id=session_id,
-            payload={"action": "update", "title": event_doc.get("title"), "error": str(exc)},
+            payload={"action": "update", "title": event_doc.get("title"), "error": str(exc), "response": response_body},
             level="error",
         )
         return {"status": "failed"}
@@ -335,10 +347,16 @@ def sync_google_delete_event(session_id, provider_event_id, calendar_type):
             response.raise_for_status()
         return {"status": "synced"}
     except Exception as exc:
+        response_body = ""
+        if getattr(exc, "response", None) is not None:
+            try:
+                response_body = exc.response.text[:500]
+            except Exception:
+                response_body = ""
         log_event(
             "google_calendar_sync_failed",
             session_id=session_id,
-            payload={"action": "delete", "provider_event_id": provider_event_id, "error": str(exc)},
+            payload={"action": "delete", "provider_event_id": provider_event_id, "error": str(exc), "response": response_body},
             level="error",
         )
         return {"status": "failed"}

@@ -12,6 +12,7 @@ APP_BASE_URL = os.getenv("APP_BASE_URL", "").rstrip("/")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", f"{APP_BASE_URL}/calendar/google/callback" if APP_BASE_URL else "")
+APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Asia/Jerusalem")
 
 if not ANTHROPIC_API_KEY:
     raise ValueError("Missing ANTHROPIC_API_KEY in .env file")
