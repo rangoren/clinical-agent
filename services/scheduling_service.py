@@ -427,7 +427,7 @@ def _extract_participant(text):
 def _build_semantic_title(text):
     participant = _extract_participant(text)
     lowered = (text or "").lower()
-    date_match = re.search(r"(?:date|דייט)\s+(?:with|עם)\s+([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF\s'-]{0,40})", _normalize_text(text), flags=re.IGNORECASE)
+    date_match = re.search(r"(?:ל)?(?:date|דייט)\s+(?:with|עם)\s+([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF\s'-]{0,40})", _normalize_text(text), flags=re.IGNORECASE)
     if date_match:
         person = re.split(
             r"\b(?:today|tomorrow|at|for|on|in|של|minutes?|hours?|דקות|דקה|שעות|שעה)\b",
@@ -1220,11 +1220,12 @@ def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflic
 
 
 def _format_missing_fields_reply(parsed):
+    prefers_hebrew = bool(re.search(r"[\u0590-\u05FF]", (parsed.get("raw_message") or "") + " " + (parsed.get("title") or "")))
     if parsed["missing_fields"] == ["date", "time"]:
-        return "OK, I still need the day and time."
+        return "בשמחה, חסרים לי גם יום וגם שעה." if prefers_hebrew else "Sure, I still need the day and time."
     if "date" in parsed["missing_fields"]:
-        return "OK, what day should I put it on?"
-    return "OK, what time?"
+        return "באיזה יום לקבוע את זה?" if prefers_hebrew else "What day should I put it on?"
+    return "באיזו שעה לקבוע?" if prefers_hebrew else "What time should I set it for?"
 
 
 def _format_draft_reply(parsed_event, conflicts):

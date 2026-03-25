@@ -1307,7 +1307,7 @@
             hideSessionBanner();
             appendAssistantMessage(
                 appMode === "scheduling"
-                    ? "Scheduling is on. I’ll prepare changes and ask before saving anything."
+                    ? "Scheduling is on."
                     : "Clinical Assistant is active."
             );
             bootstrapSession();
@@ -1437,10 +1437,11 @@
 
             const meta = document.createElement("div");
             meta.className = "draft-meta";
+            const calendarMetaId = `draft-calendar-meta-${draft.draft_id}`;
             meta.innerHTML = `
                 ${draft.target_summary ? `<div>Current: ${escapeHtml(draft.target_summary)}</div>` : ""}
                 ${draft.event_count ? `<div>Events: ${escapeHtml(String(draft.event_count))}</div>` : ""}
-                <div>Calendar: ${escapeHtml(summaryCalendarName)}</div>
+                <div>Calendar: <span id="${escapeHtml(calendarMetaId)}">${escapeHtml(summaryCalendarName)}</span></div>
                 <div>Time: ${escapeHtml(draft.start_at || "")}${draft.end_at ? ` - ${escapeHtml(draft.end_at)}` : ""}</div>
                 ${draft.duration_label ? `<div>Duration: ${escapeHtml(draft.duration_label)}</div>` : ""}
                 ${draft.location ? `<div>Location: ${escapeHtml(draft.location)}</div>` : ""}
@@ -1494,6 +1495,10 @@
                             selectedCalendarId = calendar.provider_calendar_id || null;
                             selectedCalendarName = calendar.is_primary ? "Primary" : (calendar.name || "Calendar");
                             calendarValue.textContent = selectedCalendarName;
+                            const calendarMetaValue = document.getElementById(calendarMetaId);
+                            if (calendarMetaValue) {
+                                calendarMetaValue.textContent = selectedCalendarName;
+                            }
                             confirmButton.textContent = actionType === "bulk_create"
                                 ? `Create in ${selectedCalendarName}`
                                 : actionType === "update"
