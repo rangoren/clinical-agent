@@ -261,6 +261,9 @@ def _tokenize_title(text):
             "תוסיפי",
             "תשים",
             "תשימי",
+            "תקבע",
+            "תקבעי",
+            "לקבוע",
             "ביום",
             "בתאריך",
             "בשעה",
@@ -424,6 +427,16 @@ def _extract_participant(text):
 def _build_semantic_title(text):
     participant = _extract_participant(text)
     lowered = (text or "").lower()
+    date_match = re.search(r"(?:date|דייט)\s+(?:with|עם)\s+([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF\s'-]{0,40})", _normalize_text(text), flags=re.IGNORECASE)
+    if date_match:
+        person = re.split(
+            r"\b(?:today|tomorrow|at|for|on|in|של|minutes?|hours?|דקות|דקה|שעות|שעה)\b",
+            date_match.group(1),
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0].strip(" ,.-")
+        if person:
+            return f"דייט עם {person}" if "דייט" in text else f"Date with {person}"
     if participant and any(keyword in lowered for keyword in ("meeting", "appointment", "פגישה", "שיחה", "זום", "zoom")):
         if any(keyword in text for keyword in ("פגישה", "שיחה")):
             return f"פגישה עם {participant}"
@@ -779,13 +792,13 @@ def _clean_title(text):
         flags=re.IGNORECASE,
     )
     cleaned = re.sub(
-        r"^\s*(?:תכניס(?:י)?|תוסיף(?:י)?|תשים(?:י)?)(?:\s+לי)?(?:\s+ליומן)?(?:\s+ביומן)?",
+        r"^\s*(?:תכניס(?:י)?|תוסיף(?:י)?|תשים(?:י)?|תקבע(?:י)?)(?:\s+לי)?(?:\s+ליומן)?(?:\s+ביומן)?",
         "",
         cleaned,
         flags=re.IGNORECASE,
     )
     cleaned = re.sub(
-        r"\s+(?:ביום|בתאריך|בשעה|משעה|מהשעה|from|on|starting|start|today|tomorrow|היום|מחר)\b.*$",
+        r"\s+(?:ביום|בתאריך|בשעה|משעה|מהשעה|from|on|starting|start|today|tomorrow|היום|מחר|בחמישי|בשישי|ברביעי|בשלישי|בשני|בראשון|בשבת)\b.*$",
         "",
         cleaned,
         flags=re.IGNORECASE,
@@ -804,9 +817,70 @@ def _clean_title(text):
     cleaned = re.sub(r"\b\d{1,2}-\d{1,2}(?:-\d{2,4})?\b", "", cleaned)
     cleaned = re.sub(r"\b(?:at|on|for|with|schedule|book|set|create|add|put|insert)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(appointment|meeting|call)\b", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\b(פגישה|שיחה|תכניס ליומן|תוסיף ליומן|תשים לי ביומן|ביומן|ליומן|אירוע|תאריך|בתאריך|בשעה|עד|בין)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(פגישה|שיחה|תכניס ליומן|תוסיף ליומן|תשים לי ביומן|תקבע לי|ביומן|ליומן|אירוע|תאריך|בתאריך|בשעה|עד|בין)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.-")
     return cleaned or "Untitled event"
+
+
+def _get_pending_details_context(session_id):
+    return scheduling_drafts_collection.find_one(
+        {
+            "session_id": session_id,
+            "status": "awaiting_details",
+        },
+        sort=[("updated_at", -1)],
+    )
+
+
+def _save_pending_details_context(session_id, raw_message, parsed_event):
+    now = _utcnow()
+    existing = _get_pending_details_context(session_id)
+    payload = {
+        "raw_message": raw_message,
+        "parsed_event": parsed_event,
+        "action_type": "create",
+        "status": "awaiting_details",
+        "updated_at": now,
+    }
+    if existing:
+        scheduling_drafts_collection.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": payload,
+            },
+        )
+        return existing.get("draft_id")
+
+    draft_id = str(uuid4())
+    scheduling_drafts_collection.insert_one(
+        {
+            "draft_id": draft_id,
+            "session_id": session_id,
+            "created_at": now,
+            **payload,
+        }
+    )
+    return draft_id
+
+
+def _clear_pending_details_context(session_id):
+    scheduling_drafts_collection.update_many(
+        {"session_id": session_id, "status": "awaiting_details"},
+        {"$set": {"status": "superseded", "updated_at": _utcnow()}},
+    )
+
+
+def _maybe_merge_with_pending_context(session_id, user_message):
+    pending = _get_pending_details_context(session_id)
+    if not pending:
+        return user_message
+
+    pending_message = (pending.get("raw_message") or "").strip()
+    if not pending_message:
+        return user_message
+
+    merged = f"{pending_message} {user_message.strip()}".strip()
+    return merged
 
 
 def _serialize_conflict(conflict):
@@ -1146,17 +1220,11 @@ def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflic
 
 
 def _format_missing_fields_reply(parsed):
-    details = []
-    if parsed.get("title") and parsed.get("title") != "Untitled event":
-        details.append(f"title: {parsed['title']}")
-    if parsed.get("location"):
-        details.append(f"location: {parsed['location']}")
-    details_suffix = f" So far I understood {', '.join(details)}." if details else ""
     if parsed["missing_fields"] == ["date", "time"]:
-        return "Still missing the date and time." + details_suffix
+        return "OK, I still need the day and time."
     if "date" in parsed["missing_fields"]:
-        return "Still missing the date." + details_suffix
-    return "Still missing the time." + details_suffix
+        return "OK, what day should I put it on?"
+    return "OK, what time?"
 
 
 def _format_draft_reply(parsed_event, conflicts):
@@ -1368,6 +1436,7 @@ def handle_scheduling_message(session_id, user_message):
 
     action_type = _detect_action(user_message)
     if action_type in {"update", "delete"}:
+        _clear_pending_details_context(session_id)
         target_event = _find_target_event(session_id, user_message)
         if not target_event:
             return {
@@ -1432,8 +1501,11 @@ def handle_scheduling_message(session_id, user_message):
             },
         }
 
-    bulk_parsed = _build_bulk_events_from_message(user_message)
+    merged_message = _maybe_merge_with_pending_context(session_id, user_message)
+
+    bulk_parsed = _build_bulk_events_from_message(merged_message)
     if bulk_parsed:
+        _clear_pending_details_context(session_id)
         if bulk_parsed["status"] == "needs_details":
             return {
                 "reply": "I can prepare those events. I still need the month for the repeated weekdays.",
@@ -1444,7 +1516,7 @@ def handle_scheduling_message(session_id, user_message):
         calendar_selector = _build_calendar_selector_payload(session_id, bulk_parsed["calendar_type"])
         draft_id = _save_draft(
             session_id,
-            user_message,
+            merged_message,
             action_type="bulk_create",
             parsed_event={"events": _serialize_events(bulk_parsed["events"])},
             conflicts=conflicts,
@@ -1469,18 +1541,20 @@ def handle_scheduling_message(session_id, user_message):
             },
         }
 
-    parsed = _build_event_from_message(user_message)
+    parsed = _build_event_from_message(merged_message)
     if parsed["status"] == "needs_details":
+        _save_pending_details_context(session_id, merged_message, parsed)
         return {
             "reply": _format_missing_fields_reply(parsed),
             "scheduling_draft": None,
         }
 
+    _clear_pending_details_context(session_id)
     conflicts = _find_conflicts(session_id, parsed)
     calendar_selector = _build_calendar_selector_payload(session_id, parsed["calendar_type"])
     draft_id = _save_draft(
         session_id,
-        user_message,
+        merged_message,
         action_type="create",
         parsed_event=_serialize_event(parsed),
         conflicts=conflicts,
