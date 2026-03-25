@@ -160,6 +160,29 @@ def get_google_calendars(session_id):
     ]
 
 
+def has_google_calendar_connection(session_id):
+    return bool(
+        calendar_connections_collection.find_one(
+            {"session_id": session_id, "provider": "google", "is_active": True}
+        )
+    )
+
+
+def get_google_calendar_name(session_id, provider_calendar_id):
+    if not provider_calendar_id:
+        return None
+    calendar_doc = user_calendars_collection.find_one(
+        {
+            "session_id": session_id,
+            "provider": "google",
+            "provider_calendar_id": provider_calendar_id,
+        }
+    )
+    if not calendar_doc:
+        return None
+    return calendar_doc.get("name")
+
+
 def begin_google_calendar_connect(session_id):
     if not google_calendar_enabled():
         return {"status": "unavailable", "reply": "Google Calendar is not configured yet."}
@@ -400,7 +423,13 @@ def sync_google_create_event(session_id, event_doc, preferred_calendar_id=None):
         )
         if not created:
             return {"status": "skipped"}
-        return {"status": "synced", "provider_event_id": created.get("id"), "provider_calendar_id": calendar_id}
+        return {
+            "status": "synced",
+            "provider_event_id": created.get("id"),
+            "provider_calendar_id": calendar_id,
+            "provider_calendar_name": get_google_calendar_name(session_id, calendar_id),
+            "html_link": created.get("htmlLink"),
+        }
     except Exception as exc:
         response_body = ""
         if getattr(exc, "response", None) is not None:
