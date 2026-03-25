@@ -6,6 +6,7 @@ from uuid import uuid4
 from bson import ObjectId
 
 from db import scheduled_events_collection, scheduling_drafts_collection, scheduling_preferences_collection
+from services.scheduling_extraction_service import extract_scheduling_intent
 from services.logging_service import log_event
 from services.google_calendar_service import (
     get_google_calendar_name,
@@ -218,11 +219,15 @@ def _normalize_text(text):
 
 
 def _tokenize_title(text):
-    return [
-        token
-        for token in re.findall(r"[A-Za-z0-9\u0590-\u05FF]+", (text or "").lower())
-        if token
-        not in {
+    tokens = []
+    for token in re.findall(r"[A-Za-z0-9\u0590-\u05FF]+", (text or "").lower()):
+        if not token:
+            continue
+        variants = [token]
+        if token.startswith("ה") and len(token) > 2:
+            variants.append(token[1:])
+        for variant in variants:
+            if variant in {
             "add",
             "schedule",
             "book",
@@ -271,8 +276,10 @@ def _tokenize_title(text):
             "עד",
             "היום",
             "מחר",
-        }
-    ]
+            }:
+                continue
+            tokens.append(variant)
+    return tokens
 
 
 def _detect_action(message):
@@ -586,7 +593,7 @@ def _extract_date(text):
         except ValueError:
             return None
 
-    month_names_pattern = "|".join(sorted((re.escape(name) for name in MONTHS.keys() if name.isascii()), key=len, reverse=True))
+    month_names_pattern = "|".join(sorted((re.escape(name) for name in MONTHS.keys()), key=len, reverse=True))
     month_first_match = re.search(rf"\b({month_names_pattern})\s+(\d{{1,2}})(?:,?\s*(20\d{{2}}))?\b", text, flags=re.IGNORECASE)
     if month_first_match:
         month = MONTHS[month_first_match.group(1).lower()]
@@ -602,6 +609,16 @@ def _extract_date(text):
         day = int(day_first_named_month_match.group(1))
         month = MONTHS[day_first_named_month_match.group(2).lower()]
         year = int(day_first_named_month_match.group(3) or now.year)
+        try:
+            return datetime(year, month, day).date()
+        except ValueError:
+            return None
+
+    hebrew_day_month_match = re.search(rf"\b(?:ה\s*)?(\d{{1,2}})\s+ל({month_names_pattern})(?:\s+(20\d{{2}}))?\b", text, flags=re.IGNORECASE)
+    if hebrew_day_month_match:
+        day = int(hebrew_day_month_match.group(1))
+        month = MONTHS[hebrew_day_month_match.group(2).lower()]
+        year = int(hebrew_day_month_match.group(3) or now.year)
         try:
             return datetime(year, month, day).date()
         except ValueError:
@@ -647,7 +664,7 @@ def _extract_all_dates(text):
             except ValueError:
                 continue
 
-    month_names_pattern = "|".join(sorted((re.escape(name) for name in MONTHS.keys() if name.isascii()), key=len, reverse=True))
+    month_names_pattern = "|".join(sorted((re.escape(name) for name in MONTHS.keys()), key=len, reverse=True))
     for match in re.finditer(rf"\b({month_names_pattern})\s+(\d{{1,2}})(?:,?\s*(20\d{{2}}))?\b", text, flags=re.IGNORECASE):
         try:
             found_dates.append(
@@ -659,6 +676,16 @@ def _extract_all_dates(text):
         except ValueError:
             continue
     for match in re.finditer(rf"\b(\d{{1,2}})\s+({month_names_pattern})(?:\s+(20\d{{2}}))?\b", text, flags=re.IGNORECASE):
+        try:
+            found_dates.append(
+                (
+                    match.start(),
+                    datetime(int(match.group(3) or now.year), MONTHS[match.group(2).lower()], int(match.group(1))).date(),
+                )
+            )
+        except ValueError:
+            continue
+    for match in re.finditer(rf"\b(?:ה\s*)?(\d{{1,2}})\s+ל({month_names_pattern})(?:\s+(20\d{{2}}))?\b", text, flags=re.IGNORECASE):
         try:
             found_dates.append(
                 (
@@ -881,6 +908,261 @@ def _maybe_merge_with_pending_context(session_id, user_message):
 
     merged = f"{pending_message} {user_message.strip()}".strip()
     return merged
+
+
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)).date()
+    except Exception:
+        return None
+
+
+def _parse_hhmm(value):
+    if not value:
+        return None
+    match = re.match(r"^\s*(\d{1,2}):(\d{2})\s*$", str(value))
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    if hour > 23 or minute > 59:
+        return None
+    return hour, minute
+
+
+def _should_use_llm_extraction(extraction):
+    if not extraction:
+        return False
+    if extraction.get("confidence") == "high":
+        return True
+    if extraction.get("confidence") == "medium" and (
+        extraction.get("action")
+        or extraction.get("title")
+        or extraction.get("date")
+        or extraction.get("source_date")
+        or extraction.get("target_date")
+        or extraction.get("bulk_dates")
+    ):
+        return True
+    return False
+
+
+def _apply_extraction_defaults(extraction, raw_message):
+    if not extraction:
+        return extraction
+    normalized = _normalize_text(raw_message)
+    extraction = dict(extraction)
+    if not extraction.get("calendar_type"):
+        extraction["calendar_type"] = _infer_calendar_type(normalized)
+    if extraction.get("is_shift"):
+        extraction["title"] = "תורנות"
+        extraction["location"] = extraction.get("location") or DEFAULT_SHIFT_LOCATION
+        extraction["start_time"] = extraction.get("start_time") or "08:00"
+        extraction["end_time"] = extraction.get("end_time") or "09:00"
+        extraction["duration_minutes"] = extraction.get("duration_minutes") or (DEFAULT_SHIFT_DURATION_HOURS * 60)
+    elif not extraction.get("duration_minutes"):
+        extraction["duration_minutes"] = _extract_duration_minutes(normalized) or DEFAULT_EVENT_MINUTES
+    return extraction
+
+
+def _build_event_from_extraction(extraction, raw_message):
+    extraction = _apply_extraction_defaults(extraction, raw_message)
+    calendar_type = extraction.get("calendar_type") or _infer_calendar_type(raw_message)
+    reminders = _infer_reminders(calendar_type)
+    event_date = _parse_iso_date(extraction.get("date"))
+    event_time = _parse_hhmm(extraction.get("start_time"))
+    end_time = _parse_hhmm(extraction.get("end_time"))
+    is_shift_template = bool(extraction.get("is_shift"))
+    duration_minutes = extraction.get("duration_minutes") or _infer_event_minutes(raw_message, is_shift_template=is_shift_template)
+    title = extraction.get("title") or _normalize_event_title(raw_message)
+    location = extraction.get("location") or _infer_default_location(raw_message)
+
+    missing = []
+    if not title or title == "Untitled event":
+        missing.append("title")
+    if not event_date:
+        missing.append("date")
+    if not event_time and not is_shift_template:
+        missing.append("time")
+
+    if missing:
+        return {
+            "status": "needs_details",
+            "missing_fields": missing,
+            "calendar_type": calendar_type,
+            "title": title,
+            "location": location,
+            "duration_minutes": duration_minutes,
+            "raw_message": raw_message,
+        }
+
+    start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
+    if is_shift_template:
+        if end_time:
+            end_at = datetime.combine(event_date, datetime.min.time()).replace(hour=end_time[0], minute=end_time[1])
+            if end_at <= start_at:
+                end_at += timedelta(days=1)
+            duration_minutes = int((end_at - start_at).total_seconds() / 60)
+        else:
+            end_at = start_at + timedelta(minutes=duration_minutes)
+    elif end_time:
+        end_at = datetime.combine(event_date, datetime.min.time()).replace(hour=end_time[0], minute=end_time[1])
+        if end_at <= start_at:
+            end_at += timedelta(days=1)
+        duration_minutes = int((end_at - start_at).total_seconds() / 60)
+    else:
+        end_at = start_at + timedelta(minutes=duration_minutes)
+
+    return {
+        "status": "ready",
+        "title": title,
+        "calendar_type": calendar_type,
+        "reminders": reminders,
+        "location": location,
+        "duration_minutes": duration_minutes,
+        "start_at": start_at,
+        "end_at": end_at,
+        "raw_message": raw_message,
+    }
+
+
+def _build_bulk_events_from_extraction(extraction, raw_message):
+    extraction = _apply_extraction_defaults(extraction, raw_message)
+    bulk_dates = [_parse_iso_date(item) for item in extraction.get("bulk_dates") or []]
+    bulk_dates = sorted({item for item in bulk_dates if item})
+    if len(bulk_dates) < 2:
+        return None
+
+    calendar_type = extraction.get("calendar_type") or _infer_calendar_type(raw_message)
+    reminders = _infer_reminders(calendar_type)
+    is_shift_template = bool(extraction.get("is_shift"))
+    start_time = _parse_hhmm(extraction.get("start_time"))
+    end_time = _parse_hhmm(extraction.get("end_time"))
+    duration_minutes = extraction.get("duration_minutes") or _infer_event_minutes(raw_message, is_shift_template=is_shift_template)
+    title = extraction.get("title") or _normalize_event_title(raw_message)
+    location = extraction.get("location") or _infer_default_location(raw_message)
+
+    if not start_time and not is_shift_template:
+        return {
+            "status": "needs_details",
+            "missing_fields": ["time"],
+            "calendar_type": calendar_type,
+            "title": title,
+            "raw_message": raw_message,
+        }
+
+    events = []
+    for event_date in bulk_dates:
+        if is_shift_template:
+            start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=start_time[0], minute=start_time[1])
+            if end_time:
+                end_at = datetime.combine(event_date, datetime.min.time()).replace(hour=end_time[0], minute=end_time[1])
+                if end_at <= start_at:
+                    end_at += timedelta(days=1)
+            else:
+                end_at = start_at + timedelta(minutes=duration_minutes)
+        else:
+            start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=start_time[0], minute=start_time[1])
+            if end_time:
+                end_at = datetime.combine(event_date, datetime.min.time()).replace(hour=end_time[0], minute=end_time[1])
+                if end_at <= start_at:
+                    end_at += timedelta(days=1)
+            else:
+                end_at = start_at + timedelta(minutes=duration_minutes)
+        events.append(
+            {
+                "title": title,
+                "calendar_type": calendar_type,
+                "reminders": reminders,
+                "location": location,
+                "duration_minutes": int((end_at - start_at).total_seconds() / 60),
+                "start_at": start_at,
+                "end_at": end_at,
+            }
+        )
+
+    return {"status": "ready", "events": events, "calendar_type": calendar_type, "title": title}
+
+
+def _find_target_event_from_extraction(session_id, extraction, raw_message):
+    extraction = _apply_extraction_defaults(extraction, raw_message)
+    requested_date = _parse_iso_date(extraction.get("source_date")) or _parse_iso_date(extraction.get("date"))
+    title_tokens = set(_tokenize_title(extraction.get("title") or _clean_title(raw_message)))
+    is_shift = bool(extraction.get("is_shift"))
+    candidates = list(
+        scheduled_events_collection.find({"session_id": session_id, "status": "confirmed"}).sort("start_at", 1)
+    )
+
+    best_match = None
+    best_score = -1
+    for candidate in candidates:
+        score = 0
+        candidate_title = candidate.get("title", "")
+        candidate_tokens = set(_tokenize_title(candidate_title))
+        overlap = len(title_tokens & candidate_tokens)
+        score += overlap * 6
+
+        if requested_date and candidate.get("start_at") and candidate["start_at"].date() == requested_date:
+            score += 10
+
+        if is_shift:
+            duration_hours = (candidate.get("end_at") - candidate.get("start_at")).total_seconds() / 3600
+            if candidate_title == "תורנות" or candidate.get("location") == DEFAULT_SHIFT_LOCATION or abs(duration_hours - DEFAULT_SHIFT_DURATION_HOURS) < 0.1:
+                score += 6
+
+        if title_tokens and any(token in candidate_title.lower() for token in title_tokens):
+            score += 2
+
+        if not title_tokens and requested_date and candidate.get("start_at") and candidate["start_at"].date() == requested_date:
+            score += 3
+
+        if score > best_score:
+            best_score = score
+            best_match = candidate
+
+    if not best_match or best_score <= 0:
+        return None
+    return best_match
+
+
+def _build_update_from_extraction(extraction, existing_event, raw_message):
+    extraction = _apply_extraction_defaults(extraction, raw_message)
+    existing_start = existing_event["start_at"]
+    existing_end = existing_event["end_at"]
+    requested_date = _parse_iso_date(extraction.get("target_date")) or _parse_iso_date(extraction.get("date"))
+    requested_time = _parse_hhmm(extraction.get("start_time"))
+    requested_end_time = _parse_hhmm(extraction.get("end_time"))
+
+    start_at = existing_start
+    if requested_date:
+        start_at = datetime.combine(requested_date, start_at.time())
+    if requested_time:
+        start_at = start_at.replace(hour=requested_time[0], minute=requested_time[1])
+
+    if requested_end_time:
+        end_at = datetime.combine(start_at.date(), datetime.min.time()).replace(hour=requested_end_time[0], minute=requested_end_time[1])
+        if end_at <= start_at:
+            end_at += timedelta(days=1)
+    else:
+        duration = existing_end - existing_start
+        end_at = start_at + duration
+
+    title = extraction.get("title") or existing_event.get("title", "Untitled event")
+    calendar_type = extraction.get("calendar_type") or existing_event.get("calendar_type", "personal")
+    location = extraction.get("location") if extraction.get("location") is not None else existing_event.get("location")
+    duration_minutes = int((end_at - start_at).total_seconds() / 60)
+
+    return {
+        "title": title,
+        "calendar_type": calendar_type,
+        "reminders": existing_event.get("reminders", _infer_reminders(calendar_type)),
+        "location": location,
+        "duration_minutes": duration_minutes,
+        "start_at": start_at,
+        "end_at": end_at,
+    }
 
 
 def _serialize_conflict(conflict):
@@ -1435,10 +1717,25 @@ def handle_scheduling_message(session_id, user_message):
             },
         }
 
-    action_type = _detect_action(user_message)
+    pending_context = _get_pending_details_context(session_id)
+    pending_message = (pending_context or {}).get("raw_message")
+    extraction = extract_scheduling_intent(user_message, pending_message=pending_message)
+    use_llm_extraction = _should_use_llm_extraction(extraction)
+
+    log_event(
+        "scheduling_parser_selected",
+        session_id=session_id,
+        payload={
+            "user_message": user_message,
+            "used_llm_extraction": use_llm_extraction,
+            "extraction": extraction,
+        },
+    )
+
+    action_type = extraction.get("action") if use_llm_extraction and extraction.get("action") else _detect_action(user_message)
     if action_type in {"update", "delete"}:
         _clear_pending_details_context(session_id)
-        target_event = _find_target_event(session_id, user_message)
+        target_event = _find_target_event_from_extraction(session_id, extraction, user_message) if use_llm_extraction else _find_target_event(session_id, user_message)
         if not target_event:
             return {
                 "reply": "I couldn’t find the event yet. Try adding the event name and date.",
@@ -1470,7 +1767,7 @@ def handle_scheduling_message(session_id, user_message):
                 },
             }
 
-        parsed = _build_update_from_message(user_message, target_event)
+        parsed = _build_update_from_extraction(extraction, target_event, user_message) if use_llm_extraction else _build_update_from_message(user_message, target_event)
         conflicts = [
             conflict
             for conflict in _find_conflicts(session_id, parsed)
@@ -1504,7 +1801,9 @@ def handle_scheduling_message(session_id, user_message):
 
     merged_message = _maybe_merge_with_pending_context(session_id, user_message)
 
-    bulk_parsed = _build_bulk_events_from_message(merged_message)
+    bulk_parsed = _build_bulk_events_from_extraction(extraction, merged_message) if use_llm_extraction else None
+    if not bulk_parsed:
+        bulk_parsed = _build_bulk_events_from_message(merged_message)
     if bulk_parsed:
         _clear_pending_details_context(session_id)
         if bulk_parsed["status"] == "needs_details":
@@ -1542,7 +1841,7 @@ def handle_scheduling_message(session_id, user_message):
             },
         }
 
-    parsed = _build_event_from_message(merged_message)
+    parsed = _build_event_from_extraction(extraction, merged_message) if use_llm_extraction else _build_event_from_message(merged_message)
     if parsed["status"] == "needs_details":
         _save_pending_details_context(session_id, merged_message, parsed)
         return {
