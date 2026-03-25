@@ -18,6 +18,7 @@ DEFAULT_EVENT_MINUTES = 60
 DEFAULT_SHIFT_START_HOUR = 8
 DEFAULT_SHIFT_START_MINUTE = 0
 DEFAULT_SHIFT_DURATION_HOURS = 25
+DEFAULT_SHIFT_LOCATION = "שיבא"
 CALENDAR_KEYWORDS = {
     "work": ("work", "shift", "clinic", "ward", "call", "hospital", "meeting", "on-call", "on call", "night shift", "night shifts", "call shift", "call shifts", "תורנות", "תורנויות", "כוננות", "משמרת לילה", "תורנית"),
     "kids": ("kids", "child", "children", "school", "kindergarten", "pickup", "dropoff", "pediatrician"),
@@ -212,6 +213,12 @@ def _build_shift_window(event_date):
     )
     end_at = start_at + timedelta(hours=DEFAULT_SHIFT_DURATION_HOURS)
     return start_at, end_at
+
+
+def _infer_default_location(text):
+    if _is_shift_template(text):
+        return DEFAULT_SHIFT_LOCATION
+    return None
 
 
 def _extract_time(text):
@@ -423,6 +430,7 @@ def _build_bulk_events_from_message(message):
                 "title": title,
                 "calendar_type": calendar_type,
                 "reminders": reminders,
+                "location": _infer_default_location(normalized),
                 "start_at": start_at,
                 "end_at": end_at,
             }
@@ -467,6 +475,7 @@ def _build_event_from_message(message):
         "title": _clean_title(normalized),
         "calendar_type": calendar_type,
         "reminders": reminders,
+        "location": _infer_default_location(normalized),
         "start_at": start_at,
         "end_at": end_at,
     }
@@ -553,6 +562,7 @@ def _serialize_event(event):
         "start_at": event["start_at"].isoformat(timespec="minutes"),
         "end_at": event["end_at"].isoformat(timespec="minutes"),
         "reminders": event["reminders"],
+        "location": event.get("location"),
     }
 
 
@@ -798,12 +808,13 @@ def handle_scheduling_message(session_id, user_message):
                     "draft_id": draft_id,
                     "action_type": "delete",
                     "title": target_event.get("title", "Existing event"),
-                    "calendar_type": target_event.get("calendar_type", "personal").title(),
-                    "start_at": target_event["start_at"].strftime("%a, %d %b %Y · %H:%M"),
-                    "end_at": target_event["end_at"].strftime("%H:%M"),
-                    "reminders": target_event.get("reminders", []),
-                    "conflicts": [],
-                    "status": "needs_review",
+                "calendar_type": target_event.get("calendar_type", "personal").title(),
+                "start_at": target_event["start_at"].strftime("%a, %d %b %Y · %H:%M"),
+                "end_at": target_event["end_at"].strftime("%H:%M"),
+                "reminders": target_event.get("reminders", []),
+                "location": target_event.get("location"),
+                "conflicts": [],
+                "status": "needs_review",
                 },
             }
 
@@ -831,6 +842,7 @@ def handle_scheduling_message(session_id, user_message):
                 "start_at": parsed["start_at"].strftime("%a, %d %b %Y · %H:%M"),
                 "end_at": parsed["end_at"].strftime("%H:%M"),
                 "reminders": parsed["reminders"],
+                "location": parsed.get("location"),
                 "conflicts": conflicts,
                 "status": "needs_review",
                 "target_summary": f"{target_event.get('title', 'Existing event')} · {target_event['start_at'].strftime('%a, %d %b %Y · %H:%M')}",
@@ -864,6 +876,7 @@ def handle_scheduling_message(session_id, user_message):
                 "start_at": bulk_parsed["events"][0]["start_at"].strftime("%a, %d %b %Y · %H:%M"),
                 "end_at": bulk_parsed["events"][-1]["start_at"].strftime("%a, %d %b %Y · %H:%M"),
                 "reminders": bulk_parsed["events"][0]["reminders"],
+                "location": bulk_parsed["events"][0].get("location"),
                 "conflicts": conflicts,
                 "status": "needs_review",
                 "event_count": len(bulk_parsed["events"]),
@@ -899,6 +912,7 @@ def handle_scheduling_message(session_id, user_message):
             "start_at": parsed["start_at"].strftime("%a, %d %b %Y · %H:%M"),
             "end_at": parsed["end_at"].strftime("%H:%M"),
             "reminders": parsed["reminders"],
+            "location": parsed.get("location"),
             "conflicts": conflicts,
             "status": "needs_review",
             **calendar_selector,
@@ -924,6 +938,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             "start_at": datetime.fromisoformat(parsed_event["start_at"]),
             "end_at": datetime.fromisoformat(parsed_event["end_at"]),
             "reminders": parsed_event["reminders"],
+            "location": parsed_event.get("location"),
             "status": "confirmed",
             "created_at": now,
             "updated_at": now,
@@ -975,6 +990,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
                 "start_at": datetime.fromisoformat(event["start_at"]),
                 "end_at": datetime.fromisoformat(event["end_at"]),
                 "reminders": event["reminders"],
+                "location": event.get("location"),
                 "status": "confirmed",
                 "created_at": now,
                 "updated_at": now,
@@ -1032,6 +1048,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
                     "start_at": datetime.fromisoformat(parsed_event["start_at"]),
                     "end_at": datetime.fromisoformat(parsed_event["end_at"]),
                     "reminders": parsed_event["reminders"],
+                    "location": parsed_event.get("location"),
                     "updated_at": now,
                 }
             },
@@ -1047,6 +1064,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
                 "calendar_type": parsed_event["calendar_type"],
                 "start_at": datetime.fromisoformat(parsed_event["start_at"]),
                 "end_at": datetime.fromisoformat(parsed_event["end_at"]),
+                "location": parsed_event.get("location"),
             },
             preferred_calendar_id=selected_calendar_id or target_event.get("provider_calendar_id"),
         )

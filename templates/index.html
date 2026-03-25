@@ -1343,6 +1343,7 @@
                 ${draft.event_count ? `<div>Events: ${escapeHtml(String(draft.event_count))}</div>` : ""}
                 <div>Calendar: ${escapeHtml(draft.calendar_type || "Personal")}</div>
                 <div>Time: ${escapeHtml(draft.start_at || "")}${draft.end_at ? ` - ${escapeHtml(draft.end_at)}` : ""}</div>
+                ${draft.location ? `<div>Location: ${escapeHtml(draft.location)}</div>` : ""}
                 <div>Reminders: ${escapeHtml((draft.reminders || []).join(", ") || "None")}</div>
             `;
 

@@ -341,6 +341,7 @@ def sync_google_create_event(session_id, event_doc, preferred_calendar_id=None):
             "summary": event_doc["title"],
             "start": {"dateTime": event_doc["start_at"].isoformat(), "timeZone": APP_TIMEZONE},
             "end": {"dateTime": event_doc["end_at"].isoformat(), "timeZone": APP_TIMEZONE},
+            "location": event_doc.get("location"),
             "reminders": {"useDefault": True},
         }
         created, calendar_id = _post_event(
@@ -388,6 +389,7 @@ def sync_google_update_event(session_id, provider_event_id, event_doc, preferred
                 "summary": event_doc["title"],
                 "start": {"dateTime": event_doc["start_at"].isoformat(), "timeZone": APP_TIMEZONE},
                 "end": {"dateTime": event_doc["end_at"].isoformat(), "timeZone": APP_TIMEZONE},
+                "location": event_doc.get("location"),
             },
             timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
         )
