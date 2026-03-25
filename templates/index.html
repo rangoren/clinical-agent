@@ -210,6 +210,39 @@
             letter-spacing: 0.04em;
         }
 
+        .calendar-pill {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 6px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid var(--line);
+        }
+
+        .calendar-pill.visible {
+            display: inline-flex;
+        }
+
+        .calendar-label {
+            color: var(--muted);
+            font-size: 0.76rem;
+            font-weight: 700;
+            padding-left: 6px;
+        }
+
+        .calendar-action {
+            border: none;
+            border-radius: 999px;
+            background: rgba(15, 118, 110, 0.14);
+            color: var(--brand-strong);
+            padding: 8px 12px;
+            font: inherit;
+            font-size: 0.76rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
         .content {
             position: relative;
             z-index: 1;
@@ -943,6 +976,10 @@
                     <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
                     <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
                 </div>
+                <div id="calendar-pill" class="calendar-pill">
+                    <span id="calendar-label" class="calendar-label">Google not connected</span>
+                    <button id="calendar-action" class="calendar-action" onclick="toggleGoogleCalendarConnection()">Connect Google</button>
+                </div>
                 <div class="version-stamp">{{ app_version }}</div>
                 <div id="status-pill" class="status-pill">Connecting</div>
             </div>
@@ -971,6 +1008,7 @@
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
         let appMode = localStorage.getItem("app_mode") || "clinical";
+        let googleCalendarConnected = false;
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -995,6 +1033,109 @@
         function renderModeState() {
             document.getElementById("mode-clinical").classList.toggle("active", appMode === "clinical");
             document.getElementById("mode-scheduling").classList.toggle("active", appMode === "scheduling");
+            document.getElementById("calendar-pill").classList.toggle("visible", appMode === "scheduling");
+        }
+
+        function updateCalendarUi(status) {
+            const label = document.getElementById("calendar-label");
+            const action = document.getElementById("calendar-action");
+            if (appMode !== "scheduling") return;
+
+            if (!status || status.available === false) {
+                googleCalendarConnected = false;
+                label.textContent = "Google unavailable";
+                action.textContent = "Setup required";
+                action.disabled = true;
+                return;
+            }
+
+            googleCalendarConnected = !!status.connected;
+            action.disabled = false;
+            if (status.connected) {
+                const names = (status.calendars || []).map((item) => item.name).slice(0, 2).join(", ");
+                label.textContent = names ? `Google connected: ${names}` : "Google connected";
+                action.textContent = "Disconnect";
+            } else {
+                label.textContent = "Google not connected";
+                action.textContent = "Connect Google";
+            }
+        }
+
+        async function refreshCalendarStatus() {
+            if (appMode !== "scheduling") return;
+            try {
+                const response = await fetch("/calendar/status", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        provider: "google"
+                    })
+                });
+                const data = await response.json();
+                updateCalendarUi(data);
+            } catch (_error) {
+                updateCalendarUi({ connected: false, available: false });
+            }
+        }
+
+        async function toggleGoogleCalendarConnection() {
+            if (appMode !== "scheduling") return;
+            if (googleCalendarConnected) {
+                try {
+                    const response = await fetch("/calendar/disconnect/google", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            session_id: sessionId
+                        })
+                    });
+                    const data = await response.json();
+                    appendAssistantMessage(data.reply || "Google Calendar disconnected.", "system");
+                    await refreshCalendarStatus();
+                } catch (error) {
+                    appendAssistantMessage("Error: " + error, "error");
+                }
+                return;
+            }
+
+            try {
+                const response = await fetch("/calendar/connect/google", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+                const data = await response.json();
+                if (data.auth_url) {
+                    window.location.href = data.auth_url;
+                    return;
+                }
+                appendAssistantMessage(data.reply || "Google Calendar is not configured yet.", "system");
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        function handleCalendarCallbackStatus() {
+            const params = new URLSearchParams(window.location.search);
+            const calendarStatus = params.get("calendar_status");
+            if (!calendarStatus) return;
+
+            if (calendarStatus === "connected") {
+                appendAssistantMessage("Google Calendar connected. New scheduling actions can now sync there.", "system");
+            } else if (calendarStatus === "error") {
+                appendAssistantMessage("Google Calendar connection did not complete.", "error");
+            }
+
+            window.history.replaceState({}, document.title, window.location.pathname);
         }
 
         function switchAppMode(nextMode) {
@@ -1330,6 +1471,7 @@
                 if (data.reply) {
                     appendAssistantMessage(data.reply);
                 }
+                await refreshCalendarStatus();
                 setComposerEnabled(true);
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
@@ -1563,6 +1705,7 @@
 
         renderModeState();
         autoResizeInput();
+        handleCalendarCallbackStatus();
         bootstrapSession();
     </script>
 </body>

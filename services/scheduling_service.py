@@ -6,6 +6,11 @@ from uuid import uuid4
 from bson import ObjectId
 
 from db import scheduled_events_collection, scheduling_drafts_collection
+from services.google_calendar_service import (
+    sync_google_create_event,
+    sync_google_delete_event,
+    sync_google_update_event,
+)
 
 
 DEFAULT_EVENT_MINUTES = 60
@@ -448,6 +453,8 @@ def _serialize_existing_event(existing_event):
         "event_id": str(existing_event.get("_id")),
         "title": existing_event.get("title", "Existing event"),
         "calendar_type": existing_event.get("calendar_type", "personal"),
+        "provider_event_id": existing_event.get("provider_event_id"),
+        "provider_calendar_id": existing_event.get("provider_calendar_id"),
         "start_at": existing_event["start_at"].isoformat(timespec="minutes"),
         "end_at": existing_event["end_at"].isoformat(timespec="minutes"),
         "reminders": existing_event.get("reminders", []),
@@ -796,13 +803,29 @@ def confirm_scheduling_draft(session_id, draft_id):
             "updated_at": now,
         }
         scheduled_events_collection.insert_one(event_doc)
+        sync_result = sync_google_create_event(session_id, event_doc)
+        if sync_result.get("status") == "synced":
+            scheduled_events_collection.update_one(
+                {"draft_id": draft_id, "session_id": session_id},
+                {
+                    "$set": {
+                        "provider": "google",
+                        "provider_event_id": sync_result.get("provider_event_id"),
+                        "provider_calendar_id": sync_result.get("provider_calendar_id"),
+                        "updated_at": now,
+                    }
+                },
+            )
         scheduling_drafts_collection.update_one(
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
+        reply = f"Created {parsed_event['title']} in your {parsed_event['calendar_type']} calendar."
+        if sync_result.get("status") == "synced":
+            reply += " Synced to Google Calendar."
         return {
             "status": "confirmed",
-            "reply": f"Created {parsed_event['title']} in your {parsed_event['calendar_type']} calendar.",
+            "reply": reply,
         }
 
     if action_type == "bulk_create":
@@ -813,21 +836,33 @@ def confirm_scheduling_draft(session_id, draft_id):
 
         inserted_count = 0
         for event in events:
-            scheduled_events_collection.insert_one(
-                {
-                    "session_id": session_id,
-                    "draft_id": draft_id,
-                    "event_id": str(uuid4()),
-                    "title": event["title"],
-                    "calendar_type": event["calendar_type"],
-                    "start_at": datetime.fromisoformat(event["start_at"]),
-                    "end_at": datetime.fromisoformat(event["end_at"]),
-                    "reminders": event["reminders"],
-                    "status": "confirmed",
-                    "created_at": now,
-                    "updated_at": now,
-                }
-            )
+            event_doc = {
+                "session_id": session_id,
+                "draft_id": draft_id,
+                "event_id": str(uuid4()),
+                "title": event["title"],
+                "calendar_type": event["calendar_type"],
+                "start_at": datetime.fromisoformat(event["start_at"]),
+                "end_at": datetime.fromisoformat(event["end_at"]),
+                "reminders": event["reminders"],
+                "status": "confirmed",
+                "created_at": now,
+                "updated_at": now,
+            }
+            insert_result = scheduled_events_collection.insert_one(event_doc)
+            sync_result = sync_google_create_event(session_id, event_doc)
+            if sync_result.get("status") == "synced":
+                scheduled_events_collection.update_one(
+                    {"_id": insert_result.inserted_id},
+                    {
+                        "$set": {
+                            "provider": "google",
+                            "provider_event_id": sync_result.get("provider_event_id"),
+                            "provider_calendar_id": sync_result.get("provider_calendar_id"),
+                            "updated_at": now,
+                        }
+                    },
+                )
             inserted_count += 1
 
         scheduling_drafts_collection.update_one(
@@ -863,16 +898,31 @@ def confirm_scheduling_draft(session_id, draft_id):
         if not result.modified_count:
             return {"status": "missing", "reply": "I couldn't update that event because it no longer exists."}
 
+        sync_result = sync_google_update_event(
+            session_id,
+            target_event.get("provider_event_id"),
+            {
+                "title": parsed_event["title"],
+                "calendar_type": parsed_event["calendar_type"],
+                "start_at": datetime.fromisoformat(parsed_event["start_at"]),
+                "end_at": datetime.fromisoformat(parsed_event["end_at"]),
+            },
+        )
+
         scheduling_drafts_collection.update_one(
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
+        reply = f"Updated {parsed_event['title']} to {datetime.fromisoformat(parsed_event['start_at']).strftime('%a %d %b at %H:%M')}."
+        if sync_result.get("status") == "synced":
+            reply += " Synced to Google Calendar."
         return {
             "status": "confirmed",
-            "reply": f"Updated {parsed_event['title']} to {datetime.fromisoformat(parsed_event['start_at']).strftime('%a %d %b at %H:%M')}.",
+            "reply": reply,
         }
 
     if action_type == "delete":
+        existing_doc = scheduled_events_collection.find_one(target_filter)
         result = scheduled_events_collection.update_one(
             target_filter,
             {"$set": {"status": "deleted", "updated_at": now}},
@@ -880,13 +930,22 @@ def confirm_scheduling_draft(session_id, draft_id):
         if not result.modified_count:
             return {"status": "missing", "reply": "I couldn't delete that event because it no longer exists."}
 
+        sync_result = sync_google_delete_event(
+            session_id,
+            (existing_doc or {}).get("provider_event_id"),
+            target_event.get("calendar_type", "personal"),
+        )
+
         scheduling_drafts_collection.update_one(
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
+        reply = f"Deleted {target_event.get('title', 'the event')}."
+        if sync_result.get("status") == "synced":
+            reply += " Removed from Google Calendar."
         return {
             "status": "confirmed",
-            "reply": f"Deleted {target_event.get('title', 'the event')}.",
+            "reply": reply,
         }
 
     return {"status": "missing", "reply": "I couldn't confirm that draft."}
