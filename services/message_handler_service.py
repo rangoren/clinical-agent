@@ -34,6 +34,7 @@ from services.profile_service import (
 from services.prompt_service import build_basic_clinical_system_prompt, build_clinical_system_prompt, build_general_system_prompt
 from services.response_service import generate_reply
 from services.text_formatting import format_basic_clinical_response, format_response
+from services.trusted_source_registry import get_domain_tier, get_source_domain, infer_question_route
 from services.undo_service import clear_last_saved, record_last_saved
 import re
 
@@ -450,6 +451,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         user_profile=user_profile,
         include_live=intent == "clinical_consult",
     )
+    question_route = infer_question_route(user_message)
     candidate_sources = linked_sources + external_sources + internal_sources
     basic_clinical_question = intent == "clinical_consult" and _looks_like_basic_clinical_question(user_message)
     log_event(
@@ -519,6 +521,16 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             "internal_source_count": len(internal_sources),
             "intent": intent,
             "basic_clinical_question": basic_clinical_question,
+            "question_route": question_route,
+            "external_sources": [
+                {
+                    "source_id": source.get("source_id"),
+                    "domain": get_source_domain(source.get("url") or ""),
+                    "tier": get_domain_tier(get_source_domain(source.get("url") or "")) if source.get("url") else None,
+                    "title": source.get("title"),
+                }
+                for source in external_sources
+            ],
         },
     )
     raw_reply = generate_reply(

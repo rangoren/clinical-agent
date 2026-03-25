@@ -339,6 +339,47 @@ LOCAL_OPERATIONAL_KEYWORDS = [
     "קופת חולים",
 ]
 
+LOCAL_ISRAEL_POLICY_KEYWORDS = [
+    "screening",
+    "screen",
+    "screened",
+    "recommendation",
+    "recommended",
+    "guideline",
+    "guidelines",
+    "national program",
+    "national screening",
+    "routine",
+    "currently used",
+    "current practice",
+    "follow-up",
+    "follow up",
+    "pap",
+    "pap smear",
+    "hpv",
+    "hpv typing",
+    "cervical screening",
+    "cervical cancer screening",
+    "what is done in israel",
+    "what is currently used in israel",
+    "המלצה",
+    "ההמלצה",
+    "הנחיה",
+    "הנחיות",
+    "סקר",
+    "סקר צוואר הרחם",
+    "בדיקת סקר",
+    "בדיקת פאפ",
+    "פאפ",
+    "בדיקת hpv",
+    "hpv",
+    "מה מקובל בישראל",
+    "מה עושים בישראל",
+    "מה ההמלצה בישראל",
+    "מה ההנחיה בישראל",
+    "מעקב",
+]
+
 HIGH_RISK_EXPANSION_KEYWORDS = [
     "medication in pregnancy",
     "medication in lactation",
@@ -429,8 +470,11 @@ def infer_specialty_tags(user_message, user_profile=None):
 
 def infer_question_route(user_message):
     normalized = normalize_text(user_message)
+    active_country = infer_country_from_message(user_message)
     if any(keyword in normalized for keyword in DRUG_SAFETY_KEYWORDS):
         return "drug_safety"
+    if active_country == "Israel" and any(keyword in normalized for keyword in LOCAL_ISRAEL_POLICY_KEYWORDS):
+        return "local_israel_policy"
     if any(keyword in normalized for keyword in LOCAL_OPERATIONAL_KEYWORDS):
         return "local_operational"
     return "general"
@@ -513,6 +557,22 @@ def build_search_stages(user_message, user_profile=None):
             }
         )
         return stages
+
+    if route == "local_israel_policy" and country == "Israel":
+        local_tier1 = _domains_for_country("Israel", "tier1")
+        local_tier2 = _domains_for_country("Israel", "tier2")
+        if local_tier1:
+            stages.append({"name": "israel_policy_tier1", "tier": "tier1", "domains": local_tier1, "stop_if_found": True})
+        if local_tier2:
+            stages.append({"name": "israel_policy_tier2", "tier": "tier2", "domains": local_tier2, "stop_if_found": True})
+        stages.append(
+            {
+                "name": "israel_policy_operational",
+                "tier": "operational",
+                "domains": sorted(LOCAL_OPERATIONAL_DOMAINS),
+                "stop_if_found": True,
+            }
+        )
 
     if country == "Israel":
         local_tier1 = _domains_for_country("Israel", "tier1")
