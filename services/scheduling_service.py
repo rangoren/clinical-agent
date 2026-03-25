@@ -152,7 +152,21 @@ def _save_preferred_google_calendar(session_id, calendar_type, provider_calendar
 
 
 def _normalize_text(text):
-    return re.sub(r"\s+", " ", (text or "").strip())
+    normalized = (text or "").strip()
+    replacements = {
+        "–": "-",
+        "—": "-",
+        "־": "-",
+        "“": '"',
+        "”": '"',
+        "׳": "'",
+        "״": '"',
+        " ,": ",",
+        " .": ".",
+    }
+    for source, target in replacements.items():
+        normalized = normalized.replace(source, target)
+    return re.sub(r"\s+", " ", normalized)
 
 
 def _tokenize_title(text):
@@ -257,6 +271,19 @@ def _extract_location(text):
                 return canonical_location
             if alias_lower in lowered and lowered.strip().endswith(alias_lower):
                 return canonical_location
+
+    generic_patterns = [
+        r"\b(?:at|in)\s+([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF0-9\s'\"-]{1,40})",
+        r"(?:בבית חולים|במרפאה|בקליניקה|במחלקה|במשרד|בזום|בzoom)\s*([A-Za-z\u0590-\u05FF0-9\s'\"-]{1,40})",
+    ]
+    stop_pattern = r"\b(?:today|tomorrow|next|בשעה|בתאריך|for|עד|to|\d{1,2}(?::\d{2})?)\b"
+    for pattern in generic_patterns:
+        match = re.search(pattern, normalized, flags=re.IGNORECASE)
+        if not match:
+            continue
+        location = re.split(stop_pattern, match.group(1), maxsplit=1, flags=re.IGNORECASE)[0].strip(" ,.-")
+        if location:
+            return location
     return None
 
 
@@ -271,13 +298,26 @@ def _strip_location_from_title(text):
 
 def _extract_duration_minutes(text):
     normalized = _normalize_text(text)
+    if re.search(r"\b(?:half an hour|half-hour|חצי שעה)\b", normalized, flags=re.IGNORECASE):
+        return 30
+    if re.search(r"\b(?:hour and a half|1\.5 hours?|שעה וחצי)\b", normalized, flags=re.IGNORECASE):
+        return 90
+
     minute_match = re.search(r"\b(\d{1,3})\s*(minutes?|mins?|דקות|דקה)\b", normalized, flags=re.IGNORECASE)
     if minute_match:
         return int(minute_match.group(1))
 
+    short_minute_match = re.search(r"\b(\d{1,3})\s*(?:דק|דק'|min)\b", normalized, flags=re.IGNORECASE)
+    if short_minute_match:
+        return int(short_minute_match.group(1))
+
     hour_match = re.search(r"\b(\d{1,2})\s*(hours?|hrs?|שעות|שעה)\b", normalized, flags=re.IGNORECASE)
     if hour_match:
         return int(hour_match.group(1)) * 60
+
+    short_hour_match = re.search(r"\b(\d{1,2})\s*(?:h|hr|hrs|ש')\b", normalized, flags=re.IGNORECASE)
+    if short_hour_match:
+        return int(short_hour_match.group(1)) * 60
 
     return None
 
@@ -287,6 +327,8 @@ def _strip_duration_from_title(text):
     cleaned = re.sub(r"\bof\s+\d{1,3}\s*(minutes?|mins?|hours?|hrs?)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bשל\s+\d{1,3}\s*(דקות|דקה|שעות|שעה)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b\d{1,3}\s*(minutes?|mins?|hours?|hrs?|דקות|דקה|שעות|שעה)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:half an hour|half-hour|חצי שעה|hour and a half|1\.5 hours?|שעה וחצי)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b\d{1,3}\s*(?:דק|דק'|min|h|hr|hrs|ש')\b", "", cleaned, flags=re.IGNORECASE)
     return cleaned
 
 
@@ -295,6 +337,8 @@ def _extract_participant(text):
     patterns = [
         r"\b(?:meeting|appointment|call|dinner)\s+(?:with|about)\s+([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF\s'-]{0,40})",
         r"(?:פגישה|שיחה)\s+(?:עם|על)\s+([\u0590-\u05FFA-Za-z][\u0590-\u05FFA-Za-z\s'-]{0,40})",
+        r"(?:meeting|appointment)\s+(?:regarding|for)\s+([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF\s'-]{0,40})",
+        r"(?:פגישה|שיחה)\s+(?:לגבי|מול)\s+([\u0590-\u05FFA-Za-z][\u0590-\u05FFA-Za-z\s'-]{0,40})",
     ]
     for pattern in patterns:
         match = re.search(pattern, normalized, flags=re.IGNORECASE)
@@ -314,7 +358,7 @@ def _extract_participant(text):
 def _build_semantic_title(text):
     participant = _extract_participant(text)
     lowered = (text or "").lower()
-    if participant and any(keyword in lowered for keyword in ("meeting", "appointment", "פגישה", "שיחה")):
+    if participant and any(keyword in lowered for keyword in ("meeting", "appointment", "פגישה", "שיחה", "זום", "zoom")):
         if any(keyword in text for keyword in ("פגישה", "שיחה")):
             return f"פגישה עם {participant}"
         return f"Meeting with {participant}"
@@ -348,6 +392,8 @@ def _duration_label(minutes):
 
 
 def _extract_time(text):
+    if _extract_time_range(text):
+        return _extract_time_range(text)[0]
     match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", text, flags=re.IGNORECASE)
     if not match:
         return None
@@ -362,6 +408,24 @@ def _extract_time(text):
     if hour > 23 or minute > 59:
         return None
     return hour, minute
+
+
+def _extract_time_range(text):
+    match = re.search(
+        r"(?:בשעה|בשעות|בין|מ|at)?\s*(\d{1,2})(?::(\d{2}))?\s*(?:עד|to|ל|-)\s*(\d{1,2})(?::(\d{2}))?",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+
+    start_hour = int(match.group(1))
+    start_minute = int(match.group(2) or 0)
+    end_hour = int(match.group(3))
+    end_minute = int(match.group(4) or 0)
+    if any(value > 23 for value in (start_hour, end_hour)) or any(value > 59 for value in (start_minute, end_minute)):
+        return None
+    return (start_hour, start_minute), (end_hour, end_minute)
 
 
 def _next_weekday(base_dt, weekday):
@@ -400,6 +464,30 @@ def _extract_date(text):
         except ValueError:
             return None
 
+    dotted_match = re.search(r"\b(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?\b", text)
+    if dotted_match:
+        day = int(dotted_match.group(1))
+        month = int(dotted_match.group(2))
+        year = int(dotted_match.group(3)) if dotted_match.group(3) else now.year
+        if year < 100:
+            year += 2000
+        try:
+            return datetime(year, month, day).date()
+        except ValueError:
+            return None
+
+    dashed_match = re.search(r"\b(\d{1,2})-(\d{1,2})(?:-(\d{2,4}))?\b", text)
+    if dashed_match:
+        day = int(dashed_match.group(1))
+        month = int(dashed_match.group(2))
+        year = int(dashed_match.group(3)) if dashed_match.group(3) else now.year
+        if year < 100:
+            year += 2000
+        try:
+            return datetime(year, month, day).date()
+        except ValueError:
+            return None
+
     return None
 
 
@@ -422,6 +510,14 @@ def _extract_date_phrase(text):
     short_match = re.search(r"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", text)
     if short_match:
         return short_match.group(0)
+
+    dotted_match = re.search(r"\b\d{1,2}\.\d{1,2}(?:\.\d{2,4})?\b", text)
+    if dotted_match:
+        return dotted_match.group(0)
+
+    dashed_match = re.search(r"\b\d{1,2}-\d{1,2}(?:-\d{2,4})?\b", text)
+    if dashed_match:
+        return dashed_match.group(0)
 
     return None
 
@@ -459,6 +555,8 @@ def _extract_month_year(text):
 def _clean_title(text):
     cleaned = _strip_location_from_title(text)
     cleaned = _strip_duration_from_title(cleaned)
+    cleaned = re.sub(r"\b(?:event named|event called|named)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(?:אירוע בשם|בשם האירוע|בשם)", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(today|tomorrow|next\s+\w+)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bthis month\b|\bnext month\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(" + "|".join(re.escape(key) for key in MONTHS.keys()) + r")\b(?:\s+20\d{2})?", "", cleaned, flags=re.IGNORECASE)
@@ -469,9 +567,11 @@ def _clean_title(text):
     cleaned = re.sub(r"\b\d{1,2}(?::\d{2})?\s*(am|pm)?\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(20\d{2})-(\d{2})-(\d{2})\b", "", cleaned)
     cleaned = re.sub(r"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", "", cleaned)
-    cleaned = re.sub(r"\b(at|on|for|with|schedule|book|set|create|add)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b\d{1,2}\.\d{1,2}(?:\.\d{2,4})?\b", "", cleaned)
+    cleaned = re.sub(r"\b\d{1,2}-\d{1,2}(?:-\d{2,4})?\b", "", cleaned)
+    cleaned = re.sub(r"\b(?:at|on|for|with|schedule|book|set|create|add|put|insert)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(appointment|meeting|call)\b", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\b(פגישה|שיחה|תכניס ליומן|תוסיף ליומן)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(פגישה|שיחה|תכניס ליומן|תוסיף ליומן|תשים לי ביומן|ביומן|ליומן|אירוע|תאריך|בתאריך|בשעה|עד|בין)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.-")
     return cleaned or "Untitled event"
 
@@ -576,7 +676,8 @@ def _build_event_from_message(message):
     calendar_type = _infer_calendar_type(normalized)
     reminders = _infer_reminders(calendar_type)
     event_date = _extract_date(normalized)
-    event_time = _extract_time(normalized)
+    time_range = _extract_time_range(normalized)
+    event_time = time_range[0] if time_range else _extract_time(normalized)
     is_shift_template = _is_shift_template(normalized)
     duration_minutes = _infer_event_minutes(normalized, is_shift_template=is_shift_template)
 
@@ -603,7 +704,13 @@ def _build_event_from_message(message):
         end_at = start_at + timedelta(hours=DEFAULT_SHIFT_DURATION_HOURS)
     else:
         start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
-        end_at = start_at + timedelta(minutes=duration_minutes)
+        if time_range:
+            end_at = datetime.combine(event_date, datetime.min.time()).replace(hour=time_range[1][0], minute=time_range[1][1])
+            if end_at <= start_at:
+                end_at = end_at + timedelta(days=1)
+            duration_minutes = int((end_at - start_at).total_seconds() / 60)
+        else:
+            end_at = start_at + timedelta(minutes=duration_minutes)
 
     parsed_event = {
         "status": "ready",
