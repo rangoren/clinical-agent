@@ -99,6 +99,7 @@ SHIFT_KEYWORDS = (
     "duty shift",
     "תורנות",
     "תורנויות",
+    "תורניות",
     "תורנית",
     "כוננות",
     "משמרת לילה",
@@ -209,7 +210,9 @@ def _infer_reminders(calendar_type):
 
 def _is_shift_template(text):
     lowered = (text or "").lower()
-    return any(keyword in lowered for keyword in SHIFT_KEYWORDS)
+    if any(keyword in lowered for keyword in SHIFT_KEYWORDS):
+        return True
+    return bool(re.search(r"תורנ(?:ות|יות|ית|י(?:ו)?ת)?", text or ""))
 
 
 def _build_shift_window(event_date):
