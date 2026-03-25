@@ -220,7 +220,7 @@ def _normalize_text(text):
 def _tokenize_title(text):
     return [
         token
-        for token in re.findall(r"[a-zA-Z0-9]+", (text or "").lower())
+        for token in re.findall(r"[A-Za-z0-9\u0590-\u05FF]+", (text or "").lower())
         if token
         not in {
             "add",
@@ -250,6 +250,24 @@ def _tokenize_title(text):
             "next",
             "today",
             "tomorrow",
+            "פגישה",
+            "שיחה",
+            "אירוע",
+            "יומן",
+            "ליומן",
+            "תכניס",
+            "תכניסי",
+            "תוסיף",
+            "תוסיפי",
+            "תשים",
+            "תשימי",
+            "ביום",
+            "בתאריך",
+            "בשעה",
+            "משעה",
+            "עד",
+            "היום",
+            "מחר",
         }
     ]
 
@@ -735,6 +753,24 @@ def _clean_title(text):
     cleaned = _strip_duration_from_title(cleaned)
     cleaned = re.sub(r"\b(?:event named|event called|named)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"(?:אירוע בשם|בשם האירוע|בשם)", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"^\s*(?:please\s+)?(?:add|schedule|book|set|create|put|insert)\s+(?:me\s+)?(?:an?\s+)?(?:event\s+)?",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"^\s*(?:תכניס(?:י)?|תוסיף(?:י)?|תשים(?:י)?)(?:\s+לי)?(?:\s+ליומן)?(?:\s+ביומן)?",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\s+(?:ביום|בתאריך|בשעה|משעה|מהשעה|from|on|starting|start|today|tomorrow|היום|מחר)\b.*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     cleaned = re.sub(r"\b(today|tomorrow|next\s+\w+)\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bthis month\b|\bnext month\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(" + "|".join(re.escape(key) for key in MONTHS.keys()) + r")\b(?:\s+20\d{2})?", "", cleaned, flags=re.IGNORECASE)
@@ -833,7 +869,7 @@ def _build_bulk_events_from_message(message):
             start_at, end_at = _build_shift_window(event_date)
         else:
             start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
-            end_at = start_at + timedelta(minutes=DEFAULT_EVENT_MINUTES)
+            end_at = start_at + timedelta(minutes=duration_minutes)
         events.append(
             {
                 "title": title,
@@ -1191,6 +1227,19 @@ def _build_calendar_selector_payload(session_id, calendar_type):
     }
 
 
+def _resolve_reply_calendar_name(session_id, selected_calendar_id=None, provider_calendar_id=None, fallback_calendar_type=None):
+    calendar_name = None
+    if selected_calendar_id:
+        calendar_name = get_google_calendar_name(session_id, selected_calendar_id)
+    if not calendar_name and provider_calendar_id:
+        calendar_name = get_google_calendar_name(session_id, provider_calendar_id)
+    if calendar_name:
+        return calendar_name
+    if fallback_calendar_type:
+        return fallback_calendar_type
+    return "default"
+
+
 def _format_event_line(event):
     start_label = event["start_at"].strftime("%H:%M")
     end_label = event["end_at"].strftime("%H:%M")
@@ -1500,15 +1549,15 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
-        reply = f"Created {parsed_event['title']} in your {parsed_event['calendar_type']} calendar."
+        reply_calendar_name = _resolve_reply_calendar_name(
+            session_id,
+            selected_calendar_id=selected_calendar_id,
+            provider_calendar_id=sync_result.get("provider_calendar_id"),
+            fallback_calendar_type=parsed_event["calendar_type"],
+        )
+        reply = f'Created {parsed_event["title"]} in your "{reply_calendar_name}" calendar.'
         if sync_result.get("status") == "synced":
-            calendar_name = sync_result.get("provider_calendar_name") or get_google_calendar_name(
-                session_id,
-                selected_calendar_id or sync_result.get("provider_calendar_id"),
-            )
             reply += f" Synced to Google Calendar"
-            if calendar_name:
-                reply += f" ({calendar_name})"
             reply += ". Apple Calendar may take a moment to refresh."
         else:
             reply += _sync_status_suffix(sync_result.get("status"))
@@ -1581,12 +1630,14 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
-        reply = f"Created {inserted_count} events in your {events[0]['calendar_type']} calendar."
+        reply_calendar_name = _resolve_reply_calendar_name(
+            session_id,
+            selected_calendar_id=selected_calendar_id,
+            fallback_calendar_type=events[0]["calendar_type"],
+        )
+        reply = f'Created {inserted_count} events in your "{reply_calendar_name}" calendar.'
         if synced_count == inserted_count:
-            calendar_name = get_google_calendar_name(session_id, selected_calendar_id)
             reply += " Synced to Google Calendar"
-            if calendar_name:
-                reply += f" ({calendar_name})"
             reply += ". Apple Calendar may take a moment to refresh."
         elif failed_count:
             reply += f" {synced_count} synced to Google Calendar, {failed_count} failed, and {skipped_count} stayed local only."
