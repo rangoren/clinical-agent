@@ -84,9 +84,9 @@
             position: relative;
             z-index: 1;
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             justify-content: space-between;
-            gap: 16px;
+            gap: 20px;
             padding: 20px 18px 16px;
             border-bottom: 1px solid var(--line);
             background:
@@ -123,7 +123,7 @@
             min-width: 0;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
         }
 
         .brand-kicker {
@@ -145,32 +145,13 @@
             color: var(--text);
         }
 
-        .brand-subtitle {
-            margin: 0;
-            color: var(--muted);
-            font-size: 0.9rem;
-            max-width: 42rem;
-            line-height: 1.45;
-        }
-
-        .status-pill {
-            flex-shrink: 0;
-            padding: 10px 14px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.72);
-            border: 1px solid var(--line);
-            color: var(--muted);
-            font-size: 0.82rem;
-            font-weight: 600;
-        }
-
         .topbar-meta {
             display: flex;
             flex-direction: column;
-            align-items: stretch;
+            align-items: flex-end;
             gap: 10px;
             flex-shrink: 0;
-            min-width: min(100%, 360px);
+            min-width: min(100%, 390px);
         }
 
         .topbar-row {
@@ -178,7 +159,8 @@
             align-items: center;
             justify-content: flex-end;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 10px;
+            width: 100%;
         }
 
         .mode-switch {
@@ -210,7 +192,7 @@
 
         .version-stamp {
             flex-shrink: 0;
-            padding: 10px 12px;
+            padding: 9px 12px;
             border-radius: 999px;
             background: rgba(255, 255, 255, 0.72);
             border: 1px solid var(--line);
@@ -225,8 +207,9 @@
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            padding: 10px 12px;
-            border-radius: 18px;
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 16px;
             background: rgba(255, 255, 255, 0.82);
             border: 1px solid var(--line);
         }
@@ -236,25 +219,20 @@
         }
 
         .calendar-label {
-            color: var(--muted);
+            color: var(--text);
             font-size: 0.84rem;
             font-weight: 700;
             line-height: 1.35;
         }
 
         .calendar-copy {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
+            display: inline-flex;
+            align-items: center;
             min-width: 0;
         }
 
         .calendar-kicker {
-            color: var(--muted);
-            font-size: 0.68rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
+            display: none;
         }
 
         .calendar-action {
@@ -833,7 +811,7 @@
             }
 
             .topbar-meta {
-                min-width: 330px;
+                min-width: 360px;
             }
 
             .content {
@@ -891,13 +869,6 @@
             .brand-title {
                 font-size: 0.88rem;
                 line-height: 1.1;
-            }
-
-            .brand-subtitle {
-                display: block;
-                font-size: 0.74rem;
-                line-height: 1.35;
-                max-width: none;
             }
 
             .content {
@@ -1034,31 +1005,30 @@
                 flex: 1;
             }
 
-            .status-pill {
-                display: none;
-            }
-
             .topbar-meta {
                 width: 100%;
                 min-width: 0;
                 gap: 8px;
+                align-items: stretch;
             }
 
             .topbar-row {
                 width: 100%;
                 justify-content: space-between;
+                gap: 8px;
             }
 
             .calendar-pill {
                 width: 100%;
-                align-items: stretch;
-                flex-direction: column;
+                align-items: center;
+                flex-direction: row;
                 gap: 10px;
                 padding: 10px;
             }
 
             .calendar-action {
-                width: 100%;
+                width: auto;
+                flex: 0 0 auto;
             }
 
             .version-stamp {
@@ -1085,7 +1055,6 @@
                 <div class="brand-text">
                     <div class="brand-kicker">Made for my beautiful wife</div>
                     <h1 class="brand-title">OB-GYN Clinical Assistant</h1>
-                    <p class="brand-subtitle">Built for overnight questions, quick checks, and those moments when a calm second look helps.</p>
                 </div>
             </div>
             <div class="topbar-meta">
@@ -1095,12 +1064,11 @@
                         <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
                     </div>
                     <div class="version-stamp">{{ app_version }}</div>
-                    <div id="status-pill" class="status-pill">Connecting</div>
                 </div>
                 <div id="calendar-pill" class="calendar-pill">
                     <div class="calendar-copy">
                         <span class="calendar-kicker">Calendar Sync</span>
-                        <span id="calendar-label" class="calendar-label">Google not connected</span>
+                        <span id="calendar-label" class="calendar-label">Calendar Sync: Not connected</span>
                     </div>
                     <button id="calendar-action" class="calendar-action" onclick="toggleGoogleCalendarConnection()">Connect Google</button>
                 </div>
@@ -1148,9 +1116,7 @@
             chat.scrollTop = chat.scrollHeight;
         }
 
-        function setStatus(text) {
-            document.getElementById("status-pill").textContent = text;
-        }
+        function setStatus(_text) {}
 
         function renderModeState() {
             document.getElementById("mode-clinical").classList.toggle("active", appMode === "clinical");
@@ -1165,7 +1131,7 @@
 
             if (!status || status.available === false) {
                 googleCalendarConnected = false;
-                label.textContent = "Google unavailable";
+                label.textContent = "Calendar Sync: Unavailable";
                 action.textContent = "Setup required";
                 action.disabled = true;
                 return;
@@ -1174,11 +1140,10 @@
             googleCalendarConnected = !!status.connected;
             action.disabled = false;
             if (status.connected) {
-                const names = (status.calendars || []).map((item) => item.name).slice(0, 2).join(", ");
-                label.textContent = names ? `Google connected: ${names}` : "Google connected";
+                label.textContent = "Calendar Sync: Connected";
                 action.textContent = "Disconnect";
             } else {
-                label.textContent = "Google not connected";
+                label.textContent = "Calendar Sync: Not connected";
                 action.textContent = "Connect Google";
             }
         }
@@ -1281,7 +1246,6 @@
             input.disabled = !enabled;
             sendButton.disabled = !enabled;
             chatReady = enabled;
-            setStatus(enabled ? "Ready" : "Waiting");
         }
 
         function createMessageRow(role, html, variant = "") {
