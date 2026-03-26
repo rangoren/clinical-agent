@@ -1843,7 +1843,7 @@
                 const data = await response.json();
 
                 setThinkingState(false);
-                appendAssistantMessage(data.reply);
+                const assistantRow = appendAssistantMessage(data.reply);
 
                 if (data.undo) {
                     const label = data.undo_type === "protocol"
