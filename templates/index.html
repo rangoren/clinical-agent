@@ -1536,7 +1536,7 @@
 
         function renderStudyCards(cards) {
             const shell = getStudyCardsShell();
-            if (!shell || !cards || cards.length !== 3) {
+            if (!shell || !cards || cards.length === 0) {
                 clearStudyCards();
                 return;
             }
@@ -2368,12 +2368,12 @@
                 hideSessionBanner();
                 if (data.reply) {
                     appendAssistantMessage(data.reply);
-                } else if (data.cards && data.cards.length === 3) {
+                } else if (data.cards && data.cards.length > 0) {
                     renderStudyCards(data.cards);
                 }
                 await refreshCalendarStatus();
                 setComposerEnabled(true);
-                if (!data.cards || data.cards.length !== 3) {
+                if (!data.cards || data.cards.length === 0) {
                     maybeShowStudyCards(true);
                 }
             } catch (error) {
