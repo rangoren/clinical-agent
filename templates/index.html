@@ -97,6 +97,20 @@
                 linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.62));
         }
 
+        .sticky-mode-shell {
+            position: sticky;
+            top: 0;
+            z-index: 9;
+            padding: 10px 18px 0;
+            background: linear-gradient(180deg, rgba(247, 250, 249, 0.96), rgba(247, 250, 249, 0.72) 70%, rgba(247, 250, 249, 0));
+            backdrop-filter: blur(16px);
+        }
+
+        .sticky-mode-inner {
+            display: flex;
+            justify-content: center;
+        }
+
         .brand {
             display: flex;
             align-items: center;
@@ -1057,6 +1071,10 @@
                 padding: 18px 20px;
             }
 
+            .sticky-mode-shell {
+                padding: 12px 20px 0;
+            }
+
             .chat-panel {
                 padding: 10px 10px 26px;
             }
@@ -1090,6 +1108,10 @@
                 align-items: stretch;
                 gap: 10px;
                 padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px 10px;
+            }
+
+            .sticky-mode-shell {
+                padding: 8px 10px 0;
             }
 
             .brand {
@@ -1326,7 +1348,7 @@
 
             .topbar-row {
                 width: 100%;
-                justify-content: space-between;
+                justify-content: flex-end;
                 gap: 8px;
             }
 
@@ -1387,6 +1409,11 @@
                 padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
             }
 
+            .sticky-mode-shell {
+                top: 0;
+                padding-top: 8px;
+            }
+
             .content {
                 padding-top: 8px;
             }
@@ -1413,10 +1440,6 @@
             </div>
             <div class="topbar-meta">
                 <div class="topbar-row">
-                    <div class="mode-switch" role="tablist" aria-label="Assistant mode">
-                        <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
-                        <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
-                    </div>
                     <div class="topbar-tools">
                         <div class="version-stamp">{{ app_version }}</div>
                         <div id="settings-shell" class="settings-shell">
@@ -1447,6 +1470,15 @@
                 </div>
             </div>
         </header>
+
+        <div class="sticky-mode-shell">
+            <div class="sticky-mode-inner">
+                <div class="mode-switch" role="tablist" aria-label="Assistant mode">
+                    <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
+                    <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
+                </div>
+            </div>
+        </div>
 
         <section class="content">
             <div id="session-banner" class="session-banner">
