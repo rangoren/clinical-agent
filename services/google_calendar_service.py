@@ -128,6 +128,12 @@ def _upsert_connection(session_id, token_payload, calendars):
         upsert=True,
     )
 
+    _store_google_calendars(session_id, calendars)
+
+
+def _store_google_calendars(session_id, calendars):
+    now = _utcnow()
+
     user_calendars_collection.delete_many({"session_id": session_id, "provider": "google"})
     for calendar in calendars:
         user_calendars_collection.insert_one(
@@ -143,6 +149,35 @@ def _upsert_connection(session_id, token_payload, calendars):
                 "updated_at": now,
             }
         )
+
+
+def _fetch_google_calendar_list(session_id, connection=None):
+    connection = connection or _get_connection(session_id)
+    if not connection:
+        return []
+
+    response = requests.get(
+        GOOGLE_CALENDAR_LIST_URL,
+        headers=_auth_headers(connection["access_token"]),
+        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+    )
+    if response.status_code == 401:
+        refreshed_access_token = _refresh_google_access_token(session_id, connection)
+        if refreshed_access_token:
+            response = requests.get(
+                GOOGLE_CALENDAR_LIST_URL,
+                headers=_auth_headers(refreshed_access_token),
+                timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+            )
+    response.raise_for_status()
+    calendars = response.json().get("items", [])
+    _store_google_calendars(session_id, calendars)
+    log_event(
+        "google_calendar_list_refreshed",
+        session_id=session_id,
+        payload={"calendar_count": len(calendars)},
+    )
+    return calendars
 
 
 def get_google_calendar_status(session_id):
@@ -179,6 +214,21 @@ def get_google_calendars(session_id):
             [("is_primary", -1), ("name", 1)]
         )
     )
+    if not calendars and _get_connection(session_id):
+        try:
+            _fetch_google_calendar_list(session_id)
+            calendars = list(
+                user_calendars_collection.find({"session_id": session_id, "provider": "google"}).sort(
+                    [("is_primary", -1), ("name", 1)]
+                )
+            )
+        except Exception as exc:
+            log_event(
+                "google_calendar_list_refresh_failed",
+                session_id=session_id,
+                payload={"error": str(exc)},
+                level="error",
+            )
     return [
         {
             "provider_calendar_id": item.get("provider_calendar_id"),
@@ -358,6 +408,23 @@ def _get_selected_google_calendar_id(session_id, calendar_type, preferred_calend
     )
     if primary:
         return primary["provider_calendar_id"]
+
+    calendars = get_google_calendars(session_id)
+    if preferred_calendar_id:
+        explicit = next(
+            (item for item in calendars if item.get("provider_calendar_id") == preferred_calendar_id),
+            None,
+        )
+        if explicit:
+            return explicit["provider_calendar_id"]
+    typed_match = next((item for item in calendars if item.get("calendar_type") == calendar_type), None)
+    if typed_match:
+        return typed_match["provider_calendar_id"]
+    primary_match = next((item for item in calendars if item.get("is_primary")), None)
+    if primary_match:
+        return primary_match["provider_calendar_id"]
+    if calendars:
+        return calendars[0]["provider_calendar_id"]
     return None
 
 
@@ -636,12 +703,15 @@ def sync_google_create_event(session_id, event_doc, preferred_calendar_id=None):
             "location": event_doc.get("location"),
             "reminders": {"useDefault": True},
         }
-        created, calendar_id = _post_event(
+        post_result = _post_event(
             session_id,
             payload,
             event_doc["calendar_type"],
             preferred_calendar_id=preferred_calendar_id,
         )
+        if not post_result:
+            return {"status": "skipped"}
+        created, calendar_id = post_result
         if not created:
             return {"status": "skipped"}
         created_id = created.get("id")
