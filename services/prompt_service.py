@@ -48,6 +48,8 @@ def _format_external_catalog(external_sources):
     lines = []
     for source in external_sources:
         line = f"- [{source['source_id']}] {source['title']} ({source['url']})"
+        if source.get("tier"):
+            line += f" [tier {source['tier']}]"
         if source.get("updated_at"):
             line += f" [updated {source['updated_at']}]"
         if source.get("excerpt"):
@@ -90,6 +92,13 @@ Internal context labels:
 
 External references:
 {external_catalog}
+
+Grounding rules:
+- If external references are provided, ground factual claims in those references instead of fallback background knowledge
+- Do not state a test, interval, policy, recommendation, or protocol change that contradicts the provided references
+- If a provided source explicitly states a test, interval, or policy, use that exact information rather than older general knowledge
+- If only operational or patient-facing sources are available, limit claims to what those sources explicitly state and avoid presenting them as higher-authority professional guidance
+- If the available references are not enough for a strong recommendation, say that briefly instead of guessing
 
 Core behavior:
 - Be sharp
@@ -212,6 +221,13 @@ Internal context labels:
 
 External references:
 {external_catalog}
+
+Grounding rules:
+- If external references are provided, use them as the factual anchor for the answer
+- Do not contradict the provided references with older general knowledge
+- If a provided source explicitly gives the test, interval, age range, or policy, repeat that directly and clearly
+- If only operational or patient-facing sources are available, stay close to what they explicitly say and avoid over-claiming
+- If the sources are incomplete, say that briefly rather than filling gaps with guesswork
 
 Behavior:
 - Answer briefly and directly

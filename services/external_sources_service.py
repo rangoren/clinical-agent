@@ -269,6 +269,8 @@ def _assign_source_ids(sources):
                 "source_type": source["source_type"],
                 "excerpt": source.get("excerpt"),
                 "updated_at": source.get("updated_at"),
+                "domain": source.get("domain") or get_source_domain(source["url"]),
+                "tier": source.get("tier") or get_domain_tier(source.get("domain") or get_source_domain(source["url"])),
             }
         )
     return assigned
@@ -335,6 +337,8 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
                 "title": source["title"],
                 "url": source["url"],
                 "source_type": source["source_type"],
+                "domain": domain,
+                "tier": tier,
             }
         )
         if len(selected) >= limit:

@@ -528,6 +528,8 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
                     "domain": get_source_domain(source.get("url") or ""),
                     "tier": get_domain_tier(get_source_domain(source.get("url") or "")) if source.get("url") else None,
                     "title": source.get("title"),
+                    "excerpt": source.get("excerpt"),
+                    "updated_at": source.get("updated_at"),
                 }
                 for source in external_sources
             ],
