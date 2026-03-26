@@ -12,19 +12,21 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "Preeclampsia",
         "subtopic": "Timing of delivery",
-        "question_stem": "At 35 weeks, preeclampsia with severe features is diagnosed. What is the board-oriented next step?",
+        "question_stem": "A 35-week pregnant patient is diagnosed with preeclampsia with severe features. What is the most appropriate next step in management?",
         "options": [
-            {"key": "A", "text": "Expectant management until 37 weeks"},
+            {"key": "A", "text": "Expectant management with close inpatient observation until 37 weeks"},
             {"key": "B", "text": "Delivery after maternal stabilization"},
-            {"key": "C", "text": "Discharge with home BP checks"},
-            {"key": "D", "text": "Repeat labs in one week"},
+            {"key": "C", "text": "Complete a full steroid course before making a delivery plan"},
+            {"key": "D", "text": "Outpatient management with repeat labs in 48 hours"},
         ],
         "correct_answer_key": "B",
-        "explanation": "Severe features at this gestation usually move management toward delivery once the mother is stabilized.",
+        "explanation": "At 35 weeks, preeclampsia with severe features is generally managed with maternal stabilization followed by delivery rather than routine expectant management.",
         "exam_clue": "Severe features at 35 weeks",
         "board_takeaway": "Severe features at 34 weeks or more: stabilize the mother, then deliver.",
         "decision_point": "Timing of delivery in preeclampsia with severe features",
         "difficulty_band": "standard",
+        "tempting_wrong_option": "A",
+        "tempting_wrong_reason": "Expectant management is generally reserved for selected earlier gestations, not routine management at 35 weeks with severe features.",
         "estimated_time_seconds": 60,
         "source_id": "study_src_nice_hypertension",
         "source_name": "NICE Guideline: Hypertension in Pregnancy",
@@ -41,19 +43,21 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "PPH",
         "subtopic": "Initial management",
-        "question_stem": "Postpartum hemorrhage starts immediately after vaginal birth from uterine atony. What is the best first-line uterotonic?",
+        "question_stem": "Immediately after vaginal birth, heavy bleeding is attributed to uterine atony. Which medication is the best first-line uterotonic?",
         "options": [
             {"key": "A", "text": "Oxytocin"},
-            {"key": "B", "text": "Methotrexate"},
+            {"key": "B", "text": "Methylergonovine before initial oxytocin"},
             {"key": "C", "text": "Magnesium sulfate"},
-            {"key": "D", "text": "Heparin"},
+            {"key": "D", "text": "Tranexamic acid as the only first medication"},
         ],
         "correct_answer_key": "A",
-        "explanation": "Atony-related postpartum hemorrhage is treated first with uterine massage and oxytocin as the standard first-line uterotonic.",
+        "explanation": "For uterine atony, the standard first medication is oxytocin, given along with immediate uterine massage and hemorrhage resuscitation.",
         "exam_clue": "Immediate postpartum hemorrhage from uterine atony",
         "board_takeaway": "Immediate PPH from uterine atony: uterine massage plus oxytocin first.",
         "decision_point": "First-line management of uterine atony postpartum hemorrhage",
         "difficulty_band": "warmup",
+        "tempting_wrong_option": "B",
+        "tempting_wrong_reason": "Methylergonovine can be used later in selected patients, but oxytocin is still the first-line uterotonic for initial atony management.",
         "estimated_time_seconds": 45,
         "source_id": "study_src_acog_pph",
         "source_name": "ACOG Practice Bulletin: Postpartum Hemorrhage",
@@ -70,12 +74,12 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "CTG",
         "subtopic": "Interpretation",
-        "question_stem": "Recurrent late decelerations on CTG most strongly suggest which problem?",
+        "question_stem": "On intrapartum CTG, recurrent late decelerations are present. What is the most likely underlying problem?",
         "options": [
             {"key": "A", "text": "Cord compression"},
             {"key": "B", "text": "Uteroplacental insufficiency"},
-            {"key": "C", "text": "Fetal sleep cycle"},
-            {"key": "D", "text": "Maternal fever only"},
+            {"key": "C", "text": "Benign fetal sleep cycle"},
+            {"key": "D", "text": "Head compression during contractions"},
         ],
         "correct_answer_key": "B",
         "explanation": "Recurrent late decelerations classically suggest uteroplacental insufficiency rather than cord compression.",
@@ -83,6 +87,8 @@ STUDY_SEED_ITEMS = [
         "board_takeaway": "Late decelerations point to uteroplacental insufficiency; variable decelerations point to cord compression.",
         "decision_point": "Interpret the most likely cause of a CTG deceleration pattern",
         "difficulty_band": "standard",
+        "tempting_wrong_option": "A",
+        "tempting_wrong_reason": "Cord compression more typically causes variable decelerations, not recurrent late decelerations.",
         "estimated_time_seconds": 50,
         "source_id": "study_src_nice_ctg",
         "source_name": "NICE Guideline: Fetal Monitoring in Labour",
@@ -99,12 +105,12 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "PPROM",
         "subtopic": "Latency management",
-        "question_stem": "PPROM at 30 weeks with no signs of infection: what supportive step improves latency and outcomes?",
+        "question_stem": "A patient has PPROM at 30 weeks with no signs of chorioamnionitis or fetal compromise. Which management step best improves latency and outcomes?",
         "options": [
             {"key": "A", "text": "Latency antibiotics"},
-            {"key": "B", "text": "Immediate hysteroscopy"},
-            {"key": "C", "text": "Routine tocolysis for weeks"},
-            {"key": "D", "text": "No treatment if fetal tracing is normal"},
+            {"key": "B", "text": "Immediate delivery because membranes are ruptured"},
+            {"key": "C", "text": "Prolonged routine tocolysis alone"},
+            {"key": "D", "text": "Observation only if fetal tracing is normal"},
         ],
         "correct_answer_key": "A",
         "explanation": "In appropriate PPROM cases before term and without infection, latency antibiotics help prolong pregnancy and reduce infectious morbidity.",
@@ -112,6 +118,8 @@ STUDY_SEED_ITEMS = [
         "board_takeaway": "PPROM before term without infection: give latency antibiotics as part of expectant management.",
         "decision_point": "Choose a supportive management step in preterm PPROM",
         "difficulty_band": "standard",
+        "tempting_wrong_option": "D",
+        "tempting_wrong_reason": "Normal fetal tracing does not remove the benefit of latency antibiotics in eligible preterm PPROM.",
         "estimated_time_seconds": 55,
         "source_id": "study_src_acog_prom",
         "source_name": "ACOG Practice Bulletin: Prelabor Rupture of Membranes",
@@ -250,6 +258,8 @@ def _normalize_study_item(item):
         or "standard"
     )
     normalized["review_status"] = normalized.get("review_status") or "source_grounded"
+    normalized["tempting_wrong_option"] = normalized.get("tempting_wrong_option")
+    normalized["tempting_wrong_reason"] = normalized.get("tempting_wrong_reason")
     return normalized
 
 
@@ -472,10 +482,24 @@ def _build_mcq_feedback_reply(item, correct, selected_option=None):
     if takeaway:
         lines.append(f"Board takeaway: {takeaway}")
 
-    if not correct:
+    why_not_key = None
+    why_not_reason = None
+    tempting_wrong_key = item.get("tempting_wrong_option")
+    tempting_wrong_reason = item.get("tempting_wrong_reason")
+    if correct:
+        why_not_key = tempting_wrong_key
+        why_not_reason = tempting_wrong_reason
+    else:
         selected_text = _option_text_by_key(item, selected_option)
         if selected_option and selected_text:
-            lines.append(f"Why {selected_option} is not best: it does not fit the main exam clue here.")
+            why_not_key = selected_option
+            if selected_option == tempting_wrong_key and tempting_wrong_reason:
+                why_not_reason = tempting_wrong_reason
+            else:
+                why_not_reason = "It does not fit the main exam clue as well as the best answer."
+
+    if why_not_key and why_not_reason:
+        lines.append(f"Why {why_not_key} is wrong: {why_not_reason}")
 
     return "\n".join(lines)
 
@@ -519,8 +543,22 @@ def _build_mcq_explain_reply(item, state):
     if rule:
         lines.append(f"Board takeaway: {rule}")
 
+    why_not_key = None
+    why_not_reason = None
+    tempting_wrong_key = item.get("tempting_wrong_option")
+    tempting_wrong_reason = item.get("tempting_wrong_reason")
     if answered_correctly is False and selected_key and selected_text:
-        lines.append(f"Why {selected_key} is tempting but wrong: it does not match the main clue as well as the best answer.")
+        why_not_key = selected_key
+        if selected_key == tempting_wrong_key and tempting_wrong_reason:
+            why_not_reason = tempting_wrong_reason
+        else:
+            why_not_reason = "It does not match the main clue as well as the best answer."
+    elif tempting_wrong_key and tempting_wrong_reason:
+        why_not_key = tempting_wrong_key
+        why_not_reason = tempting_wrong_reason
+
+    if why_not_key and why_not_reason:
+        lines.append(f"Why {why_not_key} is wrong: {why_not_reason}")
 
     return "\n".join(lines)
 
