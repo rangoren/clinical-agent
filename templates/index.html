@@ -1469,8 +1469,13 @@
                 chat.scrollTop = chat.scrollHeight;
                 const lastChild = chat.lastElementChild;
                 if (lastChild) {
-                    lastChild.scrollIntoView({ block: "end", behavior: "smooth" });
+                    lastChild.scrollIntoView({ block: "end", inline: "nearest", behavior: "smooth" });
                 }
+                const appShell = document.querySelector(".app-shell");
+                if (appShell) {
+                    appShell.scrollTop = appShell.scrollHeight;
+                }
+                window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
             };
 
             scrollNow();
@@ -1478,6 +1483,8 @@
                 scrollNow();
                 requestAnimationFrame(scrollNow);
             });
+            setTimeout(scrollNow, 120);
+            setTimeout(scrollNow, 260);
         }
 
         function setStatus(_text) {}
