@@ -193,6 +193,38 @@ DEPARTMENT_SHIFT_KEYWORDS = (
     "ward shift",
     "ward evening shift",
 )
+SCHEDULING_ALIAS_SEEDS = (
+    {
+        "alias_key": "half_shift_hebrew_shorthand",
+        "pattern": r"(?:(?<=\s)|^)(?:ו\s*)?חצי(?=\s*(?:ב|בתאריך|ביום|\d))",
+        "replacement": "חצי תורנות",
+        "canonical_value": "half_shift",
+    },
+    {
+        "alias_key": "half_shift_english_shorthand",
+        "pattern": r"(?:(?<=\s)|^)and\s+half(?=\s*(?:on|for|\d))",
+        "replacement": "and half shift",
+        "canonical_value": "half_shift",
+    },
+    {
+        "alias_key": "half_shift_english_bare",
+        "pattern": r"(?:(?<=\s)|^)half(?=\s*(?:on|for|\d))",
+        "replacement": "half shift",
+        "canonical_value": "half_shift",
+    },
+    {
+        "alias_key": "department_shift_moked_hebrew",
+        "pattern": r"(?:(?<=\s)|^)מוקד(?:\s+ערב)?(?=\s|$)",
+        "replacement": "מחלקות",
+        "canonical_value": "department_shift",
+    },
+    {
+        "alias_key": "department_shift_moked_english",
+        "pattern": r"(?:(?<=\s)|^)moked(?:\s+shift)?(?=\s|$)",
+        "replacement": "department shift",
+        "canonical_value": "department_shift",
+    },
+)
 
 
 def _utcnow():
@@ -273,6 +305,85 @@ def _normalize_text(text):
     for source, target in replacements.items():
         normalized = normalized.replace(source, target)
     return re.sub(r"\s+", " ", normalized)
+
+
+def _get_scheduling_alias_map(session_id):
+    preferences = _get_scheduling_preferences(session_id)
+    return preferences.get("scheduling_alias_map") or {}
+
+
+def _record_scheduling_alias_usage(session_id, alias_key, raw_phrase, replacement, canonical_value, source="seed"):
+    if not alias_key or not raw_phrase or not replacement:
+        return
+    now = _utcnow()
+    scheduling_preferences_collection.update_one(
+        {"session_id": session_id},
+        {
+            "$set": {
+                f"scheduling_alias_map.{alias_key}.replacement": replacement,
+                f"scheduling_alias_map.{alias_key}.canonical_value": canonical_value,
+                f"scheduling_alias_map.{alias_key}.source": source,
+                f"scheduling_alias_map.{alias_key}.last_used_at": now,
+                "updated_at": now,
+            },
+            "$inc": {f"scheduling_alias_map.{alias_key}.usage_count": 1},
+            "$addToSet": {f"scheduling_alias_map.{alias_key}.raw_phrases": raw_phrase},
+            "$setOnInsert": {"created_at": now},
+        },
+        upsert=True,
+    )
+
+
+def _apply_learned_aliases(session_id, text):
+    alias_map = _get_scheduling_alias_map(session_id)
+    normalized = text
+    for alias_key, alias_data in alias_map.items():
+        replacement = (alias_data or {}).get("replacement")
+        canonical_value = (alias_data or {}).get("canonical_value")
+        raw_phrases = sorted((alias_data or {}).get("raw_phrases") or [], key=len, reverse=True)
+        if not replacement:
+            continue
+        for raw_phrase in raw_phrases:
+            escaped_phrase = re.escape(raw_phrase)
+            if re.search(escaped_phrase, normalized, flags=re.IGNORECASE):
+                normalized = re.sub(escaped_phrase, replacement, normalized, flags=re.IGNORECASE)
+                _record_scheduling_alias_usage(
+                    session_id,
+                    alias_key,
+                    raw_phrase,
+                    replacement,
+                    canonical_value,
+                    source="learned",
+                )
+    return normalized
+
+
+def _normalize_scheduling_aliases(session_id, text):
+    normalized = _normalize_text(text)
+    normalized = _apply_learned_aliases(session_id, normalized)
+
+    for alias in SCHEDULING_ALIAS_SEEDS:
+        matched_phrases = []
+
+        def _replace(match):
+            matched_phrases.append(match.group(0).strip())
+            return alias["replacement"]
+
+        updated = re.sub(alias["pattern"], _replace, normalized, flags=re.IGNORECASE)
+        if updated != normalized:
+            normalized = updated
+            for raw_phrase in matched_phrases:
+                _record_scheduling_alias_usage(
+                    session_id,
+                    alias["alias_key"],
+                    raw_phrase,
+                    alias["replacement"],
+                    alias["canonical_value"],
+                    source="seed",
+                )
+
+    normalized = _normalize_text(normalized)
+    return normalized
 
 
 def _tokenize_title(text):
@@ -1967,17 +2078,19 @@ def build_scheduling_welcome(session_id):
 
 
 def handle_scheduling_message(session_id, user_message):
+    normalized_user_message = _normalize_scheduling_aliases(session_id, user_message)
+
     if not has_google_calendar_connection(session_id):
         return {
             "reply": "Calendar scheduling is almost ready. Connect your calendar in Settings first, then I can create and sync events for you here.",
             "scheduling_draft": None,
         }
 
-    if _is_daily_summary_request(user_message):
+    if _is_daily_summary_request(normalized_user_message):
         return _build_daily_summary(session_id)
 
-    if _is_bulk_shift_delete_request(user_message):
-        target_events = _find_bulk_target_events(session_id, user_message)
+    if _is_bulk_shift_delete_request(normalized_user_message):
+        target_events = _find_bulk_target_events(session_id, normalized_user_message)
         if not target_events:
             return {
                 "reply": "I couldn’t find any saved on-call shifts for that month yet.",
@@ -1986,7 +2099,7 @@ def handle_scheduling_message(session_id, user_message):
         serialized_targets = [_serialize_existing_event(item) for item in target_events]
         draft_id = _save_draft(
             session_id,
-            user_message,
+            normalized_user_message,
             action_type="bulk_delete",
             target_events=serialized_targets,
         )
@@ -2011,7 +2124,7 @@ def handle_scheduling_message(session_id, user_message):
     pending_context = _get_pending_details_context(session_id)
     pending_message = (pending_context or {}).get("raw_message")
     last_reference = _get_last_scheduling_reference(session_id)
-    extraction = extract_scheduling_intent(user_message, pending_message=pending_message, last_reference=last_reference)
+    extraction = extract_scheduling_intent(normalized_user_message, pending_message=pending_message, last_reference=last_reference)
     use_llm_extraction = _should_use_llm_extraction(extraction)
 
     log_event(
@@ -2019,16 +2132,17 @@ def handle_scheduling_message(session_id, user_message):
         session_id=session_id,
         payload={
             "user_message": user_message,
+            "normalized_user_message": normalized_user_message,
             "used_llm_extraction": use_llm_extraction,
             "extraction": extraction,
             "last_reference": last_reference,
         },
     )
 
-    action_type = extraction.get("action") if use_llm_extraction and extraction.get("action") else _detect_action(user_message)
+    action_type = extraction.get("action") if use_llm_extraction and extraction.get("action") else _detect_action(normalized_user_message)
     if action_type in {"update", "delete"}:
         _clear_pending_details_context(session_id)
-        target_event = _find_target_event_from_extraction(session_id, extraction, user_message) if use_llm_extraction else _find_target_event(session_id, user_message)
+        target_event = _find_target_event_from_extraction(session_id, extraction, normalized_user_message) if use_llm_extraction else _find_target_event(session_id, normalized_user_message)
         if not target_event and use_llm_extraction and extraction.get("references_previous"):
             target_event = _find_target_event_from_last_reference(session_id)
         if not target_event:
@@ -2042,7 +2156,7 @@ def handle_scheduling_message(session_id, user_message):
             _save_last_scheduling_reference(session_id, target_event)
             draft_id = _save_draft(
                 session_id,
-                user_message,
+                normalized_user_message,
                 action_type="delete",
                 target_event=serialized_target,
             )
@@ -2063,7 +2177,7 @@ def handle_scheduling_message(session_id, user_message):
                 },
             }
 
-        parsed = _build_update_from_extraction(extraction, target_event, user_message) if use_llm_extraction else _build_update_from_message(user_message, target_event)
+        parsed = _build_update_from_extraction(extraction, target_event, normalized_user_message) if use_llm_extraction else _build_update_from_message(normalized_user_message, target_event)
         _save_last_scheduling_reference(session_id, target_event)
         conflicts = [
             conflict
@@ -2072,7 +2186,7 @@ def handle_scheduling_message(session_id, user_message):
         ]
         draft_id = _save_draft(
             session_id,
-            user_message,
+            normalized_user_message,
             action_type="update",
             parsed_event=_serialize_event(parsed),
             conflicts=conflicts,
@@ -2096,7 +2210,7 @@ def handle_scheduling_message(session_id, user_message):
             },
         }
 
-    merged_message = _maybe_merge_with_pending_context(session_id, user_message)
+    merged_message = _maybe_merge_with_pending_context(session_id, normalized_user_message)
 
     bulk_parsed = _build_mixed_template_events_from_message(merged_message)
     if not bulk_parsed:
