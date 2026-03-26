@@ -65,6 +65,14 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
+def _ensure_utc_aware(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _cache_key(*parts):
     joined = "||".join(str(part or "") for part in parts)
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
@@ -81,6 +89,7 @@ def _load_cache(cache_type, key):
         return None
 
     expires_at = doc.get("expires_at")
+    expires_at = _ensure_utc_aware(expires_at)
     if expires_at and expires_at < now:
         return None
 
@@ -349,6 +358,7 @@ def _extract_page_date(soup, text):
 
 
 def _recency_bonus(updated_at, title="", snippet=""):
+    updated_at = _ensure_utc_aware(updated_at)
     if not updated_at:
         bonus = 0
     else:
@@ -371,6 +381,7 @@ def _recency_bonus(updated_at, title="", snippet=""):
 
 
 def _format_updated_label(updated_at):
+    updated_at = _ensure_utc_aware(updated_at)
     if not updated_at:
         return None
     return updated_at.strftime("%Y-%m-%d")
