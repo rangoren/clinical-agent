@@ -97,20 +97,6 @@
                 linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.62));
         }
 
-        .sticky-mode-shell {
-            position: sticky;
-            top: 0;
-            z-index: 9;
-            padding: 10px 18px 0;
-            background: linear-gradient(180deg, rgba(247, 250, 249, 0.96), rgba(247, 250, 249, 0.72) 70%, rgba(247, 250, 249, 0));
-            backdrop-filter: blur(16px);
-        }
-
-        .sticky-mode-inner {
-            display: flex;
-            justify-content: center;
-        }
-
         .brand {
             display: flex;
             align-items: center;
@@ -142,47 +128,6 @@
             font-weight: 720;
             letter-spacing: -0.01em;
             color: var(--text);
-        }
-
-        .quick-mode-rail {
-            position: fixed;
-            left: 14px;
-            bottom: 92px;
-            z-index: 30;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            padding: 8px;
-            border-radius: 18px;
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px solid rgba(15, 118, 110, 0.12);
-            box-shadow: 0 14px 34px rgba(20, 37, 33, 0.14);
-            backdrop-filter: blur(14px);
-        }
-
-        .quick-mode-button {
-            width: 48px;
-            height: 48px;
-            border: none;
-            border-radius: 14px;
-            background: rgba(244, 249, 247, 0.96);
-            color: var(--muted);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: transform 120ms ease, background 120ms ease, color 120ms ease, box-shadow 120ms ease;
-        }
-
-        .quick-mode-button svg {
-            width: 20px;
-            height: 20px;
-        }
-
-        .quick-mode-button.active {
-            background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(15, 118, 110, 0.08));
-            color: var(--brand-strong);
-            box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
         }
 
         .topbar-meta {
@@ -953,7 +898,46 @@
             padding: 8px;
             display: flex;
             flex-direction: column;
-            gap: 0;
+            gap: 8px;
+        }
+
+        .composer-mode-strip {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 2px 2px 0;
+        }
+
+        .composer-mode-strip.open {
+            display: flex;
+        }
+
+        .composer-mode-button {
+            flex: 1;
+            min-height: 48px;
+            border: none;
+            border-radius: 16px;
+            background: rgba(244, 249, 247, 0.96);
+            color: var(--muted);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font: inherit;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .composer-mode-button svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .composer-mode-button.active {
+            background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(15, 118, 110, 0.08));
+            color: var(--brand-strong);
+            box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
         }
 
         .composer-main {
@@ -962,6 +946,26 @@
             gap: 10px;
             min-width: 0;
             width: 100%;
+        }
+
+        .composer-plus-button {
+            width: 58px;
+            min-width: 58px;
+            height: 58px;
+            padding: 0;
+            border: 1px solid rgba(15, 118, 110, 0.14);
+            border-radius: 18px;
+            background: rgba(244, 249, 247, 0.96);
+            color: var(--brand-strong);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .composer-plus-button svg {
+            width: 20px;
+            height: 20px;
         }
 
         .composer-input {
@@ -1009,10 +1013,10 @@
             height: 58px;
             padding: 0;
             border-radius: 18px;
-            background: var(--user);
+            background: linear-gradient(135deg, #58b8ac 0%, #79c7bc 100%);
             color: white;
             font-weight: 700;
-            box-shadow: 0 12px 28px rgba(15, 118, 110, 0.24);
+            box-shadow: 0 10px 24px rgba(88, 184, 172, 0.18);
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -1112,10 +1116,6 @@
                 padding: 18px 20px;
             }
 
-            .sticky-mode-shell {
-                padding: 12px 20px 0;
-            }
-
             .chat-panel {
                 padding: 10px 10px 26px;
             }
@@ -1151,10 +1151,6 @@
                 padding: calc(env(safe-area-inset-top, 0px) + 6px) 10px 6px;
             }
 
-            .sticky-mode-shell {
-                padding: 8px 10px 0;
-            }
-
             .brand {
                 gap: 0;
                 min-width: 0;
@@ -1167,19 +1163,6 @@
             .brand-title {
                 font-size: 1.12rem;
                 line-height: 1.1;
-            }
-
-            .quick-mode-rail {
-                left: 10px;
-                bottom: calc(env(safe-area-inset-bottom, 0px) + 78px);
-                padding: 7px;
-                border-radius: 16px;
-            }
-
-            .quick-mode-button {
-                width: 44px;
-                height: 44px;
-                border-radius: 13px;
             }
 
             .content {
@@ -1233,14 +1216,27 @@
             .composer-card {
                 border-radius: 18px;
                 padding: 4px;
-                gap: 0;
+                gap: 6px;
+            }
+
+            .composer-mode-button {
+                min-height: 44px;
+                font-size: 0.82rem;
+                border-radius: 14px;
             }
 
             .composer-main {
                 gap: 4px;
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) 42px;
+                grid-template-columns: 53px minmax(0, 1fr) 53px;
                 align-items: end;
+            }
+
+            .composer-plus-button {
+                width: 53px;
+                min-width: 53px;
+                height: 53px;
+                border-radius: 14px;
             }
 
             .composer-input {
@@ -1463,11 +1459,6 @@
                 padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
             }
 
-            .sticky-mode-shell {
-                top: 0;
-                padding-top: 8px;
-            }
-
             .content {
                 padding-top: 8px;
             }
@@ -1484,22 +1475,6 @@
     </style>
 </head>
 <body>
-    <div class="quick-mode-rail" aria-label="Quick mode switch">
-        <button id="quick-mode-clinical" class="quick-mode-button active" type="button" aria-label="Clinical mode" onclick="switchAppMode('clinical')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 4V20"></path>
-                <path d="M4 12H20"></path>
-            </svg>
-        </button>
-        <button id="quick-mode-scheduling" class="quick-mode-button" type="button" aria-label="Scheduling mode" onclick="switchAppMode('scheduling')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="3.5" y="5" width="17" height="15" rx="2.5"></rect>
-                <path d="M8 3.5V7"></path>
-                <path d="M16 3.5V7"></path>
-                <path d="M3.5 10.5H20.5"></path>
-            </svg>
-        </button>
-    </div>
     <main class="app-shell">
         <header class="topbar">
             <div class="brand">
@@ -1541,15 +1516,6 @@
             </div>
         </header>
 
-        <div class="sticky-mode-shell">
-            <div class="sticky-mode-inner">
-                <div class="mode-switch" role="tablist" aria-label="Assistant mode">
-                    <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
-                    <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
-                </div>
-            </div>
-        </div>
-
         <section class="content">
             <div id="session-banner" class="session-banner">
                 <p id="session-banner-text"></p>
@@ -1563,7 +1529,31 @@
 
         <footer class="composer-shell">
             <div class="composer-card">
+                <div id="composer-mode-strip" class="composer-mode-strip">
+                    <button id="mode-clinical" class="composer-mode-button active" type="button" onclick="switchAppMode('clinical')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 4V20"></path>
+                            <path d="M4 12H20"></path>
+                        </svg>
+                        <span>Clinical</span>
+                    </button>
+                    <button id="mode-scheduling" class="composer-mode-button" type="button" onclick="switchAppMode('scheduling')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3.5" y="5" width="17" height="15" rx="2.5"></rect>
+                            <path d="M8 3.5V7"></path>
+                            <path d="M16 3.5V7"></path>
+                            <path d="M3.5 10.5H20.5"></path>
+                        </svg>
+                        <span>Scheduling</span>
+                    </button>
+                </div>
                 <div class="composer-main">
+                    <button id="composer-plus-button" class="composer-plus-button" type="button" aria-label="Open mode switch" onclick="toggleComposerModeStrip()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 5V19"></path>
+                            <path d="M5 12H19"></path>
+                        </svg>
+                    </button>
                     <textarea id="input" class="composer-input" placeholder="Type your message..." rows="1"></textarea>
                     <button id="send-button" class="primary-button" type="button" aria-label="Send message" onclick="sendMessage()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1582,6 +1572,7 @@
         let appMode = "clinical";
         let googleCalendarConnected = false;
         let studyCardsRequested = false;
+        let composerModeStripOpen = false;
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -1625,6 +1616,18 @@
         }
 
         function setStatus(_text) {}
+
+        function setComposerModeStripOpen(open) {
+            composerModeStripOpen = !!open;
+            const strip = document.getElementById("composer-mode-strip");
+            if (strip) {
+                strip.classList.toggle("open", composerModeStripOpen);
+            }
+        }
+
+        function toggleComposerModeStrip() {
+            setComposerModeStripOpen(!composerModeStripOpen);
+        }
 
         function getStudyCardsShell() {
             return document.getElementById("study-cards-shell");
@@ -1745,8 +1748,6 @@
         function renderModeState() {
             document.getElementById("mode-clinical").classList.toggle("active", appMode === "clinical");
             document.getElementById("mode-scheduling").classList.toggle("active", appMode === "scheduling");
-            document.getElementById("quick-mode-clinical").classList.toggle("active", appMode === "clinical");
-            document.getElementById("quick-mode-scheduling").classList.toggle("active", appMode === "scheduling");
             document.getElementById("settings-shell").classList.toggle("visible", appMode === "scheduling");
             if (appMode !== "scheduling") {
                 closeSettingsMenu();
@@ -1867,6 +1868,7 @@
         function switchAppMode(nextMode) {
             if (appMode === nextMode) return;
             appMode = nextMode;
+            setComposerModeStripOpen(false);
             renderModeState();
             document.getElementById("chat").innerHTML = "";
             hideSessionBanner();
