@@ -1318,11 +1318,6 @@
             renderModeState();
             document.getElementById("chat").innerHTML = "";
             hideSessionBanner();
-            appendAssistantMessage(
-                appMode === "scheduling"
-                    ? "Scheduling is on."
-                    : "Clinical Assistant is active."
-            );
             bootstrapSession();
         }
 

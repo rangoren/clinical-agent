@@ -31,7 +31,7 @@ async def handle_session_state(request: Request):
         session_id = data.get("session_id")
         app_mode = data.get("app_mode", "clinical")
         if app_mode == "scheduling":
-            return JSONResponse({"state": "ready", "needs_onboarding": False, "reply": build_scheduling_welcome()})
+            return JSONResponse({"state": "ready", "needs_onboarding": False, "reply": build_scheduling_welcome(session_id)})
         return JSONResponse(get_session_state(session_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/session-state", "error": str(exc)}, level="error")
