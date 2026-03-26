@@ -33,6 +33,7 @@ from services.profile_service import (
 )
 from services.prompt_service import build_basic_clinical_system_prompt, build_clinical_system_prompt, build_general_system_prompt
 from services.response_service import generate_reply
+from services.study_service import resolve_study_chat_message
 from services.text_formatting import format_basic_clinical_response, format_response
 from services.trusted_source_registry import get_domain_tier, get_source_domain, infer_question_route
 from services.undo_service import clear_last_saved, record_last_saved
@@ -604,5 +605,27 @@ def process_message(user_message, session_id):
 
     if not user_profile.get("onboarding_done"):
         return _handle_onboarding_message(session_id, user_profile, user_message)
+
+    study_response = resolve_study_chat_message(session_id, user_message)
+    if study_response:
+        save_message("user", user_message, session_id, metadata={"intent": "study_followup"})
+        assistant_message_id = save_message(
+            "assistant",
+            study_response.get("reply", ""),
+            session_id,
+            metadata={"intent": "study_followup_reply"},
+        )
+        response = _build_message_response(
+            reply=study_response.get("reply", ""),
+            assistant_message_id=assistant_message_id,
+            sources=study_response.get("sources", []),
+        )
+        if study_response.get("study_item"):
+            response["study_item"] = study_response["study_item"]
+        if study_response.get("study_followups"):
+            response["study_followups"] = study_response["study_followups"]
+        if study_response.get("study_context_item_id"):
+            response["study_context_item_id"] = study_response["study_context_item_id"]
+        return response
 
     return _handle_regular_message(session_id, user_profile, user_message)

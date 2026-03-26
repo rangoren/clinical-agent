@@ -2306,6 +2306,19 @@
                     appendSourcesCard(data.sources);
                 }
 
+                if (data.study_item) {
+                    appendStudyInteractionCard(data.study_item);
+                }
+
+                if (data.study_followups) {
+                    const studyItemId = data.study_item
+                        ? data.study_item.content_item_id
+                        : data.study_context_item_id;
+                    if (studyItemId) {
+                        appendStudyFollowupCard(studyItemId, data.study_followups);
+                    }
+                }
+
                 if (data.suggested_save) {
                     appendSuggestedSaveCard(data.suggested_save);
                 }

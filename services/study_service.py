@@ -1,5 +1,6 @@
 from datetime import datetime
 from random import Random
+import re
 
 from db import study_content_collection, study_user_state_collection
 from services.logging_service import log_event
@@ -201,6 +202,8 @@ def _default_state(session_id):
         "last_interaction_type": None,
         "last_incomplete_item_id": None,
         "last_incomplete_item_type": None,
+        "last_active_item_id": None,
+        "last_active_item_type": None,
         "topics_seen": [],
         "topics_correct_count": {},
         "topics_incorrect_count": {},
@@ -285,6 +288,19 @@ def _source_payload(item):
             "updated_at": item.get("last_reviewed_at"),
         }
     ]
+
+
+def _normalize_text(text):
+    return re.sub(r"\s+", " ", (text or "").strip().lower())
+
+
+def _get_active_item(session_id):
+    state = _load_state(session_id)
+    item_id = state.get("last_incomplete_item_id") or state.get("last_active_item_id")
+    if not item_id:
+        return None, state
+    item = study_content_collection.find_one({"id": item_id, "enabled": True}, {"_id": 0})
+    return item, state
 
 
 def get_idle_study_cards(session_id):
@@ -411,6 +427,8 @@ def open_study_card(session_id, content_item_id, card_type):
             "last_interaction_type": item["item_type"],
             "last_incomplete_item_id": item["id"],
             "last_incomplete_item_type": item["item_type"],
+            "last_active_item_id": item["id"],
+            "last_active_item_type": item["item_type"],
             "last_studied_topic": item["topic"],
             "cards_clicked_history": _trim_history((state.get("cards_clicked_history") or []) + [item["id"]], 18),
             "recent_topic_history": _trim_history((state.get("recent_topic_history") or []) + [item["topic"]], 12),
@@ -453,6 +471,8 @@ def answer_mcq(session_id, content_item_id, selected_option):
             "last_interaction_type": "mcq_feedback",
             "last_incomplete_item_id": None,
             "last_incomplete_item_type": None,
+            "last_active_item_id": item["id"],
+            "last_active_item_type": item["item_type"],
             "topics_seen": _trim_history((state.get("topics_seen") or []) + [topic], 30),
             "topics_correct_count": correct_counts,
             "topics_incorrect_count": incorrect_counts,
@@ -470,6 +490,7 @@ def answer_mcq(session_id, content_item_id, selected_option):
     reply = f"{'Correct.' if correct else 'Not quite.'} {item['short_explanation']} {item['key_takeaway']}"
     return {
         "reply": reply,
+        "study_context_item_id": item["id"],
         "study_followups": [
             {"action": "another_question", "label": "Another question"},
             {"action": "explain_why", "label": "Explain why"},
@@ -511,6 +532,16 @@ def handle_study_action(session_id, content_item_id, action):
         next_item = _pick_related_item(session_id, item, "mcq", exclude_self=True)
         if not next_item:
             return {"reply": "I don’t have another approved question ready on that yet."}
+        _save_state(
+            session_id,
+            {
+                "last_incomplete_item_id": next_item["id"],
+                "last_incomplete_item_type": next_item["item_type"],
+                "last_active_item_id": next_item["id"],
+                "last_active_item_type": next_item["item_type"],
+                "last_studied_topic": next_item["topic"],
+            },
+        )
         return {
             "reply": f"Another quick question on {next_item['topic']}.",
             "study_item": _build_study_item_payload(next_item),
@@ -520,6 +551,16 @@ def handle_study_action(session_id, content_item_id, action):
         next_item = _pick_related_item(session_id, item, "mcq")
         if not next_item:
             return {"reply": "I don’t have an approved quiz item on that topic yet."}
+        _save_state(
+            session_id,
+            {
+                "last_incomplete_item_id": next_item["id"],
+                "last_incomplete_item_type": next_item["item_type"],
+                "last_active_item_id": next_item["id"],
+                "last_active_item_type": next_item["item_type"],
+                "last_studied_topic": next_item["topic"],
+            },
+        )
         return {
             "reply": f"Quick question on {next_item['topic']}.",
             "study_item": _build_study_item_payload(next_item),
@@ -529,9 +570,78 @@ def handle_study_action(session_id, content_item_id, action):
         next_item = _pick_related_item(session_id, item, "pearl", exclude_self=True)
         if not next_item:
             return {"reply": "I don’t have another approved pearl ready yet."}
+        _save_state(
+            session_id,
+            {
+                "last_incomplete_item_id": next_item["id"],
+                "last_incomplete_item_type": next_item["item_type"],
+                "last_active_item_id": next_item["id"],
+                "last_active_item_type": next_item["item_type"],
+                "last_studied_topic": next_item["topic"],
+            },
+        )
         return {
             "reply": f"Another quick pearl on {next_item['topic']}.",
             "study_item": _build_study_item_payload(next_item),
         }
 
     return {"reply": "I can keep going on this topic, but I don’t have that action wired yet."}
+
+
+def _match_mcq_answer(item, user_message):
+    normalized = _normalize_text(user_message)
+    compact = re.sub(r"[^a-z0-9]", "", normalized)
+    if compact in {"a", "b", "c", "d"}:
+        return compact.upper()
+
+    for option in item.get("options", []):
+        option_key = option["key"].lower()
+        option_text = _normalize_text(option["text"])
+        if normalized == option_text or normalized in {option_key, f"option {option_key}", f"answer {option_key}"}:
+            return option["key"]
+        if option_text and option_text in normalized:
+            return option["key"]
+    return None
+
+
+def _infer_followup_action(item_type, user_message):
+    normalized = _normalize_text(user_message)
+    if not normalized:
+        return None
+
+    source_markers = ("show source", "source", "reference", "show me the source", "מקור", "תראה מקור")
+    explain_markers = ("why", "explain", "explain why", "why not", "למה", "תסביר", "תסבירי")
+    recap_markers = ("rule", "recap", "summary", "summarize", "quick recap", "הכלל", "סיכום", "בקצרה")
+    quiz_markers = ("quiz me", "test me", "ask me", "בחן אותי", "תבחן אותי")
+    another_markers = ("another", "another one", "next one", "עוד", "עוד אחת", "עוד שאלה")
+    pearl_markers = ("another pearl", "another review", "עוד פנינה")
+
+    if any(marker in normalized for marker in source_markers):
+        return "show_source"
+    if any(marker in normalized for marker in explain_markers):
+        return "explain_why"
+    if any(marker in normalized for marker in recap_markers):
+        return "quick_recap"
+    if item_type == "pearl" and any(marker in normalized for marker in quiz_markers):
+        return "quiz_me"
+    if item_type == "pearl" and any(marker in normalized for marker in pearl_markers + another_markers):
+        return "another_pearl"
+    if item_type == "mcq" and any(marker in normalized for marker in another_markers):
+        return "another_question"
+    return None
+
+
+def resolve_study_chat_message(session_id, user_message):
+    item, _state = _get_active_item(session_id)
+    if not item:
+        return None
+
+    answer_key = _match_mcq_answer(item, user_message) if item["item_type"] == "mcq" else None
+    if answer_key:
+        return answer_mcq(session_id, item["id"], answer_key)
+
+    action = _infer_followup_action(item["item_type"], user_message)
+    if action:
+        return handle_study_action(session_id, item["id"], action)
+
+    return None
