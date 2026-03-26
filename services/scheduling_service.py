@@ -1194,6 +1194,121 @@ def _build_bulk_events_from_extraction(extraction, raw_message):
     return {"status": "ready", "events": events, "calendar_type": calendar_type, "title": title}
 
 
+def _extract_template_clause_days(segment):
+    normalized = _normalize_text(segment)
+    days = set()
+
+    list_match = re.search(r"\b(\d{1,2}(?:\s*,\s*\d{1,2})+)\b", normalized)
+    if list_match:
+        for part in list_match.group(1).split(","):
+            try:
+                days.add(int(part.strip()))
+            except Exception:
+                continue
+
+    single_matches = re.findall(r"(?:\bב|\bon|\bfor|\bdate\b|\bday\b|\bבתאריך|\bליום|\bביום)\s*(\d{1,2})\b", normalized, flags=re.IGNORECASE)
+    for part in single_matches:
+        try:
+            days.add(int(part))
+        except Exception:
+            continue
+
+    trailing_match = re.search(r"(\d{1,2})\s*$", normalized)
+    if trailing_match:
+        try:
+            days.add(int(trailing_match.group(1)))
+        except Exception:
+            pass
+
+    return sorted(day for day in days if 1 <= day <= 31)
+
+
+def _build_template_events_for_days(template, days, month, year, calendar_type):
+    reminders = _infer_reminders(calendar_type)
+    start_time = _parse_hhmm(template["start_time"])
+    end_time = _parse_hhmm(template["end_time"])
+    events = []
+    for day in days:
+        if day > monthrange(year, month)[1]:
+            continue
+        event_date = datetime(year, month, day).date()
+        if template.get("is_shift"):
+            start_at, end_at = _build_shift_window_from_times(
+                event_date,
+                start_time,
+                end_time=end_time,
+                duration_minutes=template["duration_minutes"],
+            )
+        else:
+            start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=start_time[0], minute=start_time[1])
+            end_at = datetime.combine(event_date, datetime.min.time()).replace(hour=end_time[0], minute=end_time[1])
+            if end_at <= start_at:
+                end_at += timedelta(days=1)
+        events.append(
+            {
+                "title": template["title"],
+                "calendar_type": calendar_type,
+                "reminders": reminders,
+                "location": template["location"],
+                "duration_minutes": int((end_at - start_at).total_seconds() / 60),
+                "start_at": start_at,
+                "end_at": end_at,
+            }
+        )
+    return events
+
+
+def _build_mixed_template_events_from_message(message):
+    normalized = _normalize_text(message)
+    lowered = normalized.lower()
+    month, year = _extract_month_year(normalized)
+    now = _utcnow()
+    if not month:
+        month = now.month
+        year = now.year
+
+    clauses = []
+    pattern_map = [
+        (r"(תורנות חצי|חצי תורנות|half shift|half-call|half call|partial call)(.*?)(?=(?:\bתורנות\b|\bתורנויות\b|\bתורניות\b|\bמחלקות\b|$))", _match_scheduling_template("תורנות חצי")),
+        (r"(מחלקות|משמרת מחלקות|department shift|ward shift)(.*?)(?=(?:\bתורנות\b|\bתורנויות\b|\bתורניות\b|\bתורנות חצי\b|$))", _match_scheduling_template("מחלקות")),
+        (r"(תורנויות|תורניות|תורנות|on-call|on call|call shifts?)(.*?)(?=(?:\bתורנות חצי\b|\bחצי תורנות\b|\bמחלקות\b|$))", _match_scheduling_template("תורנות")),
+    ]
+
+    for pattern, template in pattern_map:
+        for match in re.finditer(pattern, lowered, flags=re.IGNORECASE):
+            full_segment = normalized[match.start():match.end()]
+            days = _extract_template_clause_days(full_segment)
+            if days:
+                clauses.append((match.start(), template, days))
+
+    if len(clauses) < 2:
+        return None
+
+    calendar_type = _infer_calendar_type(normalized)
+    events = []
+    for _, template, days in sorted(clauses, key=lambda item: item[0]):
+        events.extend(_build_template_events_for_days(template, days, month, year, calendar_type))
+
+    unique_events = []
+    seen = set()
+    for event in sorted(events, key=lambda item: (item["start_at"], item["title"])):
+        key = (event["title"], event["start_at"], event["end_at"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_events.append(event)
+
+    if len(unique_events) < 2:
+        return None
+
+    return {
+        "status": "ready",
+        "events": unique_events,
+        "calendar_type": calendar_type,
+        "title": unique_events[0]["title"] if len({item["title"] for item in unique_events}) == 1 else "Mixed shifts",
+    }
+
+
 def _find_target_event_from_extraction(session_id, extraction, raw_message):
     extraction = _apply_extraction_defaults(extraction, raw_message)
     requested_date = _parse_iso_date(extraction.get("source_date")) or _parse_iso_date(extraction.get("date"))
@@ -1720,6 +1835,13 @@ def _build_calendar_selector_payload(session_id, calendar_type):
 
 
 def _resolve_reply_calendar_name(session_id, selected_calendar_id=None, provider_calendar_id=None, fallback_calendar_type=None):
+    calendars = get_google_calendars(session_id)
+    chosen_id = selected_calendar_id or provider_calendar_id
+    if chosen_id:
+        matching = next((item for item in calendars if item.get("provider_calendar_id") == chosen_id), None)
+        if matching:
+            return "Primary" if matching.get("is_primary") else (matching.get("name") or "Calendar")
+
     calendar_name = None
     if selected_calendar_id:
         calendar_name = get_google_calendar_name(session_id, selected_calendar_id)
@@ -1931,7 +2053,9 @@ def handle_scheduling_message(session_id, user_message):
 
     merged_message = _maybe_merge_with_pending_context(session_id, user_message)
 
-    bulk_parsed = _build_bulk_events_from_extraction(extraction, merged_message) if use_llm_extraction else None
+    bulk_parsed = _build_mixed_template_events_from_message(merged_message)
+    if not bulk_parsed:
+        bulk_parsed = _build_bulk_events_from_extraction(extraction, merged_message) if use_llm_extraction else None
     if not bulk_parsed:
         bulk_parsed = _build_bulk_events_from_message(merged_message)
     if bulk_parsed:

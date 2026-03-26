@@ -1423,7 +1423,7 @@
             scrollChatToBottom();
         }
 
-        function appendSchedulingDraftCard(draft) {
+        function appendSchedulingDraftCard(draft, linkedMessageRow = null) {
             if (!draft || !draft.draft_id) return;
 
             const chat = document.getElementById("chat");
@@ -1589,7 +1589,7 @@
                         : `Create in ${selectedCalendarName}`
                 )
                 : confirmLabel;
-            confirmButton.addEventListener("click", () => confirmSchedulingDraft(draft.draft_id, card, selectedCalendarId));
+            confirmButton.addEventListener("click", () => confirmSchedulingDraft(draft.draft_id, card, selectedCalendarId, linkedMessageRow));
 
             const dismissButton = document.createElement("button");
             dismissButton.className = "ghost-button";
@@ -1679,7 +1679,7 @@
 
                 const data = await response.json();
                 if (card) card.remove();
-                appendAssistantMessage(data.reply);
+                const assistantRow = appendAssistantMessage(data.reply);
 
                 if (data.undo) {
                     const label = data.undo_type === "protocol"
@@ -1868,7 +1868,7 @@
                 }
 
                 if (data.scheduling_draft) {
-                    appendSchedulingDraftCard(data.scheduling_draft);
+                    appendSchedulingDraftCard(data.scheduling_draft, assistantRow);
                 }
             } catch (error) {
                 setThinkingState(false);
@@ -1907,7 +1907,7 @@
             }
         }
 
-        async function confirmSchedulingDraft(draftId, card, selectedCalendarId = null) {
+        async function confirmSchedulingDraft(draftId, card, selectedCalendarId = null, linkedMessageRow = null) {
             try {
                 const response = await fetch("/scheduling/confirm", {
                     method: "POST",
@@ -1922,6 +1922,7 @@
                 });
                 const data = await response.json();
                 if (card) card.remove();
+                if (linkedMessageRow) linkedMessageRow.remove();
                 appendAssistantMessage(data.reply || "Draft confirmed.");
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
