@@ -2188,10 +2188,12 @@
                 if (data.reply) {
                     clearStudyCards();
                     appendAssistantMessage(data.reply);
+                } else if (data.cards && data.cards.length === 3) {
+                    renderStudyCards(data.cards);
                 }
                 await refreshCalendarStatus();
                 setComposerEnabled(true);
-                if (!data.reply) {
+                if (!data.reply && (!data.cards || data.cards.length !== 3)) {
                     maybeShowStudyCards(true);
                 }
             } catch (error) {
