@@ -522,6 +522,161 @@
             margin-bottom: 2px;
         }
 
+        .study-cards-shell {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            padding: 6px 6px 10px;
+        }
+
+        .study-cards-shell.visible {
+            display: flex;
+        }
+
+        .study-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .study-entry-card,
+        .study-flow-card,
+        .study-followup-card {
+            border-radius: 16px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.86);
+            box-shadow: 0 12px 24px rgba(20, 37, 33, 0.06);
+            animation: riseIn 180ms ease-out;
+        }
+
+        .study-entry-card {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 0;
+            cursor: pointer;
+        }
+
+        .study-entry-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .study-entry-type {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--brand);
+        }
+
+        .study-entry-topic {
+            font-size: 0.74rem;
+            color: var(--muted);
+        }
+
+        .study-entry-title {
+            margin: 0;
+            font-size: 0.96rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .study-entry-subtitle {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.84rem;
+            line-height: 1.4;
+        }
+
+        .study-entry-cta {
+            align-self: flex-start;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(15, 118, 110, 0.1);
+            color: var(--brand-strong);
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .study-flow-card,
+        .study-followup-card {
+            align-self: flex-start;
+            max-width: min(100%, 760px);
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .study-flow-kicker {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--brand);
+        }
+
+        .study-flow-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .study-flow-text,
+        .study-flow-list {
+            margin: 0;
+            color: var(--text);
+            line-height: 1.5;
+            font-size: 0.92rem;
+        }
+
+        .study-flow-list {
+            padding-left: 1rem;
+        }
+
+        .study-options,
+        .study-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .study-option-button {
+            border: 1px solid rgba(15, 118, 110, 0.16);
+            background: rgba(245, 248, 247, 0.98);
+            color: var(--text);
+            padding: 10px 12px;
+            border-radius: 12px;
+            font: inherit;
+            font-size: 0.88rem;
+            text-align: left;
+            cursor: pointer;
+            min-width: min(100%, 260px);
+        }
+
+        .study-entry-card:hover,
+        .study-option-button:hover {
+            border-color: rgba(15, 118, 110, 0.28);
+            transform: translateY(-1px);
+        }
+
+        .study-option-button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .study-option-key {
+            font-weight: 700;
+            color: var(--brand-strong);
+            margin-right: 8px;
+        }
+
         .utility-text,
         .feedback-text,
         .sources-title {
@@ -995,6 +1150,18 @@
                 max-width: 100%;
             }
 
+            .study-cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .study-entry-card {
+                padding: 11px;
+            }
+
+            .study-option-button {
+                min-width: 100%;
+            }
+
             .sources-card {
                 padding: 10px 12px;
                 margin-top: 8px;
@@ -1142,6 +1309,7 @@
 
         <footer class="composer-shell">
             <div class="composer-card">
+                <div id="study-cards-shell" class="study-cards-shell"></div>
                 <div class="composer-main">
                     <textarea id="input" class="composer-input" placeholder="Type your message..." rows="1"></textarea>
                     <button id="send-button" class="primary-button" onclick="sendMessage()">Send</button>
@@ -1155,6 +1323,7 @@
         let chatReady = false;
         let appMode = "clinical";
         let googleCalendarConnected = false;
+        let studyCardsRequested = false;
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -1173,6 +1342,107 @@
         }
 
         function setStatus(_text) {}
+
+        function getStudyCardsShell() {
+            return document.getElementById("study-cards-shell");
+        }
+
+        function clearStudyCards() {
+            const shell = getStudyCardsShell();
+            if (!shell) return;
+            shell.innerHTML = "";
+            shell.classList.remove("visible");
+            studyCardsRequested = false;
+        }
+
+        function hideStudyCards() {
+            const shell = getStudyCardsShell();
+            if (!shell) return;
+            shell.classList.remove("visible");
+        }
+
+        function shouldShowStudyCards() {
+            const input = document.getElementById("input");
+            const chat = document.getElementById("chat");
+            return (
+                appMode === "clinical" &&
+                chat &&
+                chat.children.length === 0 &&
+                input &&
+                !input.value.trim()
+            );
+        }
+
+        function renderStudyCards(cards) {
+            const shell = getStudyCardsShell();
+            if (!shell || !cards || cards.length !== 3) {
+                clearStudyCards();
+                return;
+            }
+
+            const grid = document.createElement("div");
+            grid.className = "study-cards-grid";
+
+            cards.forEach((card) => {
+                const typeLabel = card.type === "practice"
+                    ? "Practice"
+                    : card.type === "pearl"
+                    ? "Pearl"
+                    : "Revisit";
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "study-entry-card";
+                button.innerHTML = `
+                    <div class="study-entry-top">
+                        <span class="study-entry-type">${escapeHtml(typeLabel)}</span>
+                        <span class="study-entry-topic">${escapeHtml(card.topic || "")}</span>
+                    </div>
+                    <p class="study-entry-title">${escapeHtml(card.title)}</p>
+                    <p class="study-entry-subtitle">${escapeHtml(card.subtitle)}</p>
+                    <span class="study-entry-cta">${escapeHtml(card.cta)}</span>
+                `;
+                button.addEventListener("click", () => openStudyCard(card.type, card.content_item_id));
+                grid.appendChild(button);
+            });
+
+            shell.innerHTML = "";
+            shell.appendChild(grid);
+            shell.classList.add("visible");
+        }
+
+        async function maybeShowStudyCards(force = false) {
+            if (!shouldShowStudyCards()) {
+                hideStudyCards();
+                return;
+            }
+
+            const shell = getStudyCardsShell();
+            if (!shell) return;
+
+            if (!force && shell.children.length > 0) {
+                shell.classList.add("visible");
+                return;
+            }
+
+            if (studyCardsRequested) return;
+            studyCardsRequested = true;
+
+            try {
+                const response = await fetch("/study/cards", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+                const data = await response.json();
+                renderStudyCards(data.cards || []);
+            } catch (_error) {
+                clearStudyCards();
+            }
+        }
 
         function closeSettingsMenu() {
             const panel = document.getElementById("settings-panel");
@@ -1318,6 +1588,7 @@
             renderModeState();
             document.getElementById("chat").innerHTML = "";
             hideSessionBanner();
+            clearStudyCards();
             bootstrapSession();
         }
 
@@ -1644,6 +1915,168 @@
             scrollChatToBottom();
         }
 
+        function appendStudyInteractionCard(studyItem) {
+            if (!studyItem || !studyItem.content_item_id) return null;
+
+            const chat = document.getElementById("chat");
+            const card = document.createElement("div");
+            card.className = "study-flow-card";
+            card.dataset.contentItemId = studyItem.content_item_id;
+
+            if (studyItem.item_type === "mcq") {
+                const optionsHtml = (studyItem.options || []).map((option) => `
+                    <button class="study-option-button" data-option-key="${escapeHtml(option.key)}">
+                        <span class="study-option-key">${escapeHtml(option.key)}</span>${escapeHtml(option.text)}
+                    </button>
+                `).join("");
+
+                card.innerHTML = `
+                    <div class="study-flow-kicker">Quick MCQ · ${escapeHtml(studyItem.topic || "")}</div>
+                    <p class="study-flow-title">${escapeHtml(studyItem.question_stem || "")}</p>
+                    <div class="study-options">${optionsHtml}</div>
+                `;
+
+                card.querySelectorAll(".study-option-button").forEach((button) => {
+                    button.addEventListener("click", () => submitStudyAnswer(studyItem.content_item_id, button.dataset.optionKey, card));
+                });
+            } else {
+                const bulletsHtml = (studyItem.bullets || []).map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("");
+                card.innerHTML = `
+                    <div class="study-flow-kicker">${escapeHtml(studyItem.topic || "")}</div>
+                    <p class="study-flow-title">${escapeHtml(studyItem.title || "")}</p>
+                    <ul class="study-flow-list">${bulletsHtml}</ul>
+                `;
+                if (studyItem.actions && studyItem.actions.length) {
+                    card.appendChild(buildStudyActionsBar(studyItem.content_item_id, studyItem.actions));
+                }
+            }
+
+            chat.appendChild(card);
+            scrollChatToBottom();
+            return card;
+        }
+
+        function buildStudyActionsBar(contentItemId, actions) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "study-actions";
+            actions.forEach((action) => {
+                const button = document.createElement("button");
+                button.className = "secondary-button";
+                button.textContent = action.label;
+                button.addEventListener("click", () => handleStudyAction(contentItemId, action.action));
+                wrapper.appendChild(button);
+            });
+            return wrapper;
+        }
+
+        function appendStudyFollowupCard(contentItemId, actions) {
+            if (!actions || !actions.length) return;
+            const chat = document.getElementById("chat");
+            const card = document.createElement("div");
+            card.className = "study-followup-card";
+            const title = document.createElement("p");
+            title.className = "study-flow-title";
+            title.textContent = "Keep going";
+            card.appendChild(title);
+            card.appendChild(buildStudyActionsBar(contentItemId, actions));
+            chat.appendChild(card);
+            scrollChatToBottom();
+        }
+
+        async function openStudyCard(cardType, contentItemId) {
+            clearStudyCards();
+            setThinkingState(true);
+            try {
+                const response = await fetch("/study/open", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        card_type: cardType,
+                        content_item_id: contentItemId
+                    })
+                });
+                const data = await response.json();
+                setThinkingState(false);
+                if (data.reply) {
+                    appendAssistantMessage(data.reply, "system");
+                }
+                if (data.study_item) {
+                    appendStudyInteractionCard(data.study_item);
+                }
+                if (data.sources && data.sources.length) {
+                    appendSourcesCard(data.sources);
+                }
+            } catch (error) {
+                setThinkingState(false);
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function submitStudyAnswer(contentItemId, selectedOption, card) {
+            if (card) {
+                card.querySelectorAll(".study-option-button").forEach((button) => {
+                    button.disabled = true;
+                });
+            }
+
+            try {
+                const response = await fetch("/study/answer", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        content_item_id: contentItemId,
+                        selected_option: selectedOption
+                    })
+                });
+                const data = await response.json();
+                if (data.reply) {
+                    appendAssistantMessage(data.reply);
+                }
+                if (data.study_followups) {
+                    appendStudyFollowupCard(contentItemId, data.study_followups);
+                }
+                if (data.sources && data.sources.length) {
+                    appendSourcesCard(data.sources);
+                }
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function handleStudyAction(contentItemId, action) {
+            try {
+                const response = await fetch("/study/action", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        content_item_id: contentItemId,
+                        action: action
+                    })
+                });
+                const data = await response.json();
+                if (data.reply) {
+                    appendAssistantMessage(data.reply);
+                }
+                if (data.study_item) {
+                    appendStudyInteractionCard(data.study_item);
+                }
+                if (data.sources && data.sources.length) {
+                    appendSourcesCard(data.sources);
+                }
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
         function escapeHtml(value) {
             const div = document.createElement("div");
             div.textContent = value;
@@ -1732,6 +2165,7 @@
                 const data = await response.json();
 
                 if (data.state === "new_onboarding") {
+                    clearStudyCards();
                     appendAssistantMessage(data.reply);
                     hideSessionBanner();
                     setComposerEnabled(true);
@@ -1739,6 +2173,7 @@
                 }
 
                 if (data.state === "incomplete_onboarding") {
+                    clearStudyCards();
                     showSessionBanner(
                         "You didn’t finish onboarding last time.",
                         `
@@ -1751,11 +2186,16 @@
 
                 hideSessionBanner();
                 if (data.reply) {
+                    clearStudyCards();
                     appendAssistantMessage(data.reply);
                 }
                 await refreshCalendarStatus();
                 setComposerEnabled(true);
+                if (!data.reply) {
+                    maybeShowStudyCards(true);
+                }
             } catch (error) {
+                clearStudyCards();
                 appendAssistantMessage("Error: " + error, "error");
                 setComposerEnabled(true);
                 setStatus("Error");
@@ -1764,6 +2204,7 @@
 
         async function continueOnboarding() {
             setStatus("Resuming");
+            clearStudyCards();
 
             try {
                 const response = await fetch("/continue-onboarding", {
@@ -1789,6 +2230,7 @@
 
         async function startChatMode() {
             setStatus("Resetting");
+            clearStudyCards();
 
             try {
                 const response = await fetch("/chat-mode", {
@@ -1820,6 +2262,7 @@
             const message = input.value.trim();
             if (!message) return;
 
+            clearStudyCards();
             appendUserMessage(message);
             input.value = "";
             autoResizeInput();
@@ -1979,7 +2422,14 @@
             }
         }
 
-        document.getElementById("input").addEventListener("input", autoResizeInput);
+        document.getElementById("input").addEventListener("input", function() {
+            autoResizeInput();
+            if (this.value.trim()) {
+                hideStudyCards();
+            } else {
+                maybeShowStudyCards();
+            }
+        });
         document.getElementById("input").addEventListener("keypress", function(event) {
             if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
