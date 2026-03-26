@@ -611,7 +611,7 @@ def handle_study_action(session_id, content_item_id, action):
     if action == "show_source":
         log_event("source_requested", session_id, {"content_item_id": item["id"], "topic": item["topic"]})
         return {
-            "reply": f"Source for this {item['item_type']}:",
+            "reply": None,
             "sources": _source_payload(item),
         }
 
