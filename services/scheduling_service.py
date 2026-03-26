@@ -157,6 +157,18 @@ SUMMARY_KEYWORDS = (
     "what do i have today",
     "what do we have today",
 )
+MONTHLY_SHIFT_SUMMARY_MARKERS = (
+    "מתי התורנויות",
+    "מתי התורנות",
+    "אילו תורנויות",
+    "איזה תורנויות",
+    "איזה תורנות",
+    "what are my shifts",
+    "when are my shifts",
+    "when is my on-call",
+    "what are my on-call shifts",
+    "when are my call shifts",
+)
 SHIFT_KEYWORDS = (
     "on-call",
     "on call",
@@ -467,6 +479,19 @@ def _is_daily_summary_request(message):
         phrase in lowered
         for phrase in ("do i have", "meetings", "meeting", "schedule", "events", "what do i", "what's on", "whats on")
     )
+
+
+def _is_monthly_shift_summary_request(message):
+    lowered = _normalize_text(message).lower()
+    if any(marker in lowered for marker in MONTHLY_SHIFT_SUMMARY_MARKERS):
+        return True
+    has_month = bool(_extract_month_year(lowered)[0])
+    asks_when = any(token in lowered for token in ("מתי", "איזה", "what", "when"))
+    asks_shifts = any(
+        token in lowered
+        for token in ("תורנות", "תורנויות", "תורניות", "תורנות חצי", "חצי תורנות", "shift", "shifts", "on-call", "call shift")
+    )
+    return has_month and asks_when and asks_shifts
 
 
 def _infer_calendar_type(text):
@@ -2008,6 +2033,15 @@ def _format_event_line(event):
     return f"- {start_label}-{end_label} · {event.get('title', 'Untitled event')} ({event.get('calendar_type', 'personal')})"
 
 
+def _format_shift_summary_line(event):
+    start_label = event["start_at"].strftime("%a %d %b")
+    time_label = event["start_at"].strftime("%H:%M")
+    title = event.get("title", "Event")
+    if title == "תורנות חצי":
+        return f"- {start_label} · תורנות חצי · {time_label}"
+    return f"- {start_label} · {title} · {time_label}"
+
+
 def _build_daily_summary(session_id):
     now = _utcnow()
     start_of_day = datetime.combine(now.date(), datetime.min.time())
@@ -2071,6 +2105,52 @@ def _build_daily_summary(session_id):
     }
 
 
+def _build_monthly_shift_summary(session_id, message):
+    month, year = _extract_month_year(message)
+    if not month or not year:
+        return {
+            "reply": "Which month should I check for your shifts?",
+            "scheduling_draft": None,
+        }
+
+    start_of_month = datetime(year, month, 1)
+    end_of_month = datetime(year, month, monthrange(year, month)[1], 23, 59, 59)
+    shift_titles = {"תורנות", "תורנות חצי"}
+    events = list(
+        scheduled_events_collection.find(
+            {
+                "session_id": session_id,
+                "status": "confirmed",
+                "start_at": {"$gte": start_of_month, "$lte": end_of_month},
+                "title": {"$in": list(shift_titles)},
+            }
+        ).sort("start_at", 1)
+    )
+
+    month_label = datetime(year, month, 1).strftime("%B %Y")
+    if not events:
+        return {
+            "reply": f"I don’t see any saved shifts for {month_label}.",
+            "scheduling_draft": None,
+        }
+
+    full_shift_count = sum(1 for event in events if event.get("title") == "תורנות")
+    half_shift_count = sum(1 for event in events if event.get("title") == "תורנות חצי")
+    summary_bits = []
+    if full_shift_count:
+        summary_bits.append(f"{full_shift_count} full")
+    if half_shift_count:
+        summary_bits.append(f"{half_shift_count} half")
+    summary_suffix = f" ({', '.join(summary_bits)})" if summary_bits else ""
+
+    lines = [f"Your shifts for {month_label}: {len(events)} total{summary_suffix}."]
+    lines.extend(_format_shift_summary_line(event) for event in events)
+    return {
+        "reply": "\n".join(lines),
+        "scheduling_draft": None,
+    }
+
+
 def build_scheduling_welcome(session_id):
     if has_google_calendar_connection(session_id):
         return "Scheduling is on."
@@ -2085,6 +2165,9 @@ def handle_scheduling_message(session_id, user_message):
             "reply": "Calendar scheduling is almost ready. Connect your calendar in Settings first, then I can create and sync events for you here.",
             "scheduling_draft": None,
         }
+
+    if _is_monthly_shift_summary_request(normalized_user_message):
+        return _build_monthly_shift_summary(session_id, normalized_user_message)
 
     if _is_daily_summary_request(normalized_user_message):
         return _build_daily_summary(session_id)
