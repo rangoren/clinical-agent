@@ -1271,14 +1271,19 @@ def _build_mixed_template_events_from_message(message):
     pattern_map = [
         (r"(תורנות חצי|חצי תורנות|half shift|half-call|half call|partial call)(.*?)(?=(?:\bתורנות\b|\bתורנויות\b|\bתורניות\b|\bמחלקות\b|$))", _match_scheduling_template("תורנות חצי")),
         (r"(מחלקות|משמרת מחלקות|department shift|ward shift)(.*?)(?=(?:\bתורנות\b|\bתורנויות\b|\bתורניות\b|\bתורנות חצי\b|$))", _match_scheduling_template("מחלקות")),
-        (r"(תורנויות|תורניות|תורנות|on-call|on call|call shifts?)(.*?)(?=(?:\bתורנות חצי\b|\bחצי תורנות\b|\bמחלקות\b|$))", _match_scheduling_template("תורנות")),
+        (r"(תורנויות|תורניות|on-call|on call|call shifts?|(?<!חצי\s)תורנות(?!\s*חצי))(.*?)(?=(?:\bתורנות חצי\b|\bחצי תורנות\b|\bמחלקות\b|$))", _match_scheduling_template("תורנות")),
     ]
 
+    seen_clauses = set()
     for pattern, template in pattern_map:
         for match in re.finditer(pattern, lowered, flags=re.IGNORECASE):
             full_segment = normalized[match.start():match.end()]
             days = _extract_template_clause_days(full_segment)
             if days:
+                signature = (match.start(), template["title"], tuple(days))
+                if signature in seen_clauses:
+                    continue
+                seen_clauses.add(signature)
                 clauses.append((match.start(), template, days))
 
     if len(clauses) < 2:
@@ -1307,6 +1312,19 @@ def _build_mixed_template_events_from_message(message):
         "calendar_type": calendar_type,
         "title": unique_events[0]["title"] if len({item["title"] for item in unique_events}) == 1 else "Mixed shifts",
     }
+
+
+def _summarize_bulk_events(events):
+    if not events:
+        return None
+    counts = {}
+    for event in events:
+        title = event.get("title", "Event")
+        counts[title] = counts.get(title, 0) + 1
+    parts = []
+    for title, count in counts.items():
+        parts.append(f"{count} {title}" if count != 1 else title)
+    return " · ".join(parts)
 
 
 def _find_target_event_from_extraction(session_id, extraction, raw_message):
@@ -2092,7 +2110,7 @@ def handle_scheduling_message(session_id, user_message):
                 "conflicts": conflicts,
                 "status": "needs_review",
                 "event_count": len(bulk_parsed["events"]),
-                "target_summary": f"{len(bulk_parsed['events'])} events",
+                "target_summary": _summarize_bulk_events(bulk_parsed["events"]) or f"{len(bulk_parsed['events'])} events",
                 **calendar_selector,
             },
         }
