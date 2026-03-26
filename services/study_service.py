@@ -229,7 +229,8 @@ def _trim_history(items, max_items=12):
 def _save_state(session_id, updates):
     updates["updated_at"] = _utc_now()
     insert_defaults = _default_state(session_id)
-    insert_defaults.pop("updated_at", None)
+    for key in list(updates.keys()):
+        insert_defaults.pop(key, None)
     study_user_state_collection.update_one(
         {"session_id": session_id},
         {"$set": updates, "$setOnInsert": insert_defaults},
