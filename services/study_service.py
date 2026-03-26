@@ -6,6 +6,22 @@ from db import study_content_collection, study_user_state_collection
 from services.logging_service import log_event
 
 
+STAGE_B_AUTHORING_RUBRIC = {
+    "warmup": [
+        "Short stem with one clear clue",
+        "One real clinical decision point",
+        "At least one tempting management distractor",
+        "One best answer with one short why-not",
+    ],
+    "standard": [
+        "Short-to-medium stem with one clear, not overly exposed clue",
+        "Board-relevant clinical decision point",
+        "At least one plausible management mistake as distractor",
+        "Explanation must stay compressed: best answer, why, why-not, takeaway",
+    ],
+}
+
+
 STUDY_SEED_ITEMS = [
     {
         "id": "mcq_preeclampsia_delivery",
@@ -356,13 +372,22 @@ def _difficulty_rank(item):
     return 2
 
 
-def _selection_score(item, state, preferred_topic=None, preferred_item_type=None):
+def _selection_score(item, state, preferred_topic=None, preferred_item_type=None, preferred_difficulty_band=None):
     score = 0
 
     if preferred_item_type and item.get("item_type") == preferred_item_type:
         score += 30
     if preferred_topic and item.get("topic") == preferred_topic:
         score += 28
+    if preferred_difficulty_band:
+        item_band = (item.get("difficulty_band") or "").strip().lower()
+        target_band = preferred_difficulty_band.strip().lower()
+        if item_band == target_band:
+            score += 26
+        elif target_band == "standard" and item_band == "warmup":
+            score -= 10
+        elif target_band == "warmup" and item_band == "standard":
+            score -= 4
 
     if item.get("item_type") == "mcq":
         score += 18
@@ -401,7 +426,7 @@ def _selection_score(item, state, preferred_topic=None, preferred_item_type=None
     return score
 
 
-def _pick_best_item(session_id, candidates, salt, state, preferred_topic=None, preferred_item_type=None):
+def _pick_best_item(session_id, candidates, salt, state, preferred_topic=None, preferred_item_type=None, preferred_difficulty_band=None):
     if not candidates:
         return None
     scored = []
@@ -411,6 +436,7 @@ def _pick_best_item(session_id, candidates, salt, state, preferred_topic=None, p
             state,
             preferred_topic=preferred_topic,
             preferred_item_type=preferred_item_type,
+            preferred_difficulty_band=preferred_difficulty_band,
         )
         scored.append((score, item))
 
@@ -462,25 +488,31 @@ def _option_text_by_key(item, option_key):
     return None
 
 
+def _mcq_takeaway_text(item):
+    takeaway = (item.get("board_takeaway") or "").strip()
+    if takeaway:
+        return takeaway
+    exam_clue = (item.get("exam_clue") or "").strip()
+    if exam_clue:
+        return exam_clue
+    return ""
+
+
 def _build_mcq_feedback_reply(item, correct, selected_option=None):
     status = "Correct." if correct else "Incorrect."
     correct_key = item.get("correct_answer_key")
     correct_text = _option_text_by_key(item, correct_key)
     lines = [status]
     if correct_key and correct_text:
-        lines.append(f"Correct answer: {correct_key}: {correct_text}")
+        lines.append(f"Best answer: {correct_key}: {correct_text}")
 
     explanation = (item.get("explanation") or "").strip()
     if explanation:
-        lines.append(f"Why it is correct: {explanation}")
+        lines.append(f"Why: {explanation}")
 
-    exam_clue = (item.get("exam_clue") or "").strip()
-    if exam_clue:
-        lines.append(f"Key clue: {exam_clue}")
-
-    takeaway = (item.get("board_takeaway") or "").strip()
+    takeaway = _mcq_takeaway_text(item)
     if takeaway:
-        lines.append(f"Board takeaway: {takeaway}")
+        lines.append(f"Takeaway: {takeaway}")
 
     why_not_key = None
     why_not_reason = None
@@ -499,7 +531,7 @@ def _build_mcq_feedback_reply(item, correct, selected_option=None):
                 why_not_reason = "It does not fit the main exam clue as well as the best answer."
 
     if why_not_key and why_not_reason:
-        lines.append(f"Why {why_not_key} is wrong: {why_not_reason}")
+        lines.append(f"Why not {why_not_key}: {why_not_reason}")
 
     return "\n".join(lines)
 
@@ -529,19 +561,15 @@ def _build_mcq_explain_reply(item, state):
     lines.append(opening)
 
     if correct_key and correct_text:
-        lines.append(f"Correct answer: {correct_key}: {correct_text}")
+        lines.append(f"Best answer: {correct_key}: {correct_text}")
 
     explanation = (item.get("explanation") or "").strip()
     if explanation:
-        lines.append(f"Why it is correct: {explanation}")
+        lines.append(f"Why: {explanation}")
 
-    exam_clue = (item.get("exam_clue") or "").strip()
-    if exam_clue:
-        lines.append(f"Key clue: {exam_clue}")
-
-    rule = _board_rule_text(item)
-    if rule:
-        lines.append(f"Board takeaway: {rule}")
+    takeaway = _mcq_takeaway_text(item)
+    if takeaway:
+        lines.append(f"Takeaway: {takeaway}")
 
     why_not_key = None
     why_not_reason = None
@@ -558,7 +586,7 @@ def _build_mcq_explain_reply(item, state):
         why_not_reason = tempting_wrong_reason
 
     if why_not_key and why_not_reason:
-        lines.append(f"Why {why_not_key} is wrong: {why_not_reason}")
+        lines.append(f"Why not {why_not_key}: {why_not_reason}")
 
     return "\n".join(lines)
 
@@ -594,6 +622,7 @@ def get_idle_study_cards(session_id):
         state,
         preferred_topic=weak_topic,
         preferred_item_type="mcq",
+        preferred_difficulty_band="warmup",
     )
     if practice_item:
         used_ids.add(practice_item["id"])
@@ -630,6 +659,7 @@ def get_idle_study_cards(session_id):
         "dynamic",
         state,
         preferred_topic=dynamic_topic,
+        preferred_difficulty_band="standard",
     )
 
     cards = []
@@ -674,7 +704,7 @@ def get_idle_study_cards(session_id):
         fallback_pool = _get_items(exclude_ids=used_ids) or _get_items()
         scored_fallback = sorted(
             fallback_pool,
-            key=lambda item: _selection_score(item, state),
+            key=lambda item: _selection_score(item, state, preferred_difficulty_band="standard"),
             reverse=True,
         )
         for item in scored_fallback:
@@ -845,6 +875,7 @@ def _pick_related_item(session_id, item, item_type, exclude_self=False):
         state,
         preferred_topic=item.get("topic"),
         preferred_item_type=item_type,
+        preferred_difficulty_band="standard" if item_type == "mcq" else None,
     )
 
 
