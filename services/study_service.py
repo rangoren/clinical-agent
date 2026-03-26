@@ -294,6 +294,52 @@ def _normalize_text(text):
     return re.sub(r"\s+", " ", (text or "").strip().lower())
 
 
+def _option_text_by_key(item, option_key):
+    if not option_key:
+        return None
+    normalized_key = str(option_key).upper()
+    for option in item.get("options", []):
+        if option.get("key", "").upper() == normalized_key:
+            return option.get("text")
+    return None
+
+
+def _build_mcq_feedback_reply(item, correct):
+    status = "Correct." if correct else "Not quite."
+    explanation = re.sub(r"^(Correct|Not quite)\.\s*", "", item["short_explanation"]).strip()
+    return f"{status} {explanation} {item['key_takeaway']}"
+
+
+def _build_mcq_explain_reply(item, state):
+    correct_key = item.get("correct_option")
+    correct_text = _option_text_by_key(item, correct_key)
+    selected_key = (state.get("last_answered_option") or "").upper() or None
+    selected_text = _option_text_by_key(item, selected_key)
+    answered_correctly = state.get("last_answer_correct")
+
+    opening = "Why this answer:"
+    if answered_correctly is True:
+        opening = "Why that answer is right:"
+    elif answered_correctly is False:
+        opening = "Why your answer was off:"
+
+    parts = [opening]
+    if correct_key and correct_text:
+        parts.append(f"The best answer is {correct_key}: {correct_text}.")
+
+    explanation = re.sub(r"^(Correct|Not quite)\.\s*", "", item["short_explanation"]).strip()
+    if explanation:
+        parts.append(explanation)
+
+    if item.get("key_takeaway"):
+        parts.append(item["key_takeaway"])
+
+    if answered_correctly is False and selected_key and selected_text:
+        parts.append(f"You picked {selected_key}: {selected_text}, but the board clue points away from that choice.")
+
+    return " ".join(parts)
+
+
 def _get_active_item(session_id):
     state = _load_state(session_id)
     item_id = state.get("last_incomplete_item_id") or state.get("last_active_item_id")
@@ -478,6 +524,8 @@ def answer_mcq(session_id, content_item_id, selected_option):
             "topics_incorrect_count": incorrect_counts,
             "recent_mistake_topics": _trim_history(recent_mistakes, 8),
             "last_studied_topic": topic,
+            "last_answered_option": (selected_option or "").upper(),
+            "last_answer_correct": correct,
         },
     )
     log_event(
@@ -487,7 +535,7 @@ def answer_mcq(session_id, content_item_id, selected_option):
     )
     log_event("mcq_correct" if correct else "mcq_incorrect", session_id, {"content_item_id": item["id"], "topic": topic})
 
-    reply = f"{'Correct.' if correct else 'Not quite.'} {item['short_explanation']} {item['key_takeaway']}"
+    reply = _build_mcq_feedback_reply(item, correct)
     return {
         "reply": reply,
         "study_context_item_id": item["id"],
@@ -510,6 +558,7 @@ def handle_study_action(session_id, content_item_id, action):
     item = study_content_collection.find_one({"id": content_item_id, "enabled": True}, {"_id": 0})
     if not item:
         return {"reply": "I couldn’t find that study item anymore."}
+    state = _load_state(session_id)
 
     log_event("mcq_followup_clicked" if item["item_type"] == "mcq" else "pearl_followup_clicked", session_id, {"content_item_id": item["id"], "action": action})
 
@@ -521,7 +570,9 @@ def handle_study_action(session_id, content_item_id, action):
         }
 
     if action == "explain_why":
-        return {"reply": f"{item['short_explanation']} {item['key_takeaway']}"}
+        if item["item_type"] == "mcq":
+            return {"reply": _build_mcq_explain_reply(item, state)}
+        return {"reply": "Why this pearl matters: " + " ".join(item.get("bullets", [])[:2])}
 
     if action == "quick_recap":
         if item["item_type"] == "pearl":
