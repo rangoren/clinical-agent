@@ -134,7 +134,7 @@
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 10px;
+            gap: 12px;
             flex-shrink: 0;
             min-width: 0;
         }
@@ -143,7 +143,7 @@
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 10px;
+            gap: 12px;
         }
 
         .topbar-tools {
@@ -156,28 +156,32 @@
         .mode-switch {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 4px;
+            gap: 8px;
+            padding: 6px;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.8);
-            border: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(244, 249, 247, 0.92));
+            border: 1px solid rgba(15, 118, 110, 0.14);
+            box-shadow: 0 10px 24px rgba(20, 37, 33, 0.08);
         }
 
         .mode-button {
             border: none;
             background: transparent;
             color: var(--muted);
-            padding: 8px 12px;
+            min-height: 46px;
+            padding: 0 18px;
             border-radius: 999px;
             font: inherit;
-            font-size: 0.8rem;
-            font-weight: 700;
+            font-size: 0.88rem;
+            font-weight: 800;
+            letter-spacing: -0.01em;
             cursor: pointer;
         }
 
         .mode-button.active {
-            background: rgba(15, 118, 110, 0.14);
+            background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(15, 118, 110, 0.08));
             color: var(--brand-strong);
+            box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08), 0 6px 14px rgba(15, 118, 110, 0.14);
         }
 
         .version-stamp {
@@ -944,13 +948,24 @@
         }
 
         .primary-button {
+            width: 58px;
+            min-width: 58px;
+            height: 58px;
+            padding: 0;
             border-radius: 18px;
-            padding: 14px 16px;
-            min-width: 64px;
             background: var(--user);
             color: white;
             font-weight: 700;
             box-shadow: 0 12px 28px rgba(15, 118, 110, 0.24);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .primary-button svg {
+            width: 21px;
+            height: 21px;
+            display: block;
         }
 
         .primary-button:disabled {
@@ -1158,22 +1173,19 @@
             }
 
             .primary-button {
-                width: 42px;
-                min-width: 42px;
-                height: 42px;
+                width: 46px;
+                min-width: 46px;
+                height: 46px;
                 padding: 0;
-                border-radius: 12px;
-                font-size: 0;
+                border-radius: 14px;
                 flex: 0 0 auto;
                 display: inline-grid;
                 place-items: center;
             }
 
-            .primary-button::before {
-                content: "\2191";
-                font-size: 1rem;
-                line-height: 1;
-                font-weight: 700;
+            .primary-button svg {
+                width: 18px;
+                height: 18px;
             }
 
             .utility-card,
@@ -1324,12 +1336,13 @@
             }
 
             .mode-switch {
-                padding: 3px;
+                padding: 4px;
             }
 
             .mode-button {
-                padding: 7px 10px;
-                font-size: 0.72rem;
+                min-height: 40px;
+                padding: 0 13px;
+                font-size: 0.76rem;
             }
         }
 
@@ -1433,7 +1446,12 @@
             <div class="composer-card">
                 <div class="composer-main">
                     <textarea id="input" class="composer-input" placeholder="Type your message..." rows="1"></textarea>
-                    <button id="send-button" class="primary-button" onclick="sendMessage()">Send</button>
+                    <button id="send-button" class="primary-button" type="button" aria-label="Send message" onclick="sendMessage()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M4 19L20 12L4 5L7 12L4 19Z"></path>
+                            <path d="M7 12H20"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
         </footer>
