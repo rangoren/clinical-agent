@@ -964,6 +964,21 @@ def _parse_hhmm(value):
     return hour, minute
 
 
+def _build_shift_window_from_times(event_date, start_time, end_time=None, duration_minutes=None):
+    start_hour, start_minute = start_time or (8, 0)
+    start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=start_hour, minute=start_minute)
+
+    if end_time:
+        end_hour, end_minute = end_time
+        end_at = datetime.combine(event_date, datetime.min.time()).replace(hour=end_hour, minute=end_minute)
+        if end_at <= start_at or ((duration_minutes or 0) >= (24 * 60) and end_at > start_at):
+            end_at += timedelta(days=1)
+    else:
+        end_at = start_at + timedelta(minutes=duration_minutes or (DEFAULT_SHIFT_DURATION_HOURS * 60))
+
+    return start_at, end_at
+
+
 def _should_use_llm_extraction(extraction):
     if not extraction:
         return False
@@ -1032,13 +1047,8 @@ def _build_event_from_extraction(extraction, raw_message):
 
     start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
     if is_shift_template:
-        if end_time:
-            end_at = datetime.combine(event_date, datetime.min.time()).replace(hour=end_time[0], minute=end_time[1])
-            if end_at <= start_at:
-                end_at += timedelta(days=1)
-            duration_minutes = int((end_at - start_at).total_seconds() / 60)
-        else:
-            end_at = start_at + timedelta(minutes=duration_minutes)
+        start_at, end_at = _build_shift_window_from_times(event_date, event_time, end_time=end_time, duration_minutes=duration_minutes)
+        duration_minutes = int((end_at - start_at).total_seconds() / 60)
     elif end_time:
         end_at = datetime.combine(event_date, datetime.min.time()).replace(hour=end_time[0], minute=end_time[1])
         if end_at <= start_at:
@@ -1088,13 +1098,12 @@ def _build_bulk_events_from_extraction(extraction, raw_message):
     events = []
     for event_date in bulk_dates:
         if is_shift_template:
-            start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=start_time[0], minute=start_time[1])
-            if end_time:
-                end_at = datetime.combine(event_date, datetime.min.time()).replace(hour=end_time[0], minute=end_time[1])
-                if end_at <= start_at:
-                    end_at += timedelta(days=1)
-            else:
-                end_at = start_at + timedelta(minutes=duration_minutes)
+            start_at, end_at = _build_shift_window_from_times(
+                event_date,
+                start_time,
+                end_time=end_time,
+                duration_minutes=duration_minutes,
+            )
         else:
             start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=start_time[0], minute=start_time[1])
             if end_time:
