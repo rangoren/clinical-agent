@@ -1509,11 +1509,8 @@
 
         function shouldShowStudyCards() {
             const input = document.getElementById("input");
-            const chat = document.getElementById("chat");
             return (
                 appMode === "clinical" &&
-                chat &&
-                chat.children.length === 0 &&
                 input &&
                 !input.value.trim()
             );
@@ -2352,14 +2349,13 @@
 
                 hideSessionBanner();
                 if (data.reply) {
-                    clearStudyCards();
                     appendAssistantMessage(data.reply);
                 } else if (data.cards && data.cards.length === 3) {
                     renderStudyCards(data.cards);
                 }
                 await refreshCalendarStatus();
                 setComposerEnabled(true);
-                if (!data.reply && (!data.cards || data.cards.length !== 3)) {
+                if (!data.cards || data.cards.length !== 3) {
                     maybeShowStudyCards(true);
                 }
             } catch (error) {

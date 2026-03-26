@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
-APP_VERSION = "v0.2.77"
+APP_VERSION = "v0.2.78"
 
 
 @router.get("/")
