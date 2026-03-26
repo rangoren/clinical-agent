@@ -1612,7 +1612,7 @@ def _sync_status_suffix(sync_status, *, plural=False):
     if sync_status == "failed":
         return " Saved here, but Google Calendar sync failed."
     if sync_status == "skipped":
-        return " Saved here only."
+        return " Saved here only. Google Calendar isn't connected on this device yet."
     return ""
 
 

@@ -82,7 +82,7 @@
 
         .topbar {
             position: relative;
-            z-index: 1;
+            z-index: 8;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -113,7 +113,7 @@
             align-self: flex-start;
             padding: 0;
             color: var(--brand-strong);
-            font-size: 0.7rem;
+            font-size: 0.77rem;
             font-weight: 700;
             letter-spacing: 0.08em;
             text-transform: uppercase;
@@ -121,7 +121,7 @@
 
         .brand-title {
             margin: 0;
-            font-size: 1.08rem;
+            font-size: 1.19rem;
             font-weight: 720;
             letter-spacing: -0.01em;
             color: var(--text);
@@ -141,6 +141,13 @@
             align-items: center;
             justify-content: flex-end;
             gap: 10px;
+        }
+
+        .topbar-tools {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
         }
 
         .mode-switch {
@@ -231,7 +238,7 @@
             border: 1px solid var(--line);
             box-shadow: 0 18px 48px rgba(20, 37, 33, 0.14);
             backdrop-filter: blur(16px);
-            z-index: 20;
+            z-index: 60;
         }
 
         .settings-panel.open {
@@ -889,11 +896,11 @@
             }
 
             .brand-kicker {
-                font-size: 0.62rem;
+                font-size: 0.68rem;
             }
 
             .brand-title {
-                font-size: 0.88rem;
+                font-size: 0.97rem;
                 line-height: 1.1;
             }
 
@@ -1045,6 +1052,10 @@
                 gap: 8px;
             }
 
+            .topbar-tools {
+                gap: 6px;
+            }
+
             .settings-trigger {
                 width: 38px;
                 height: 38px;
@@ -1054,6 +1065,7 @@
                 right: 0;
                 left: auto;
                 min-width: 220px;
+                z-index: 80;
             }
 
             .version-stamp {
@@ -1088,29 +1100,31 @@
                         <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
                         <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
                     </div>
-                    <div class="version-stamp">{{ app_version }}</div>
-                    <div id="settings-shell" class="settings-shell">
-                        <button
-                            id="settings-trigger"
-                            class="settings-trigger"
-                            type="button"
-                            aria-label="Scheduling settings"
-                            aria-expanded="false"
-                            onclick="toggleSettingsMenu(event)"
-                        >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <circle cx="12" cy="12" r="3.2"></circle>
-                                <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a1.2 1.2 0 0 1 0 1.7l-1.3 1.3a1.2 1.2 0 0 1-1.7 0l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a1.2 1.2 0 0 1-1.2 1.2h-1.8A1.2 1.2 0 0 1 10.7 20v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a1.2 1.2 0 0 1-1.7 0l-1.3-1.3a1.2 1.2 0 0 1 0-1.7l.1-.1A1 1 0 0 0 6.2 15a1 1 0 0 0-.9-.6H5a1.2 1.2 0 0 1-1.2-1.2v-1.8A1.2 1.2 0 0 1 5 10.2h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a1.2 1.2 0 0 1 0-1.7l1.3-1.3a1.2 1.2 0 0 1 1.7 0l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a1.2 1.2 0 0 1 1.2-1.2h1.8A1.2 1.2 0 0 1 14.9 4v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a1.2 1.2 0 0 1 1.7 0l1.3 1.3a1.2 1.2 0 0 1 0 1.7l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6h.2a1.2 1.2 0 0 1 1.2 1.2v1.8a1.2 1.2 0 0 1-1.2 1.2h-.2a1 1 0 0 0-.9.6z"></path>
-                            </svg>
-                        </button>
-                        <div id="settings-panel" class="settings-panel" role="menu" aria-label="Scheduling settings">
-                            <div class="settings-section">
-                                <span class="settings-label">Calendar Sync</span>
-                                <div class="calendar-copy">
-                                    <span id="calendar-label" class="calendar-label">Calendar Sync: Not connected</span>
+                    <div class="topbar-tools">
+                        <div class="version-stamp">{{ app_version }}</div>
+                        <div id="settings-shell" class="settings-shell">
+                            <button
+                                id="settings-trigger"
+                                class="settings-trigger"
+                                type="button"
+                                aria-label="Scheduling settings"
+                                aria-expanded="false"
+                                onclick="toggleSettingsMenu(event)"
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="3.2"></circle>
+                                    <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a1.2 1.2 0 0 1 0 1.7l-1.3 1.3a1.2 1.2 0 0 1-1.7 0l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a1.2 1.2 0 0 1-1.2 1.2h-1.8A1.2 1.2 0 0 1 10.7 20v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a1.2 1.2 0 0 1-1.7 0l-1.3-1.3a1.2 1.2 0 0 1 0-1.7l.1-.1A1 1 0 0 0 6.2 15a1 1 0 0 0-.9-.6H5a1.2 1.2 0 0 1-1.2-1.2v-1.8A1.2 1.2 0 0 1 5 10.2h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a1.2 1.2 0 0 1 0-1.7l1.3-1.3a1.2 1.2 0 0 1 1.7 0l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a1.2 1.2 0 0 1 1.2-1.2h1.8A1.2 1.2 0 0 1 14.9 4v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a1.2 1.2 0 0 1 1.7 0l1.3 1.3a1.2 1.2 0 0 1 0 1.7l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6h.2a1.2 1.2 0 0 1 1.2 1.2v1.8a1.2 1.2 0 0 1-1.2 1.2h-.2a1 1 0 0 0-.9.6z"></path>
+                                </svg>
+                            </button>
+                            <div id="settings-panel" class="settings-panel" role="menu" aria-label="Scheduling settings">
+                                <div class="settings-section">
+                                    <span class="settings-label">Calendar Sync</span>
+                                    <div class="calendar-copy">
+                                        <span id="calendar-label" class="calendar-label">Calendar Sync: Not connected</span>
+                                    </div>
                                 </div>
+                                <button id="calendar-action" class="calendar-action" onclick="toggleGoogleCalendarConnection()">Connect Google</button>
                             </div>
-                            <button id="calendar-action" class="calendar-action" onclick="toggleGoogleCalendarConnection()">Connect Google</button>
                         </div>
                     </div>
                 </div>
