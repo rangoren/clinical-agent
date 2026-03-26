@@ -62,6 +62,7 @@ def _normalize_extraction(payload):
         "duration_minutes": payload.get("duration_minutes"),
         "bulk_dates": payload.get("bulk_dates") or [],
         "missing_fields": [str(item).lower() for item in (payload.get("missing_fields") or []) if item],
+        "references_previous": bool(payload.get("references_previous")),
         "confidence": str(payload.get("confidence") or "low").lower(),
         "notes": (payload.get("notes") or "").strip() or None,
     }
@@ -85,11 +86,20 @@ def _normalize_extraction(payload):
     return extraction
 
 
-def extract_scheduling_intent(user_message, pending_message=None):
+def extract_scheduling_intent(user_message, pending_message=None, last_reference=None):
     context = _current_context()
     combined_message = user_message.strip()
     if pending_message:
         combined_message = f"{pending_message.strip()}\nFollow-up message: {user_message.strip()}".strip()
+    last_reference_block = "- None"
+    if last_reference:
+        last_reference_block = (
+            f"- title: {last_reference.get('title')}\n"
+            f"- start_at: {last_reference.get('start_at')}\n"
+            f"- end_at: {last_reference.get('end_at')}\n"
+            f"- calendar_type: {last_reference.get('calendar_type')}\n"
+            f"- location: {last_reference.get('location') or ''}"
+        )
 
     system_prompt = f"""
 You extract structured scheduling intent for a personal scheduling copilot.
@@ -100,12 +110,16 @@ Current local context:
 - Current local datetime: {context['iso_now']}
 - Current weekday: {context['weekday']}
 
+Most recent scheduling reference in the conversation:
+{last_reference_block}
+
 Return JSON only.
 
 Rules:
 - Understand Hebrew and English naturally.
 - Resolve relative dates like today, tomorrow, next Thursday, יום חמישי הקרוב into ISO dates.
 - If the user is continuing a previous message, combine the intent naturally.
+- Decide whether the user is referring to the most recent scheduling reference.
 - Detect action as one of: create, update, delete, bulk_create, bulk_delete.
 - For shifts/on-call/night duty/תורנות/תורנויות/תורניות:
   - is_shift = true
@@ -125,6 +139,7 @@ Rules:
 - If information is missing, include missing_fields using only: title, date, time
 - Prefer the actual event title, not the command text.
 - If the user says "דייט עם רן" or "date with Ran", that is the title.
+- If the user says things like "it", "that", "אותה", "אותו", "את זה", or clearly refers to the last event without repeating details, set references_previous = true.
 - If confidence is not at least medium, return confidence low.
 
 JSON schema:
@@ -143,6 +158,7 @@ JSON schema:
   "duration_minutes": number|null,
   "bulk_dates": ["YYYY-MM-DD"],
   "missing_fields": ["title"|"date"|"time"],
+  "references_previous": boolean,
   "confidence": "high|medium|low",
   "notes": string|null
 }}
@@ -170,6 +186,7 @@ JSON schema:
         payload={
             "message": user_message,
             "pending_message": pending_message,
+            "last_reference": last_reference,
             "raw_reply": raw_text,
             "parsed": extraction,
         },

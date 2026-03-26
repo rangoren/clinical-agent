@@ -184,6 +184,11 @@ def _get_preferred_google_calendar(session_id, calendar_type):
     return preferred_map.get(calendar_type)
 
 
+def _get_last_scheduling_reference(session_id):
+    preferences = _get_scheduling_preferences(session_id)
+    return preferences.get("last_scheduling_reference")
+
+
 def _save_preferred_google_calendar(session_id, calendar_type, provider_calendar_id):
     if not provider_calendar_id or not calendar_type:
         return
@@ -192,6 +197,33 @@ def _save_preferred_google_calendar(session_id, calendar_type, provider_calendar
         {
             "$set": {
                 f"google_calendar_preferences.{calendar_type}": provider_calendar_id,
+                "updated_at": _utcnow(),
+            },
+            "$setOnInsert": {"created_at": _utcnow()},
+        },
+        upsert=True,
+    )
+
+
+def _save_last_scheduling_reference(session_id, event_doc):
+    if not event_doc:
+        return
+    reference = {
+        "event_id": str(event_doc.get("_id") or event_doc.get("event_id") or ""),
+        "title": event_doc.get("title"),
+        "calendar_type": event_doc.get("calendar_type"),
+        "start_at": event_doc.get("start_at").isoformat(timespec="minutes") if isinstance(event_doc.get("start_at"), datetime) else event_doc.get("start_at"),
+        "end_at": event_doc.get("end_at").isoformat(timespec="minutes") if isinstance(event_doc.get("end_at"), datetime) else event_doc.get("end_at"),
+        "location": event_doc.get("location"),
+        "provider_event_id": event_doc.get("provider_event_id"),
+        "provider_calendar_id": event_doc.get("provider_calendar_id"),
+        "status": event_doc.get("status"),
+    }
+    scheduling_preferences_collection.update_one(
+        {"session_id": session_id},
+        {
+            "$set": {
+                "last_scheduling_reference": reference,
                 "updated_at": _utcnow(),
             },
             "$setOnInsert": {"created_at": _utcnow()},
@@ -1127,6 +1159,22 @@ def _find_target_event_from_extraction(session_id, extraction, raw_message):
     return best_match
 
 
+def _find_target_event_from_last_reference(session_id):
+    last_reference = _get_last_scheduling_reference(session_id)
+    if not last_reference:
+        return None
+    event_id = last_reference.get("event_id")
+    if not event_id:
+        return None
+    try:
+        candidate = scheduled_events_collection.find_one(
+            {"_id": ObjectId(event_id), "session_id": session_id, "status": "confirmed"}
+        )
+    except Exception:
+        return None
+    return candidate
+
+
 def _build_update_from_extraction(extraction, existing_event, raw_message):
     extraction = _apply_extraction_defaults(extraction, raw_message)
     existing_start = existing_event["start_at"]
@@ -1719,7 +1767,8 @@ def handle_scheduling_message(session_id, user_message):
 
     pending_context = _get_pending_details_context(session_id)
     pending_message = (pending_context or {}).get("raw_message")
-    extraction = extract_scheduling_intent(user_message, pending_message=pending_message)
+    last_reference = _get_last_scheduling_reference(session_id)
+    extraction = extract_scheduling_intent(user_message, pending_message=pending_message, last_reference=last_reference)
     use_llm_extraction = _should_use_llm_extraction(extraction)
 
     log_event(
@@ -1729,6 +1778,7 @@ def handle_scheduling_message(session_id, user_message):
             "user_message": user_message,
             "used_llm_extraction": use_llm_extraction,
             "extraction": extraction,
+            "last_reference": last_reference,
         },
     )
 
@@ -1736,6 +1786,8 @@ def handle_scheduling_message(session_id, user_message):
     if action_type in {"update", "delete"}:
         _clear_pending_details_context(session_id)
         target_event = _find_target_event_from_extraction(session_id, extraction, user_message) if use_llm_extraction else _find_target_event(session_id, user_message)
+        if not target_event and use_llm_extraction and extraction.get("references_previous"):
+            target_event = _find_target_event_from_last_reference(session_id)
         if not target_event:
             return {
                 "reply": "I couldn’t find the event yet. Try adding the event name and date.",
@@ -1744,6 +1796,7 @@ def handle_scheduling_message(session_id, user_message):
 
         serialized_target = _serialize_existing_event(target_event)
         if action_type == "delete":
+            _save_last_scheduling_reference(session_id, target_event)
             draft_id = _save_draft(
                 session_id,
                 user_message,
@@ -1768,6 +1821,7 @@ def handle_scheduling_message(session_id, user_message):
             }
 
         parsed = _build_update_from_extraction(extraction, target_event, user_message) if use_llm_extraction else _build_update_from_message(user_message, target_event)
+        _save_last_scheduling_reference(session_id, target_event)
         conflicts = [
             conflict
             for conflict in _find_conflicts(session_id, parsed)
@@ -1934,6 +1988,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
+        _save_last_scheduling_reference(session_id, event_doc)
         reply_calendar_name = _resolve_reply_calendar_name(
             session_id,
             selected_calendar_id=selected_calendar_id,
@@ -1960,6 +2015,7 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
         synced_count = 0
         failed_count = 0
         skipped_count = 0
+        last_created_event_doc = None
         for event in events:
             event_doc = {
                 "session_id": session_id,
@@ -1976,6 +2032,8 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
                 "updated_at": now,
             }
             insert_result = scheduled_events_collection.insert_one(event_doc)
+            event_doc["_id"] = insert_result.inserted_id
+            last_created_event_doc = event_doc
             sync_result = sync_google_create_event(session_id, event_doc, preferred_calendar_id=selected_calendar_id)
             if sync_result.get("status") == "synced":
                 scheduled_events_collection.update_one(
@@ -2014,6 +2072,8 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
+        if last_created_event_doc:
+            _save_last_scheduling_reference(session_id, last_created_event_doc)
         reply_calendar_name = _resolve_reply_calendar_name(
             session_id,
             selected_calendar_id=selected_calendar_id,
@@ -2080,6 +2140,22 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
+        if target_events:
+            last_deleted = target_events[-1]
+            _save_last_scheduling_reference(
+                session_id,
+                {
+                    "event_id": last_deleted.get("event_id"),
+                    "title": last_deleted.get("title"),
+                    "calendar_type": last_deleted.get("calendar_type"),
+                    "start_at": last_deleted.get("start_at"),
+                    "end_at": last_deleted.get("end_at"),
+                    "location": last_deleted.get("location"),
+                    "provider_event_id": last_deleted.get("provider_event_id"),
+                    "provider_calendar_id": last_deleted.get("provider_calendar_id"),
+                    "status": "deleted",
+                },
+            )
         reply = f"Deleted {deleted_count} events."
         if google_connected:
             if synced_count == deleted_count:
@@ -2144,6 +2220,9 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
+        updated_doc = scheduled_events_collection.find_one(target_filter)
+        if updated_doc:
+            _save_last_scheduling_reference(session_id, updated_doc)
         reply = f"Updated {parsed_event['title']} to {datetime.fromisoformat(parsed_event['start_at']).strftime('%a %d %b at %H:%M')}."
         reply += _sync_status_suffix(sync_result.get("status"))
         return {
@@ -2184,6 +2263,14 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             {"draft_id": draft_id, "session_id": session_id},
             {"$set": {"status": "confirmed", "updated_at": now}},
         )
+        if existing_doc:
+            _save_last_scheduling_reference(
+                session_id,
+                {
+                    **existing_doc,
+                    "status": "deleted",
+                },
+            )
         reply = f"Deleted {target_event.get('title', 'the event')}."
         if sync_result.get("status") == "synced":
             reply += " Removed from Google Calendar."
