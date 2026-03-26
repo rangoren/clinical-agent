@@ -546,6 +546,7 @@ def build_search_stages(user_message, user_profile=None):
     route = infer_question_route(user_message)
     high_risk = is_high_risk_expansion_topic(user_message)
     stages = []
+    defer_israel_operational_for_policy = False
 
     if route == "local_operational" and country == "Israel":
         stages.append(
@@ -565,16 +566,9 @@ def build_search_stages(user_message, user_profile=None):
             stages.append({"name": "israel_policy_tier1", "tier": "tier1", "domains": local_tier1, "stop_if_found": True})
         if local_tier2:
             stages.append({"name": "israel_policy_tier2", "tier": "tier2", "domains": local_tier2, "stop_if_found": True})
-        stages.append(
-            {
-                "name": "israel_policy_operational",
-                "tier": "operational",
-                "domains": sorted(LOCAL_OPERATIONAL_DOMAINS),
-                "stop_if_found": True,
-            }
-        )
+        defer_israel_operational_for_policy = True
 
-    if country == "Israel":
+    if country == "Israel" and route != "local_israel_policy":
         local_tier1 = _domains_for_country("Israel", "tier1")
         local_tier2 = _domains_for_country("Israel", "tier2")
         if local_tier1:
@@ -605,6 +599,15 @@ def build_search_stages(user_message, user_profile=None):
         stages.append({"name": "global_tier1", "tier": "tier1", "domains": global_tier1, "stop_if_found": True})
     if global_tier2:
         stages.append({"name": "global_tier2", "tier": "tier2", "domains": global_tier2, "stop_if_found": True})
+    if defer_israel_operational_for_policy:
+        stages.append(
+            {
+                "name": "israel_policy_operational",
+                "tier": "operational",
+                "domains": sorted(LOCAL_OPERATIONAL_DOMAINS),
+                "stop_if_found": True,
+            }
+        )
     if global_tier4:
         stages.append({"name": "global_tier4", "tier": "tier4", "domains": global_tier4, "stop_if_found": True})
     if not high_risk:
