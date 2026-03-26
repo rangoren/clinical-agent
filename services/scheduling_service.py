@@ -1328,6 +1328,20 @@ def _summarize_bulk_events(events):
     return " · ".join(parts)
 
 
+def _summarize_bulk_durations(events):
+    if not events:
+        return None
+    counts = {}
+    for event in events:
+        label = _duration_label(event.get("duration_minutes")) or "unknown"
+        counts[label] = counts.get(label, 0) + 1
+    parts = []
+    for label, count in counts.items():
+        event_label = "event" if count == 1 else "events"
+        parts.append(f"{count} {event_label} · {label}")
+    return " | ".join(parts)
+
+
 def _find_target_event_from_extraction(session_id, extraction, raw_message):
     extraction = _apply_extraction_defaults(extraction, raw_message)
     requested_date = _parse_iso_date(extraction.get("source_date")) or _parse_iso_date(extraction.get("date"))
@@ -2108,6 +2122,7 @@ def handle_scheduling_message(session_id, user_message):
                 "reminders": bulk_parsed["events"][0]["reminders"],
                 "location": bulk_parsed["events"][0].get("location"),
                 "duration_label": _duration_label(bulk_parsed["events"][0].get("duration_minutes")),
+                "duration_summary": _summarize_bulk_durations(bulk_parsed["events"]),
                 "conflicts": conflicts,
                 "status": "needs_review",
                 "event_count": len(bulk_parsed["events"]),

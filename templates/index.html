@@ -1453,9 +1453,8 @@
             meta.innerHTML = `
                 ${draft.target_summary ? `<div>${summaryLabel}: ${escapeHtml(draft.target_summary)}</div>` : ""}
                 ${eventCountLine}
-                <div>Calendar: <span id="${escapeHtml(calendarMetaId)}">${escapeHtml(summaryCalendarName)}</span></div>
                 <div>Time: ${escapeHtml(draft.start_at || "")}${draft.end_at ? ` - ${escapeHtml(draft.end_at)}` : ""}</div>
-                ${draft.duration_label ? `<div>Duration: ${escapeHtml(draft.duration_label)}</div>` : ""}
+                ${draft.duration_summary ? `<div>Duration: ${escapeHtml(draft.duration_summary)}</div>` : (draft.duration_label ? `<div>Duration: ${escapeHtml(draft.duration_label)}</div>` : "")}
                 ${draft.location ? `<div>Location: ${escapeHtml(draft.location)}</div>` : ""}
             `;
 
@@ -1463,7 +1462,7 @@
             card.appendChild(meta);
 
             let selectedCalendarId = draft.selected_calendar ? draft.selected_calendar.provider_calendar_id : null;
-            let selectedCalendarName = draft.selected_calendar ? draft.selected_calendar.name : "";
+            let selectedCalendarName = summaryCalendarName;
             if (draft.available_calendars && draft.available_calendars.length) {
                 const calendarRow = document.createElement("div");
                 calendarRow.className = "draft-inline-row";
