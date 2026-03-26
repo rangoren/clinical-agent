@@ -19,11 +19,12 @@ STUDY_SEED_ITEMS = [
             {"key": "C", "text": "Discharge with home BP checks"},
             {"key": "D", "text": "Repeat labs in one week"},
         ],
-        "correct_option": "B",
-        "short_explanation": "Correct. Severe features usually shift the plan toward delivery once the mother is stabilized.",
-        "key_takeaway": "The exam clue is severe features: management becomes more urgent.",
-        "board_rule": "Severe features at 34 weeks or more: stabilize the mother, then deliver.",
-        "difficulty": "medium",
+        "correct_answer_key": "B",
+        "explanation": "Severe features at this gestation usually move management toward delivery once the mother is stabilized.",
+        "exam_clue": "Severe features at 35 weeks",
+        "board_takeaway": "Severe features at 34 weeks or more: stabilize the mother, then deliver.",
+        "decision_point": "Timing of delivery in preeclampsia with severe features",
+        "difficulty_band": "standard",
         "estimated_time_seconds": 60,
         "source_id": "study_src_nice_hypertension",
         "source_name": "NICE Guideline: Hypertension in Pregnancy",
@@ -32,6 +33,7 @@ STUDY_SEED_ITEMS = [
         "source_excerpt": "Severe maternal disease changes timing and usually favors delivery after stabilization rather than routine expectant care.",
         "approved_for_stage_b": True,
         "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
         "enabled": True,
     },
     {
@@ -46,11 +48,12 @@ STUDY_SEED_ITEMS = [
             {"key": "C", "text": "Magnesium sulfate"},
             {"key": "D", "text": "Heparin"},
         ],
-        "correct_option": "A",
-        "short_explanation": "Correct. Oxytocin is the standard first-line uterotonic for atony-related PPH.",
-        "key_takeaway": "On boards, uterine atony plus immediate bleeding points to oxytocin first.",
-        "board_rule": "Immediate PPH from uterine atony: uterine massage plus oxytocin first.",
-        "difficulty": "easy",
+        "correct_answer_key": "A",
+        "explanation": "Atony-related postpartum hemorrhage is treated first with uterine massage and oxytocin as the standard first-line uterotonic.",
+        "exam_clue": "Immediate postpartum hemorrhage from uterine atony",
+        "board_takeaway": "Immediate PPH from uterine atony: uterine massage plus oxytocin first.",
+        "decision_point": "First-line management of uterine atony postpartum hemorrhage",
+        "difficulty_band": "warmup",
         "estimated_time_seconds": 45,
         "source_id": "study_src_acog_pph",
         "source_name": "ACOG Practice Bulletin: Postpartum Hemorrhage",
@@ -59,6 +62,7 @@ STUDY_SEED_ITEMS = [
         "source_excerpt": "Initial treatment of uterine atony includes uterine massage and oxytocin as first-line uterotonic therapy.",
         "approved_for_stage_b": True,
         "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
         "enabled": True,
     },
     {
@@ -73,11 +77,12 @@ STUDY_SEED_ITEMS = [
             {"key": "C", "text": "Fetal sleep cycle"},
             {"key": "D", "text": "Maternal fever only"},
         ],
-        "correct_option": "B",
-        "short_explanation": "Correct. Late decelerations classically point to uteroplacental insufficiency.",
-        "key_takeaway": "Variable decelerations suggest cord compression; late decelerations suggest placental compromise.",
-        "board_rule": "Late decelerations point to uteroplacental insufficiency; variable decelerations point to cord compression.",
-        "difficulty": "medium",
+        "correct_answer_key": "B",
+        "explanation": "Recurrent late decelerations classically suggest uteroplacental insufficiency rather than cord compression.",
+        "exam_clue": "Recurrent late decelerations",
+        "board_takeaway": "Late decelerations point to uteroplacental insufficiency; variable decelerations point to cord compression.",
+        "decision_point": "Interpret the most likely cause of a CTG deceleration pattern",
+        "difficulty_band": "standard",
         "estimated_time_seconds": 50,
         "source_id": "study_src_nice_ctg",
         "source_name": "NICE Guideline: Fetal Monitoring in Labour",
@@ -86,6 +91,7 @@ STUDY_SEED_ITEMS = [
         "source_excerpt": "Late decelerations are associated with uteroplacental insufficiency and possible fetal hypoxia.",
         "approved_for_stage_b": True,
         "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
         "enabled": True,
     },
     {
@@ -100,11 +106,12 @@ STUDY_SEED_ITEMS = [
             {"key": "C", "text": "Routine tocolysis for weeks"},
             {"key": "D", "text": "No treatment if fetal tracing is normal"},
         ],
-        "correct_option": "A",
-        "short_explanation": "Correct. In appropriate PPROM cases, latency antibiotics help prolong pregnancy and reduce infection risk.",
-        "key_takeaway": "Boards often test antibiotics as part of expectant PPROM care before term.",
-        "board_rule": "PPROM before term without infection: give latency antibiotics as part of expectant management.",
-        "difficulty": "medium",
+        "correct_answer_key": "A",
+        "explanation": "In appropriate PPROM cases before term and without infection, latency antibiotics help prolong pregnancy and reduce infectious morbidity.",
+        "exam_clue": "PPROM at 30 weeks without infection",
+        "board_takeaway": "PPROM before term without infection: give latency antibiotics as part of expectant management.",
+        "decision_point": "Choose a supportive management step in preterm PPROM",
+        "difficulty_band": "standard",
         "estimated_time_seconds": 55,
         "source_id": "study_src_acog_prom",
         "source_name": "ACOG Practice Bulletin: Prelabor Rupture of Membranes",
@@ -113,6 +120,7 @@ STUDY_SEED_ITEMS = [
         "source_excerpt": "Latency antibiotics are recommended in eligible PPROM cases to prolong pregnancy and lower infectious morbidity.",
         "approved_for_stage_b": True,
         "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
         "enabled": True,
     },
     {
@@ -191,12 +199,58 @@ def _utc_now():
 def ensure_study_content_seed():
     now = _utc_now()
     for item in STUDY_SEED_ITEMS:
-        if study_content_collection.find_one({"id": item["id"]}, {"id": 1}):
-            continue
         payload = dict(item)
-        payload["created_at"] = now
         payload["updated_at"] = now
-        study_content_collection.insert_one(payload)
+        study_content_collection.update_one(
+            {"id": item["id"]},
+            {
+                "$set": payload,
+                "$setOnInsert": {"created_at": now},
+            },
+            upsert=True,
+        )
+
+
+def _normalize_study_item(item):
+    if not item:
+        return None
+
+    normalized = dict(item)
+    if normalized.get("item_type") != "mcq":
+        return normalized
+
+    normalized["correct_answer_key"] = (
+        normalized.get("correct_answer_key")
+        or normalized.get("correct_option")
+    )
+    explanation = (normalized.get("explanation") or normalized.get("short_explanation") or "").strip()
+    explanation = re.sub(r"^(Correct|Not quite)\.\s*", "", explanation).strip()
+    normalized["explanation"] = explanation
+    normalized["exam_clue"] = (
+        normalized.get("exam_clue")
+        or normalized.get("key_clue")
+        or normalized.get("key_takeaway")
+        or normalized.get("subtopic")
+        or normalized.get("topic")
+    )
+    normalized["board_takeaway"] = (
+        normalized.get("board_takeaway")
+        or normalized.get("board_rule")
+        or normalized.get("key_takeaway")
+        or explanation
+    )
+    normalized["decision_point"] = (
+        normalized.get("decision_point")
+        or normalized.get("subtopic")
+        or normalized.get("topic")
+    )
+    normalized["difficulty_band"] = (
+        normalized.get("difficulty_band")
+        or normalized.get("difficulty")
+        or "standard"
+    )
+    normalized["review_status"] = normalized.get("review_status") or "source_grounded"
+    return normalized
 
 
 def _default_state(session_id):
@@ -265,7 +319,7 @@ def _get_items(item_type=None, topic=None, exclude_ids=None):
         query["item_type"] = item_type
     if topic:
         query["topic"] = topic
-    items = list(study_content_collection.find(query, {"_id": 0}))
+    items = [_normalize_study_item(item) for item in study_content_collection.find(query, {"_id": 0})]
     if exclude_ids:
         items = [item for item in items if item["id"] not in exclude_ids]
     return items
@@ -281,6 +335,82 @@ def _pick_item(session_id, candidates, salt):
         return None
     rng = _rng_for_session(session_id, salt)
     return candidates[rng.randrange(len(candidates))]
+
+
+def _difficulty_rank(item):
+    band = (item.get("difficulty_band") or "").strip().lower()
+    if band == "standard":
+        return 3
+    if band == "warmup":
+        return 1
+    return 2
+
+
+def _selection_score(item, state, preferred_topic=None, preferred_item_type=None):
+    score = 0
+
+    if preferred_item_type and item.get("item_type") == preferred_item_type:
+        score += 30
+    if preferred_topic and item.get("topic") == preferred_topic:
+        score += 28
+
+    if item.get("item_type") == "mcq":
+        score += 18
+        if item.get("decision_point"):
+            score += 10
+        if item.get("exam_clue"):
+            score += 8
+        score += _difficulty_rank(item) * 6
+    else:
+        score += 8
+
+    source_excerpt = (item.get("source_excerpt") or "").strip()
+    if source_excerpt:
+        score += 4
+    if item.get("last_reviewed_at"):
+        score += 3
+    if item.get("review_status") == "source_grounded":
+        score += 4
+
+    recent_topics = state.get("recent_topic_history") or []
+    if item.get("topic") in recent_topics[-2:]:
+        score -= 8
+
+    cards_shown_history = state.get("cards_shown_history") or []
+    if item.get("id") in cards_shown_history[-6:]:
+        score -= 10
+
+    cards_clicked_history = state.get("cards_clicked_history") or []
+    if item.get("id") in cards_clicked_history[-6:]:
+        score -= 12
+
+    recent_mistakes = state.get("recent_mistake_topics") or []
+    if item.get("topic") and item.get("topic") in recent_mistakes[-3:]:
+        score += 12
+
+    return score
+
+
+def _pick_best_item(session_id, candidates, salt, state, preferred_topic=None, preferred_item_type=None):
+    if not candidates:
+        return None
+    scored = []
+    for item in candidates:
+        score = _selection_score(
+            item,
+            state,
+            preferred_topic=preferred_topic,
+            preferred_item_type=preferred_item_type,
+        )
+        scored.append((score, item))
+
+    if not scored:
+        return None
+
+    scored.sort(key=lambda entry: entry[0], reverse=True)
+    top_score = scored[0][0]
+    shortlist = [item for score, item in scored if score >= top_score - 4]
+    return _pick_item(session_id, shortlist, salt)
 
 
 def _title_for_dynamic(item, has_history):
@@ -322,14 +452,36 @@ def _option_text_by_key(item, option_key):
     return None
 
 
-def _build_mcq_feedback_reply(item, correct):
-    status = "Correct." if correct else "Not quite."
-    explanation = re.sub(r"^(Correct|Not quite)\.\s*", "", item["short_explanation"]).strip()
-    return f"{status} {explanation} {item['key_takeaway']}"
+def _build_mcq_feedback_reply(item, correct, selected_option=None):
+    status = "Correct." if correct else "Incorrect."
+    correct_key = item.get("correct_answer_key")
+    correct_text = _option_text_by_key(item, correct_key)
+    lines = [status]
+    if correct_key and correct_text:
+        lines.append(f"Correct answer: {correct_key}: {correct_text}")
+
+    explanation = (item.get("explanation") or "").strip()
+    if explanation:
+        lines.append(f"Why it is correct: {explanation}")
+
+    exam_clue = (item.get("exam_clue") or "").strip()
+    if exam_clue:
+        lines.append(f"Key clue: {exam_clue}")
+
+    takeaway = (item.get("board_takeaway") or "").strip()
+    if takeaway:
+        lines.append(f"Board takeaway: {takeaway}")
+
+    if not correct:
+        selected_text = _option_text_by_key(item, selected_option)
+        if selected_option and selected_text:
+            lines.append(f"Why {selected_option} is not best: it does not fit the main exam clue here.")
+
+    return "\n".join(lines)
 
 
 def _board_rule_text(item):
-    rule = (item.get("board_rule") or "").strip()
+    rule = (item.get("board_takeaway") or item.get("board_rule") or "").strip()
     if rule:
         return rule
     if item.get("item_type") == "pearl" and item.get("bullets"):
@@ -338,34 +490,39 @@ def _board_rule_text(item):
 
 
 def _build_mcq_explain_reply(item, state):
-    correct_key = item.get("correct_option")
+    correct_key = item.get("correct_answer_key")
     correct_text = _option_text_by_key(item, correct_key)
     selected_key = (state.get("last_answered_option") or "").upper() or None
     selected_text = _option_text_by_key(item, selected_key)
     answered_correctly = state.get("last_answer_correct")
+    lines = []
 
     opening = "Why this answer:"
     if answered_correctly is True:
         opening = "Why that answer is right:"
     elif answered_correctly is False:
         opening = "Why your answer was off:"
+    lines.append(opening)
 
-    parts = [opening]
     if correct_key and correct_text:
-        parts.append(f"The best answer is {correct_key}: {correct_text}.")
+        lines.append(f"Correct answer: {correct_key}: {correct_text}")
 
-    explanation = re.sub(r"^(Correct|Not quite)\.\s*", "", item["short_explanation"]).strip()
+    explanation = (item.get("explanation") or "").strip()
     if explanation:
-        parts.append(explanation)
+        lines.append(f"Why it is correct: {explanation}")
+
+    exam_clue = (item.get("exam_clue") or "").strip()
+    if exam_clue:
+        lines.append(f"Key clue: {exam_clue}")
 
     rule = _board_rule_text(item)
     if rule:
-        parts.append(f"Board rule: {rule}")
+        lines.append(f"Board takeaway: {rule}")
 
     if answered_correctly is False and selected_key and selected_text:
-        parts.append(f"You picked {selected_key}: {selected_text}, but the board clue points away from that choice.")
+        lines.append(f"Why {selected_key} is tempting but wrong: it does not match the main clue as well as the best answer.")
 
-    return " ".join(parts)
+    return "\n".join(lines)
 
 
 def _get_active_item(session_id):
@@ -373,7 +530,7 @@ def _get_active_item(session_id):
     item_id = state.get("last_incomplete_item_id") or state.get("last_active_item_id")
     if not item_id:
         return None, state
-    item = study_content_collection.find_one({"id": item_id, "enabled": True}, {"_id": 0})
+    item = _normalize_study_item(study_content_collection.find_one({"id": item_id, "enabled": True}, {"_id": 0}))
     return item, state
 
 
@@ -392,14 +549,28 @@ def get_idle_study_cards(session_id):
     practice_pool = _get_items(item_type="mcq", topic=weak_topic, exclude_ids=recent_exclude_ids) or _get_items(item_type="mcq", exclude_ids=recent_exclude_ids)
     if not practice_pool:
         practice_pool = _get_items(item_type="mcq", topic=weak_topic) or _get_items(item_type="mcq")
-    practice_item = _pick_item(session_id, practice_pool, "practice")
+    practice_item = _pick_best_item(
+        session_id,
+        practice_pool,
+        "practice",
+        state,
+        preferred_topic=weak_topic,
+        preferred_item_type="mcq",
+    )
     if practice_item:
         used_ids.add(practice_item["id"])
 
     pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids | recent_exclude_ids)
     if not pearl_pool:
         pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids)
-    pearl_item = _pick_item(session_id, pearl_pool, "pearl")
+    pearl_item = _pick_best_item(
+        session_id,
+        pearl_pool,
+        "pearl",
+        state,
+        preferred_topic=recent_topic,
+        preferred_item_type="pearl",
+    )
     if pearl_item:
         used_ids.add(pearl_item["id"])
 
@@ -415,7 +586,13 @@ def get_idle_study_cards(session_id):
             if dynamic_topic
             else _get_items(exclude_ids=used_ids)
         )
-    dynamic_item = _pick_item(session_id, dynamic_pool, "dynamic")
+    dynamic_item = _pick_best_item(
+        session_id,
+        dynamic_pool,
+        "dynamic",
+        state,
+        preferred_topic=dynamic_topic,
+    )
 
     cards = []
     if practice_item:
@@ -457,7 +634,12 @@ def get_idle_study_cards(session_id):
 
     if len(cards) < 3:
         fallback_pool = _get_items(exclude_ids=used_ids) or _get_items()
-        for item in fallback_pool:
+        scored_fallback = sorted(
+            fallback_pool,
+            key=lambda item: _selection_score(item, state),
+            reverse=True,
+        )
+        for item in scored_fallback:
             if item["id"] in {card["content_item_id"] for card in cards}:
                 continue
             cards.append(
@@ -498,6 +680,8 @@ def _build_study_item_payload(item):
                 "question_stem": item["question_stem"],
                 "options": item["options"],
                 "estimated_time_seconds": item.get("estimated_time_seconds", 60),
+                "difficulty_band": item.get("difficulty_band"),
+                "decision_point": item.get("decision_point"),
             }
         )
     else:
@@ -519,7 +703,7 @@ def _build_study_item_payload(item):
 
 def open_study_card(session_id, content_item_id, card_type):
     ensure_study_content_seed()
-    item = study_content_collection.find_one({"id": content_item_id, "enabled": True}, {"_id": 0})
+    item = _normalize_study_item(study_content_collection.find_one({"id": content_item_id, "enabled": True}, {"_id": 0}))
     if not item:
         return {"reply": "I don’t have an approved study item for that yet."}
 
@@ -553,13 +737,13 @@ def open_study_card(session_id, content_item_id, card_type):
 
 
 def answer_mcq(session_id, content_item_id, selected_option):
-    item = study_content_collection.find_one({"id": content_item_id, "item_type": "mcq", "enabled": True}, {"_id": 0})
+    item = _normalize_study_item(study_content_collection.find_one({"id": content_item_id, "item_type": "mcq", "enabled": True}, {"_id": 0}))
     if not item:
         return {"reply": "I couldn’t load that question anymore."}
 
     state = _load_state(session_id)
     topic = item["topic"]
-    correct = (selected_option or "").upper() == item["correct_option"]
+    correct = (selected_option or "").upper() == item["correct_answer_key"]
     correct_counts = dict(state.get("topics_correct_count") or {})
     incorrect_counts = dict(state.get("topics_incorrect_count") or {})
     recent_mistakes = list(state.get("recent_mistake_topics") or [])
@@ -594,7 +778,7 @@ def answer_mcq(session_id, content_item_id, selected_option):
     )
     log_event("mcq_correct" if correct else "mcq_incorrect", session_id, {"content_item_id": item["id"], "topic": topic})
 
-    reply = _build_mcq_feedback_reply(item, correct)
+    reply = _build_mcq_feedback_reply(item, correct, (selected_option or "").upper())
     return {
         "reply": reply,
         "study_context_item_id": item["id"],
@@ -616,11 +800,18 @@ def _pick_related_item(session_id, item, item_type, exclude_self=False):
     if not candidates:
         fallback_exclude_ids = {item["id"]} if exclude_self else None
         candidates = _get_items(item_type=item_type, topic=item["topic"], exclude_ids=fallback_exclude_ids) or _get_items(item_type=item_type, exclude_ids=fallback_exclude_ids)
-    return _pick_item(session_id, candidates, f"{item['id']}:{item_type}")
+    return _pick_best_item(
+        session_id,
+        candidates,
+        f"{item['id']}:{item_type}",
+        state,
+        preferred_topic=item.get("topic"),
+        preferred_item_type=item_type,
+    )
 
 
 def handle_study_action(session_id, content_item_id, action):
-    item = study_content_collection.find_one({"id": content_item_id, "enabled": True}, {"_id": 0})
+    item = _normalize_study_item(study_content_collection.find_one({"id": content_item_id, "enabled": True}, {"_id": 0}))
     if not item:
         return {"reply": "I couldn’t find that study item anymore."}
     state = _load_state(session_id)
