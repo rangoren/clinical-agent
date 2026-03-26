@@ -455,6 +455,25 @@ def get_idle_study_cards(session_id):
             }
         )
 
+    if len(cards) < 3:
+        fallback_pool = _get_items(exclude_ids=used_ids) or _get_items()
+        for item in fallback_pool:
+            if item["id"] in {card["content_item_id"] for card in cards}:
+                continue
+            cards.append(
+                {
+                    "id": f"fallback_{item['id']}",
+                    "type": "practice" if item["item_type"] == "mcq" else "pearl",
+                    "title": "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
+                    "subtitle": "1-minute exam-style practice" if item["item_type"] == "mcq" else "Fast board takeaway",
+                    "cta": "Start" if item["item_type"] == "mcq" else "Open",
+                    "content_item_id": item["id"],
+                    "topic": item["topic"],
+                }
+            )
+            if len(cards) == 3:
+                break
+
     shown_history = _trim_history((state.get("cards_shown_history") or []) + [card["content_item_id"] for card in cards], 18)
     _save_state(
         session_id,
