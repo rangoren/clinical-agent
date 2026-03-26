@@ -181,6 +181,8 @@ HALF_SHIFT_KEYWORDS = (
     "half-call",
     "half call",
     "partial call",
+    "partial shift",
+    "half duty",
 )
 DEPARTMENT_SHIFT_KEYWORDS = (
     "מחלקות",
@@ -1268,9 +1270,11 @@ def _build_mixed_template_events_from_message(message):
         year = now.year
 
     clauses = []
-    next_clause = r"(?=(?:\s*(?:ו|and)\s+)?(?:תורנות חצי|חצי תורנות|מחלקות|משמרת מחלקות|department shift|ward shift|תורנויות|תורניות|on-call|on call|call shifts?|(?<!חצי\s)תורנות(?!\s*חצי))|$)"
+    next_clause = r"(?=(?:\s*(?:ו|and)\s+)?(?:תורנות חצי|חצי תורנות|half shift|half-call|half call|partial call|partial shift|half duty|מחלקות|משמרת מחלקות|department shift|ward shift|תורנויות|תורניות|on-call|on call|call shifts?|(?<!חצי\s)תורנות(?!\s*חצי))|$)"
     pattern_map = [
-        (rf"(תורנות חצי|חצי תורנות|half shift|half-call|half call|partial call)(.*?){next_clause}", _match_scheduling_template("תורנות חצי")),
+        (rf"((?:ו\s*)?חצי)(.*?){next_clause}", _match_scheduling_template("תורנות חצי")),
+        (rf"((?:and\s+)?half(?:\s+(?:shift|call|duty))?)(.*?){next_clause}", _match_scheduling_template("תורנות חצי")),
+        (rf"(תורנות חצי|חצי תורנות|half shift|half-call|half call|partial call|partial shift|half duty)(.*?){next_clause}", _match_scheduling_template("תורנות חצי")),
         (rf"(מחלקות|משמרת מחלקות|department shift|ward shift)(.*?){next_clause}", _match_scheduling_template("מחלקות")),
         (rf"(תורנויות|תורניות|on-call|on call|call shifts?|(?<!חצי\s)תורנות(?!\s*חצי))(.*?){next_clause}", _match_scheduling_template("תורנות")),
     ]
