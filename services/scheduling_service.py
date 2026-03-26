@@ -23,11 +23,16 @@ DEFAULT_SHIFT_START_HOUR = 8
 DEFAULT_SHIFT_START_MINUTE = 0
 DEFAULT_SHIFT_DURATION_HOURS = 25
 DEFAULT_SHIFT_LOCATION = "שיבא"
+HALF_SHIFT_START_HOUR = 15
+HALF_SHIFT_START_MINUTE = 0
+HALF_SHIFT_END_HOUR = 23
+HALF_SHIFT_END_MINUTE = 0
+HALF_SHIFT_DURATION_MINUTES = 8 * 60
 KNOWN_LOCATIONS = {
     "שיבא": ("shiba", "sheba", "tel hashomer", "תל השומר", "שיבא"),
 }
 CALENDAR_KEYWORDS = {
-    "work": ("work", "shift", "clinic", "ward", "call", "hospital", "meeting", "on-call", "on call", "night shift", "night shifts", "call shift", "call shifts", "תורנות", "תורנויות", "כוננות", "משמרת לילה", "תורנית"),
+    "work": ("work", "shift", "clinic", "ward", "call", "hospital", "meeting", "on-call", "on call", "night shift", "night shifts", "call shift", "call shifts", "תורנות", "תורנויות", "תורנות חצי", "חצי תורנות", "מחלקות", "משמרת מחלקות", "כוננות", "משמרת לילה", "תורנית"),
     "kids": ("kids", "child", "children", "school", "kindergarten", "pickup", "dropoff", "pediatrician"),
     "family": ("family", "parents", "in-laws", "dinner", "birthday", "shared"),
     "personal": ("gym", "dentist", "doctor", "hair", "friend", "date", "personal"),
@@ -167,6 +172,24 @@ SHIFT_KEYWORDS = (
     "תורנית",
     "כוננות",
     "משמרת לילה",
+)
+HALF_SHIFT_KEYWORDS = (
+    "תורנות חצי",
+    "חצי תורנות",
+    "תורנות חצי יום",
+    "half shift",
+    "half-call",
+    "half call",
+    "partial call",
+)
+DEPARTMENT_SHIFT_KEYWORDS = (
+    "מחלקות",
+    "משמרת מחלקות",
+    "מחלקה ערב",
+    "מחלקת ערב",
+    "department shift",
+    "ward shift",
+    "ward evening shift",
 )
 
 
@@ -352,6 +375,43 @@ def _is_shift_template(text):
     return bool(re.search(r"תורנ(?:ות|יות|ית|י(?:ו)?ת)?", text or ""))
 
 
+def _match_scheduling_template(text):
+    normalized = _normalize_text(text)
+    lowered = normalized.lower()
+
+    if any(keyword in lowered for keyword in HALF_SHIFT_KEYWORDS) or re.search(r"תורנות\s+חצי|חצי\s+תורנות", normalized):
+        return {
+            "title": "תורנות חצי",
+            "location": DEFAULT_SHIFT_LOCATION,
+            "start_time": "15:00",
+            "end_time": "23:00",
+            "duration_minutes": HALF_SHIFT_DURATION_MINUTES,
+            "is_shift": False,
+        }
+
+    if any(keyword in lowered for keyword in DEPARTMENT_SHIFT_KEYWORDS) or re.search(r"משמרת\s+מחלקות|מחלקות", normalized):
+        return {
+            "title": "מחלקות",
+            "location": DEFAULT_SHIFT_LOCATION,
+            "start_time": "15:00",
+            "end_time": "23:00",
+            "duration_minutes": HALF_SHIFT_DURATION_MINUTES,
+            "is_shift": False,
+        }
+
+    if _is_shift_template(normalized):
+        return {
+            "title": "תורנות",
+            "location": DEFAULT_SHIFT_LOCATION,
+            "start_time": "08:00",
+            "end_time": "09:00",
+            "duration_minutes": DEFAULT_SHIFT_DURATION_HOURS * 60,
+            "is_shift": True,
+        }
+
+    return None
+
+
 def _build_shift_window(event_date):
     start_at = datetime.combine(event_date, datetime.min.time()).replace(
         hour=DEFAULT_SHIFT_START_HOUR,
@@ -362,8 +422,9 @@ def _build_shift_window(event_date):
 
 
 def _infer_default_location(text):
-    if _is_shift_template(text):
-        return DEFAULT_SHIFT_LOCATION
+    template = _match_scheduling_template(text)
+    if template:
+        return template["location"]
     return _extract_location(text)
 
 
@@ -500,8 +561,9 @@ def _extract_explicit_title(text):
 
 
 def _normalize_event_title(text):
-    if _is_shift_template(text):
-        return "תורנות"
+    template = _match_scheduling_template(text)
+    if template:
+        return template["title"]
     semantic_title = _build_semantic_title(text)
     if semantic_title:
         return semantic_title
@@ -512,6 +574,9 @@ def _normalize_event_title(text):
 
 
 def _infer_event_minutes(text, is_shift_template=False):
+    template = _match_scheduling_template(text)
+    if template:
+        return template["duration_minutes"]
     if is_shift_template:
         return DEFAULT_SHIFT_DURATION_HOURS * 60
     return _extract_duration_minutes(text) or DEFAULT_EVENT_MINUTES
@@ -1001,14 +1066,16 @@ def _apply_extraction_defaults(extraction, raw_message):
         return extraction
     normalized = _normalize_text(raw_message)
     extraction = dict(extraction)
+    template = _match_scheduling_template(normalized)
     if not extraction.get("calendar_type"):
         extraction["calendar_type"] = _infer_calendar_type(normalized)
-    if extraction.get("is_shift"):
-        extraction["title"] = "תורנות"
-        extraction["location"] = extraction.get("location") or DEFAULT_SHIFT_LOCATION
-        extraction["start_time"] = extraction.get("start_time") or "08:00"
-        extraction["end_time"] = extraction.get("end_time") or "09:00"
-        extraction["duration_minutes"] = extraction.get("duration_minutes") or (DEFAULT_SHIFT_DURATION_HOURS * 60)
+    if template:
+        extraction["title"] = extraction.get("title") or template["title"]
+        extraction["location"] = extraction.get("location") or template["location"]
+        extraction["start_time"] = extraction.get("start_time") or template["start_time"]
+        extraction["end_time"] = extraction.get("end_time") or template["end_time"]
+        extraction["duration_minutes"] = extraction.get("duration_minutes") or template["duration_minutes"]
+        extraction["is_shift"] = bool(extraction.get("is_shift") or template["is_shift"])
     elif not extraction.get("duration_minutes"):
         extraction["duration_minutes"] = _extract_duration_minutes(normalized) or DEFAULT_EVENT_MINUTES
     return extraction

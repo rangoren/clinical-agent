@@ -128,6 +128,19 @@ Rules:
   - default start_time should be "08:00"
   - default end_time should be "09:00"
   - default duration_minutes should be 1500
+- For "תורנות חצי" / "חצי תורנות" / "half shift":
+  - title should be exactly "תורנות חצי"
+  - default location should be "שיבא" unless the user explicitly gave another location
+  - default start_time should be "15:00"
+  - default end_time should be "23:00"
+  - default duration_minutes should be 480
+- For "מחלקות" / "משמרת מחלקות" / "department shift" / "ward shift":
+  - title should be exactly "מחלקות"
+  - default location should be "שיבא" unless the user explicitly gave another location
+  - default start_time should be "15:00"
+  - default end_time should be "23:00"
+  - default duration_minutes should be 480
+- If the user writes dates like "4,7,9 and half shift on 15", treat 15 as a date when the request is about scheduling events, not as an hour.
 - If the user gives multiple dates for the same event, use is_bulk=true and fill bulk_dates with ISO dates.
 - For update:
   - source_date is the current event date if stated
