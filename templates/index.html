@@ -1446,9 +1446,13 @@
             const meta = document.createElement("div");
             meta.className = "draft-meta";
             const calendarMetaId = `draft-calendar-meta-${draft.draft_id}`;
+            const summaryLabel = actionType === "bulk_create" ? "Plan" : "Current";
+            const eventCountLine = draft.event_count && actionType !== "bulk_create"
+                ? `<div>Events: ${escapeHtml(String(draft.event_count))}</div>`
+                : "";
             meta.innerHTML = `
-                ${draft.target_summary ? `<div>Current: ${escapeHtml(draft.target_summary)}</div>` : ""}
-                ${draft.event_count ? `<div>Events: ${escapeHtml(String(draft.event_count))}</div>` : ""}
+                ${draft.target_summary ? `<div>${summaryLabel}: ${escapeHtml(draft.target_summary)}</div>` : ""}
+                ${eventCountLine}
                 <div>Calendar: <span id="${escapeHtml(calendarMetaId)}">${escapeHtml(summaryCalendarName)}</span></div>
                 <div>Time: ${escapeHtml(draft.start_at || "")}${draft.end_at ? ` - ${escapeHtml(draft.end_at)}` : ""}</div>
                 ${draft.duration_label ? `<div>Duration: ${escapeHtml(draft.duration_label)}</div>` : ""}

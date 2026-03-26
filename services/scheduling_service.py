@@ -1268,10 +1268,11 @@ def _build_mixed_template_events_from_message(message):
         year = now.year
 
     clauses = []
+    next_clause = r"(?=(?:\s*(?:ו|and)\s+)?(?:תורנות חצי|חצי תורנות|מחלקות|משמרת מחלקות|department shift|ward shift|תורנויות|תורניות|on-call|on call|call shifts?|(?<!חצי\s)תורנות(?!\s*חצי))|$)"
     pattern_map = [
-        (r"(תורנות חצי|חצי תורנות|half shift|half-call|half call|partial call)(.*?)(?=(?:\bתורנות\b|\bתורנויות\b|\bתורניות\b|\bמחלקות\b|$))", _match_scheduling_template("תורנות חצי")),
-        (r"(מחלקות|משמרת מחלקות|department shift|ward shift)(.*?)(?=(?:\bתורנות\b|\bתורנויות\b|\bתורניות\b|\bתורנות חצי\b|$))", _match_scheduling_template("מחלקות")),
-        (r"(תורנויות|תורניות|on-call|on call|call shifts?|(?<!חצי\s)תורנות(?!\s*חצי))(.*?)(?=(?:\bתורנות חצי\b|\bחצי תורנות\b|\bמחלקות\b|$))", _match_scheduling_template("תורנות")),
+        (rf"(תורנות חצי|חצי תורנות|half shift|half-call|half call|partial call)(.*?){next_clause}", _match_scheduling_template("תורנות חצי")),
+        (rf"(מחלקות|משמרת מחלקות|department shift|ward shift)(.*?){next_clause}", _match_scheduling_template("מחלקות")),
+        (rf"(תורנויות|תורניות|on-call|on call|call shifts?|(?<!חצי\s)תורנות(?!\s*חצי))(.*?){next_clause}", _match_scheduling_template("תורנות")),
     ]
 
     seen_clauses = set()
