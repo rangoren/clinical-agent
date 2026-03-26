@@ -1954,8 +1954,28 @@
             return row;
         }
 
+        function formatAssistantMessageHtml(message) {
+            const text = String(message || "").trim();
+            if (!text) return "";
+            if (text.includes("<") && text.includes(">")) {
+                return text;
+            }
+
+            return text
+                .split("\n")
+                .filter((line) => line.trim())
+                .map((line) => {
+                    const escaped = escapeHtml(line.trim());
+                    if (escaped.startsWith("- ")) {
+                        return `<div>${escaped}</div>`;
+                    }
+                    return `<p>${escaped}</p>`;
+                })
+                .join("");
+        }
+
         function appendAssistantMessage(message, variant = "") {
-            return appendMessage("assistant", message, variant);
+            return appendMessage("assistant", formatAssistantMessageHtml(message), variant);
         }
 
         function appendUserMessage(message) {
