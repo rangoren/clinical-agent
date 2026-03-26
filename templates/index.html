@@ -560,10 +560,11 @@
             padding: 10px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 7px;
             min-width: 0;
             cursor: pointer;
             text-align: left;
+            justify-content: space-between;
         }
 
         .study-entry-top {
@@ -574,7 +575,7 @@
         }
 
         .study-entry-type {
-            font-size: 0.64rem;
+            font-size: 0.68rem;
             font-weight: 700;
             letter-spacing: 0.08em;
             text-transform: uppercase;
@@ -582,10 +583,10 @@
         }
 
         .study-entry-topic {
-            font-size: 0.7rem;
+            font-size: 0.78rem;
             color: var(--muted);
             text-align: right;
-            line-height: 1.25;
+            line-height: 1.3;
             display: -webkit-box;
             -webkit-line-clamp: 1;
             -webkit-box-orient: vertical;
@@ -594,12 +595,12 @@
 
         .study-entry-title {
             margin: 0;
-            font-size: 0.88rem;
-            font-weight: 700;
+            font-size: 1rem;
+            font-weight: 760;
             color: var(--text);
-            line-height: 1.3;
+            line-height: 1.24;
             display: -webkit-box;
-            -webkit-line-clamp: 2;
+            -webkit-line-clamp: 3;
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
@@ -607,8 +608,8 @@
         .study-entry-subtitle {
             margin: 0;
             color: var(--muted);
-            font-size: 0.77rem;
-            line-height: 1.35;
+            font-size: 0.84rem;
+            line-height: 1.32;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
@@ -1216,20 +1217,25 @@
             }
 
             .study-entry-type {
-                font-size: 0.56rem;
+                font-size: 0.6rem;
             }
 
             .study-entry-topic {
-                font-size: 0.6rem;
+                font-size: 0.68rem;
                 text-align: left;
             }
 
             .study-entry-title {
-                font-size: 0.74rem;
+                font-size: 0.82rem;
                 -webkit-line-clamp: 3;
             }
 
-            .study-entry-subtitle,
+            .study-entry-subtitle {
+                display: -webkit-box;
+                font-size: 0.72rem;
+                -webkit-line-clamp: 2;
+            }
+
             .study-entry-cta {
                 display: none;
             }
