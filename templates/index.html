@@ -98,7 +98,7 @@
         }
 
         .mode-row {
-            padding: 10px 18px 0;
+            padding: 0;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -312,7 +312,7 @@
             display: flex;
             flex-direction: column;
             min-height: 0;
-            padding: 14px;
+            padding: 10px 14px 14px;
             gap: 12px;
         }
 
@@ -1124,11 +1124,11 @@
             }
 
             .content {
-                padding: 18px 20px;
+                padding: 12px 20px 18px;
             }
 
             .mode-row {
-                padding: 12px 20px 0;
+                padding: 0;
             }
 
             .chat-panel {
@@ -1193,12 +1193,12 @@
             }
 
             .content {
-                padding: 6px 8px 0;
+                padding: 8px 8px 0;
                 min-height: 0;
             }
 
             .mode-row {
-                padding: 8px 10px 0;
+                padding: 0;
             }
 
             .chat-panel {
@@ -1557,14 +1557,14 @@
             </div>
         </header>
 
-        <div class="mode-row">
-            <div class="mode-switch" role="tablist" aria-label="Assistant mode">
-                <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
-                <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
-            </div>
-        </div>
-
         <section class="content">
+            <div class="mode-row">
+                <div class="mode-switch" role="tablist" aria-label="Assistant mode">
+                    <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
+                    <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
+                </div>
+            </div>
+
             <div id="session-banner" class="session-banner">
                 <p id="session-banner-text"></p>
                 <div id="session-banner-actions" class="session-banner-actions"></div>
