@@ -218,6 +218,7 @@ def _default_state(session_id):
         "recent_topic_history": [],
         "cards_shown_history": [],
         "cards_clicked_history": [],
+        "recent_study_item_history": [],
         "created_at": now,
         "updated_at": now,
     }
@@ -246,6 +247,16 @@ def _save_state(session_id, updates):
         {"$set": updates, "$setOnInsert": insert_defaults},
         upsert=True,
     )
+
+
+def _recent_study_exclude_ids(state, max_items=12):
+    return set((state.get("recent_study_item_history") or [])[-max_items:])
+
+
+def _record_studied_item(state, item_id):
+    history = list(state.get("recent_study_item_history") or [])
+    history.append(item_id)
+    return _trim_history(history, 24)
 
 
 def _get_items(item_type=None, topic=None, exclude_ids=None):
@@ -371,28 +382,39 @@ def get_idle_study_cards(session_id):
     state = _load_state(session_id)
     recent_mistakes = state.get("recent_mistake_topics") or []
     recent_topics = state.get("recent_topic_history") or []
+    recent_exclude_ids = _recent_study_exclude_ids(state)
 
     weak_topic = recent_mistakes[-1] if recent_mistakes else None
     recent_topic = recent_topics[-1] if recent_topics else None
 
     used_ids = set()
 
-    practice_pool = _get_items(item_type="mcq", topic=weak_topic) or _get_items(item_type="mcq")
+    practice_pool = _get_items(item_type="mcq", topic=weak_topic, exclude_ids=recent_exclude_ids) or _get_items(item_type="mcq", exclude_ids=recent_exclude_ids)
+    if not practice_pool:
+        practice_pool = _get_items(item_type="mcq", topic=weak_topic) or _get_items(item_type="mcq")
     practice_item = _pick_item(session_id, practice_pool, "practice")
     if practice_item:
         used_ids.add(practice_item["id"])
 
-    pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids)
+    pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids | recent_exclude_ids)
+    if not pearl_pool:
+        pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids)
     pearl_item = _pick_item(session_id, pearl_pool, "pearl")
     if pearl_item:
         used_ids.add(pearl_item["id"])
 
     dynamic_topic = weak_topic or recent_topic
     dynamic_pool = (
-        _get_items(topic=dynamic_topic, exclude_ids=used_ids)
+        _get_items(topic=dynamic_topic, exclude_ids=used_ids | recent_exclude_ids)
         if dynamic_topic
-        else _get_items(exclude_ids=used_ids)
+        else _get_items(exclude_ids=used_ids | recent_exclude_ids)
     )
+    if not dynamic_pool:
+        dynamic_pool = (
+            _get_items(topic=dynamic_topic, exclude_ids=used_ids)
+            if dynamic_topic
+            else _get_items(exclude_ids=used_ids)
+        )
     dynamic_item = _pick_item(session_id, dynamic_pool, "dynamic")
 
     cards = []
@@ -495,6 +517,7 @@ def open_study_card(session_id, content_item_id, card_type):
             "last_studied_topic": item["topic"],
             "cards_clicked_history": _trim_history((state.get("cards_clicked_history") or []) + [item["id"]], 18),
             "recent_topic_history": _trim_history((state.get("recent_topic_history") or []) + [item["topic"]], 12),
+            "recent_study_item_history": _record_studied_item(state, item["id"]),
         },
     )
     log_event("study_card_clicked", session_id, {"card_type": card_type, "content_item_id": item["id"], "topic": item["topic"]})
@@ -566,8 +589,14 @@ def answer_mcq(session_id, content_item_id, selected_option):
 
 
 def _pick_related_item(session_id, item, item_type, exclude_self=False):
-    exclude_ids = {item["id"]} if exclude_self else None
+    state = _load_state(session_id)
+    exclude_ids = _recent_study_exclude_ids(state)
+    if exclude_self:
+        exclude_ids.add(item["id"])
     candidates = _get_items(item_type=item_type, topic=item["topic"], exclude_ids=exclude_ids) or _get_items(item_type=item_type, exclude_ids=exclude_ids)
+    if not candidates:
+        fallback_exclude_ids = {item["id"]} if exclude_self else None
+        candidates = _get_items(item_type=item_type, topic=item["topic"], exclude_ids=fallback_exclude_ids) or _get_items(item_type=item_type, exclude_ids=fallback_exclude_ids)
     return _pick_item(session_id, candidates, f"{item['id']}:{item_type}")
 
 
@@ -606,6 +635,7 @@ def handle_study_action(session_id, content_item_id, action):
                 "last_active_item_id": next_item["id"],
                 "last_active_item_type": next_item["item_type"],
                 "last_studied_topic": next_item["topic"],
+                "recent_study_item_history": _record_studied_item(state, next_item["id"]),
             },
         )
         return {
@@ -625,6 +655,7 @@ def handle_study_action(session_id, content_item_id, action):
                 "last_active_item_id": next_item["id"],
                 "last_active_item_type": next_item["item_type"],
                 "last_studied_topic": next_item["topic"],
+                "recent_study_item_history": _record_studied_item(state, next_item["id"]),
             },
         )
         return {
@@ -644,6 +675,7 @@ def handle_study_action(session_id, content_item_id, action):
                 "last_active_item_id": next_item["id"],
                 "last_active_item_type": next_item["item_type"],
                 "last_studied_topic": next_item["topic"],
+                "recent_study_item_history": _record_studied_item(state, next_item["id"]),
             },
         )
         return {
