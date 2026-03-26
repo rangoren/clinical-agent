@@ -2036,10 +2036,7 @@ def _format_event_line(event):
 def _format_shift_summary_line(event):
     start_label = event["start_at"].strftime("%a %d %b")
     time_label = event["start_at"].strftime("%H:%M")
-    title = event.get("title", "Event")
-    if title == "תורנות חצי":
-        return f"- {start_label} · תורנות חצי · {time_label}"
-    return f"- {start_label} · {title} · {time_label}"
+    return f"- {start_label} · {time_label}"
 
 
 def _build_daily_summary(session_id):
@@ -2143,7 +2140,10 @@ def _build_monthly_shift_summary(session_id, message):
         summary_bits.append(f"{half_shift_count} half")
     summary_suffix = f" ({', '.join(summary_bits)})" if summary_bits else ""
 
-    lines = [f"Your shifts for {month_label}: {len(events)} total{summary_suffix}."]
+    lines = [
+        f"Your shifts for {month_label}",
+        f"{len(events)} total{summary_suffix}:",
+    ]
     lines.extend(_format_shift_summary_line(event) for event in events)
     return {
         "reply": "\n".join(lines),
