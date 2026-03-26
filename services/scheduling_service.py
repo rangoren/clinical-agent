@@ -1959,10 +1959,16 @@ def _build_daily_summary(session_id):
 def build_scheduling_welcome(session_id):
     if has_google_calendar_connection(session_id):
         return "Scheduling is on."
-    return "To enable scheduling, connect your calendar in Settings."
+    return "Connect your calendar in Settings to start creating and syncing events."
 
 
 def handle_scheduling_message(session_id, user_message):
+    if not has_google_calendar_connection(session_id):
+        return {
+            "reply": "Calendar scheduling is almost ready. Connect your calendar in Settings first, then I can create and sync events for you here.",
+            "scheduling_draft": None,
+        }
+
     if _is_daily_summary_request(user_message):
         return _build_daily_summary(session_id)
 

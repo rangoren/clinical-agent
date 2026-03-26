@@ -157,7 +157,7 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 6px;
+            padding: 7px;
             border-radius: 999px;
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(244, 249, 247, 0.92));
             border: 1px solid rgba(15, 118, 110, 0.14);
@@ -168,11 +168,11 @@
             border: none;
             background: transparent;
             color: var(--muted);
-            min-height: 46px;
-            padding: 0 18px;
+            min-height: 55px;
+            padding: 0 22px;
             border-radius: 999px;
             font: inherit;
-            font-size: 0.88rem;
+            font-size: 0.96rem;
             font-weight: 800;
             letter-spacing: -0.01em;
             cursor: pointer;
@@ -645,7 +645,7 @@
 
         .study-flow-title {
             margin: 0;
-            font-size: 1rem;
+            font-size: 1.06rem;
             font-weight: 700;
             color: var(--text);
         }
@@ -655,7 +655,7 @@
             margin: 0;
             color: var(--text);
             line-height: 1.5;
-            font-size: 0.92rem;
+            font-size: 0.98rem;
         }
 
         .study-flow-list {
@@ -684,7 +684,7 @@
             padding: 10px 12px;
             border-radius: 12px;
             font: inherit;
-            font-size: 0.88rem;
+            font-size: 0.94rem;
             text-align: left;
             cursor: pointer;
             min-width: min(100%, 260px);
@@ -1230,8 +1230,7 @@
             }
 
             .study-entry-subtitle,
-            .study-entry-cta,
-            .study-actions {
+            .study-entry-cta {
                 display: none;
             }
 
@@ -1245,11 +1244,23 @@
             .study-flow-text,
             .study-flow-list,
             .study-option-button {
-                font-size: 0.84rem;
+                font-size: 0.92rem;
+            }
+
+            .study-actions {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .study-actions .secondary-button {
+                width: 100%;
+                min-height: 44px;
+                font-size: 0.92rem;
             }
 
             .study-mobile-hint {
-                display: block;
+                display: none;
             }
 
             .study-option-button {
@@ -1340,9 +1351,9 @@
             }
 
             .mode-button {
-                min-height: 40px;
-                padding: 0 13px;
-                font-size: 0.76rem;
+                min-height: 48px;
+                padding: 0 16px;
+                font-size: 0.84rem;
             }
         }
 
