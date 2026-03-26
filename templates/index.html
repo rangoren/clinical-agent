@@ -98,9 +98,13 @@
         }
 
         .mode-row {
-            padding: 8px 18px 0;
+            padding: 0 18px 8px;
             display: flex;
             justify-content: center;
+            border-bottom: 1px solid var(--line);
+            background:
+                radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 16rem),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.62));
         }
 
         .brand {
@@ -164,7 +168,7 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 5px;
+            padding: 4px;
             border-radius: 999px;
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(244, 249, 247, 0.92));
             border: 1px solid rgba(15, 118, 110, 0.14);
@@ -908,12 +912,71 @@
             gap: 0;
         }
 
+        .composer-mode-strip {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 0 0 8px;
+        }
+
+        .composer-mode-strip.open {
+            display: flex;
+        }
+
+        .composer-mode-button {
+            flex: 1;
+            min-height: 44px;
+            border: none;
+            border-radius: 15px;
+            background: rgba(244, 249, 247, 0.98);
+            color: var(--muted);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font: inherit;
+            font-size: 0.88rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .composer-mode-button svg {
+            width: 17px;
+            height: 17px;
+        }
+
+        .composer-mode-button.active {
+            background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(15, 118, 110, 0.08));
+            color: var(--brand-strong);
+            box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
+        }
+
         .composer-main {
             display: flex;
             align-items: flex-end;
             gap: 10px;
             min-width: 0;
             width: 100%;
+        }
+
+        .composer-plus-button {
+            width: 54px;
+            min-width: 54px;
+            height: 54px;
+            padding: 0;
+            border: 1px solid rgba(15, 118, 110, 0.14);
+            border-radius: 16px;
+            background: rgba(244, 249, 247, 0.98);
+            color: var(--brand-strong);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .composer-plus-button svg {
+            width: 18px;
+            height: 18px;
         }
 
         .composer-input {
@@ -961,10 +1024,10 @@
             height: 54px;
             padding: 0;
             border-radius: 16px;
-            background: linear-gradient(135deg, #70bdb2 0%, #8bcfc5 100%);
+            background: var(--user);
             color: white;
             font-weight: 700;
-            box-shadow: 0 8px 18px rgba(112, 189, 178, 0.16);
+            box-shadow: 0 12px 28px rgba(15, 118, 110, 0.24);
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -1098,7 +1161,7 @@
 
             .topbar {
                 flex-direction: column;
-                align-items: center;
+                align-items: stretch;
                 gap: 8px;
                 padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px 8px;
             }
@@ -1106,18 +1169,18 @@
             .brand {
                 gap: 0;
                 min-width: 0;
-                justify-content: center;
+                justify-content: flex-start;
             }
 
             .brand-kicker {
                 font-size: 1.12rem;
-                align-self: center;
+                align-self: flex-start;
             }
 
             .brand-title {
                 font-size: 1.12rem;
                 line-height: 1.1;
-                text-align: center;
+                text-align: left;
             }
 
             .content {
@@ -1126,7 +1189,7 @@
             }
 
             .mode-row {
-                padding: 6px 10px 0;
+                padding: 0 10px 8px;
             }
 
             .chat-panel {
@@ -1178,11 +1241,28 @@
                 gap: 0;
             }
 
+            .composer-mode-strip {
+                padding-bottom: 6px;
+            }
+
+            .composer-mode-button {
+                min-height: 42px;
+                font-size: 0.8rem;
+                border-radius: 14px;
+            }
+
             .composer-main {
                 gap: 8px;
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) 49px;
+                grid-template-columns: 49px minmax(0, 1fr) 49px;
                 align-items: center;
+            }
+
+            .composer-plus-button {
+                width: 49px;
+                min-width: 49px;
+                height: 49px;
+                border-radius: 14px;
             }
 
             .composer-input {
@@ -1482,7 +1562,31 @@
 
         <footer class="composer-shell">
             <div class="composer-card">
+                <div id="composer-mode-strip" class="composer-mode-strip">
+                    <button id="composer-mode-clinical" class="composer-mode-button active" type="button" onclick="switchAppMode('clinical')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 4V20"></path>
+                            <path d="M4 12H20"></path>
+                        </svg>
+                        <span>Clinical</span>
+                    </button>
+                    <button id="composer-mode-scheduling" class="composer-mode-button" type="button" onclick="switchAppMode('scheduling')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3.5" y="5" width="17" height="15" rx="2.5"></rect>
+                            <path d="M8 3.5V7"></path>
+                            <path d="M16 3.5V7"></path>
+                            <path d="M3.5 10.5H20.5"></path>
+                        </svg>
+                        <span>Scheduling</span>
+                    </button>
+                </div>
                 <div class="composer-main">
+                    <button id="composer-plus-button" class="composer-plus-button" type="button" aria-label="Open mode switch" onclick="toggleComposerModeStrip()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 5V19"></path>
+                            <path d="M5 12H19"></path>
+                        </svg>
+                    </button>
                     <textarea id="input" class="composer-input" placeholder="Type your message..." rows="1"></textarea>
                     <button id="send-button" class="primary-button" type="button" aria-label="Send message" onclick="sendMessage()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1501,6 +1605,7 @@
         let appMode = "clinical";
         let googleCalendarConnected = false;
         let studyCardsRequested = false;
+        let composerModeStripOpen = false;
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -1544,6 +1649,18 @@
         }
 
         function setStatus(_text) {}
+
+        function setComposerModeStripOpen(open) {
+            composerModeStripOpen = !!open;
+            const strip = document.getElementById("composer-mode-strip");
+            if (strip) {
+                strip.classList.toggle("open", composerModeStripOpen);
+            }
+        }
+
+        function toggleComposerModeStrip() {
+            setComposerModeStripOpen(!composerModeStripOpen);
+        }
 
         function getStudyCardsShell() {
             return document.getElementById("study-cards-shell");
@@ -1664,6 +1781,8 @@
         function renderModeState() {
             document.getElementById("mode-clinical").classList.toggle("active", appMode === "clinical");
             document.getElementById("mode-scheduling").classList.toggle("active", appMode === "scheduling");
+            document.getElementById("composer-mode-clinical").classList.toggle("active", appMode === "clinical");
+            document.getElementById("composer-mode-scheduling").classList.toggle("active", appMode === "scheduling");
             document.getElementById("settings-shell").classList.toggle("visible", appMode === "scheduling");
             if (appMode !== "scheduling") {
                 closeSettingsMenu();
@@ -1784,6 +1903,7 @@
         function switchAppMode(nextMode) {
             if (appMode === nextMode) return;
             appMode = nextMode;
+            setComposerModeStripOpen(false);
             renderModeState();
             document.getElementById("chat").innerHTML = "";
             hideSessionBanner();
