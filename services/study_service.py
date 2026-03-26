@@ -22,6 +22,7 @@ STUDY_SEED_ITEMS = [
         "correct_option": "B",
         "short_explanation": "Correct. Severe features usually shift the plan toward delivery once the mother is stabilized.",
         "key_takeaway": "The exam clue is severe features: management becomes more urgent.",
+        "board_rule": "Severe features at 34 weeks or more: stabilize the mother, then deliver.",
         "difficulty": "medium",
         "estimated_time_seconds": 60,
         "source_id": "study_src_nice_hypertension",
@@ -48,6 +49,7 @@ STUDY_SEED_ITEMS = [
         "correct_option": "A",
         "short_explanation": "Correct. Oxytocin is the standard first-line uterotonic for atony-related PPH.",
         "key_takeaway": "On boards, uterine atony plus immediate bleeding points to oxytocin first.",
+        "board_rule": "Immediate PPH from uterine atony: uterine massage plus oxytocin first.",
         "difficulty": "easy",
         "estimated_time_seconds": 45,
         "source_id": "study_src_acog_pph",
@@ -74,6 +76,7 @@ STUDY_SEED_ITEMS = [
         "correct_option": "B",
         "short_explanation": "Correct. Late decelerations classically point to uteroplacental insufficiency.",
         "key_takeaway": "Variable decelerations suggest cord compression; late decelerations suggest placental compromise.",
+        "board_rule": "Late decelerations point to uteroplacental insufficiency; variable decelerations point to cord compression.",
         "difficulty": "medium",
         "estimated_time_seconds": 50,
         "source_id": "study_src_nice_ctg",
@@ -100,6 +103,7 @@ STUDY_SEED_ITEMS = [
         "correct_option": "A",
         "short_explanation": "Correct. In appropriate PPROM cases, latency antibiotics help prolong pregnancy and reduce infection risk.",
         "key_takeaway": "Boards often test antibiotics as part of expectant PPROM care before term.",
+        "board_rule": "PPROM before term without infection: give latency antibiotics as part of expectant management.",
         "difficulty": "medium",
         "estimated_time_seconds": 55,
         "source_id": "study_src_acog_prom",
@@ -121,6 +125,7 @@ STUDY_SEED_ITEMS = [
             "The first practical move is uterine massage plus oxytocin.",
             "If bleeding continues, escalate fast and think causes systematically.",
         ],
+        "board_rule": "Primary PPH from uterine atony: massage and oxytocin come first.",
         "board_relevance": "Common board pattern",
         "estimated_time_seconds": 35,
         "source_id": "study_src_acog_pph",
@@ -142,6 +147,7 @@ STUDY_SEED_ITEMS = [
             "Variable decelerations point more to cord compression.",
             "Late decelerations should make you think placental insufficiency.",
         ],
+        "board_rule": "Early = head compression, variable = cord compression, late = placental insufficiency.",
         "board_relevance": "High-yield interpretation rule",
         "estimated_time_seconds": 30,
         "source_id": "study_src_nice_ctg",
@@ -163,6 +169,7 @@ STUDY_SEED_ITEMS = [
             "The exam focus is timely colposcopic evaluation or expedited management when appropriate.",
             "High-grade cytology raises the stakes even when the patient feels well.",
         ],
+        "board_rule": "HSIL is not watchful waiting; it needs prompt risk-based evaluation or treatment.",
         "board_relevance": "Classic exam escalation rule",
         "estimated_time_seconds": 35,
         "source_id": "study_src_asccp_hsil",
@@ -310,6 +317,15 @@ def _build_mcq_feedback_reply(item, correct):
     return f"{status} {explanation} {item['key_takeaway']}"
 
 
+def _board_rule_text(item):
+    rule = (item.get("board_rule") or "").strip()
+    if rule:
+        return rule
+    if item.get("item_type") == "pearl" and item.get("bullets"):
+        return " ".join(item["bullets"][:2])
+    return item.get("key_takeaway", "").strip()
+
+
 def _build_mcq_explain_reply(item, state):
     correct_key = item.get("correct_option")
     correct_text = _option_text_by_key(item, correct_key)
@@ -331,8 +347,9 @@ def _build_mcq_explain_reply(item, state):
     if explanation:
         parts.append(explanation)
 
-    if item.get("key_takeaway"):
-        parts.append(item["key_takeaway"])
+    rule = _board_rule_text(item)
+    if rule:
+        parts.append(f"Board rule: {rule}")
 
     if answered_correctly is False and selected_key and selected_text:
         parts.append(f"You picked {selected_key}: {selected_text}, but the board clue points away from that choice.")
@@ -572,12 +589,10 @@ def handle_study_action(session_id, content_item_id, action):
     if action == "explain_why":
         if item["item_type"] == "mcq":
             return {"reply": _build_mcq_explain_reply(item, state)}
-        return {"reply": "Why this pearl matters: " + " ".join(item.get("bullets", [])[:2])}
+        return {"reply": "Why this pearl matters: " + _board_rule_text(item)}
 
     if action == "quick_recap":
-        if item["item_type"] == "pearl":
-            return {"reply": "Quick recap: " + " ".join(item["bullets"][:2])}
-        return {"reply": f"Quick recap: {item['key_takeaway']}"}
+        return {"reply": "Board rule: " + _board_rule_text(item)}
 
     if action == "another_question":
         next_item = _pick_related_item(session_id, item, "mcq", exclude_self=True)
