@@ -395,7 +395,14 @@ def is_profile_only_message(user_message, extracted_fields):
 def is_general_greeting_message(user_message):
     cleaned = re.sub(r"\s+", " ", user_message.strip().lower())
     greeting_phrases = ONBOARDING_GREETING_WORDS | {"how are you", "מה שלומך", "מה נשמע", "שלום"}
-    return any(phrase in cleaned for phrase in greeting_phrases)
+    if cleaned in greeting_phrases:
+        return True
+
+    tokens = cleaned.split()
+    if len(tokens) > 3:
+        return False
+
+    return cleaned in {"hi there", "hey there", "hello there", "good morning", "good evening", "good afternoon"}
 
 
 def is_core_profile_complete(profile):
