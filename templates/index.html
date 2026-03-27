@@ -95,19 +95,10 @@
             align-items: center;
             justify-content: space-between;
             gap: 20px;
-            padding: 14px 18px 6px;
+            padding: 16px 18px 10px;
             border-bottom: 1px solid var(--line);
             background:
-                radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 16rem),
-                linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.62));
-        }
-
-        .mode-row {
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: transparent;
+                linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7));
         }
 
         .brand {
@@ -121,7 +112,7 @@
             min-width: 0;
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 3px;
             justify-content: center;
         }
 
@@ -130,18 +121,18 @@
             align-self: flex-start;
             padding: 0;
             color: var(--brand-strong);
-            font-size: 1.36rem;
-            font-weight: 700;
+            font-size: 1.18rem;
+            font-weight: 680;
             letter-spacing: -0.01em;
             text-transform: none;
         }
 
         .brand-title {
             margin: 0;
-            font-size: 1.36rem;
-            font-weight: 720;
+            font-size: 1.08rem;
+            font-weight: 620;
             letter-spacing: -0.01em;
-            color: var(--text);
+            color: var(--muted);
         }
 
         .topbar-meta {
@@ -167,48 +158,15 @@
             flex-shrink: 0;
         }
 
-        .mode-switch {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px;
-            width: auto;
-            max-width: max-content;
-            border-radius: 999px;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(244, 249, 247, 0.92));
-            border: 1px solid rgba(15, 118, 110, 0.14);
-            box-shadow: 0 8px 18px rgba(20, 37, 33, 0.07);
-        }
-
-        .mode-button {
-            border: none;
-            background: transparent;
-            color: var(--muted);
-            min-height: 46px;
-            padding: 0 18px;
-            border-radius: 999px;
-            font: inherit;
-            font-size: 0.88rem;
-            font-weight: 800;
-            letter-spacing: -0.01em;
-            cursor: pointer;
-        }
-
-        .mode-button.active {
-            background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(15, 118, 110, 0.08));
-            color: var(--brand-strong);
-            box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08), 0 6px 14px rgba(15, 118, 110, 0.14);
-        }
-
         .version-stamp {
             flex-shrink: 0;
-            min-height: 42px;
-            padding: 9px 12px;
+            min-height: 36px;
+            padding: 8px 11px;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.72);
+            background: rgba(255, 255, 255, 0.88);
             border: 1px solid var(--line);
             color: var(--muted);
-            font-size: 0.76rem;
+            font-size: 0.72rem;
             font-weight: 700;
             letter-spacing: 0.04em;
             display: inline-flex;
@@ -333,8 +291,53 @@
             display: flex;
             flex-direction: column;
             min-height: 0;
-            padding: 10px 14px 14px;
+            padding: 12px 16px 0;
+            gap: 10px;
+        }
+
+        .context-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             gap: 12px;
+            padding: 4px 2px 0;
+        }
+
+        .context-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .context-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            width: fit-content;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid rgba(29, 58, 52, 0.08);
+            color: var(--brand-strong);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .context-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 999px;
+            background: var(--brand);
+        }
+
+        .context-subtitle {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.88rem;
+            line-height: 1.35;
         }
 
         .session-banner {
@@ -364,7 +367,7 @@
             flex: 1;
             min-height: 0;
             overflow-y: auto;
-            padding: 6px 4px 18px;
+            padding: 12px 2px 10px;
             scroll-behavior: smooth;
         }
 
@@ -387,70 +390,69 @@
         }
 
         .message-row.user {
-            justify-content: flex-start;
+            justify-content: flex-end;
         }
 
         .message-stack {
-            max-width: min(100%, 760px);
-            width: min(100%, 760px);
+            max-width: min(100%, 720px);
+            width: auto;
             min-width: 0;
             display: flex;
             flex-direction: column;
-            gap: 0;
+            gap: 6px;
             animation: riseIn 180ms ease-out;
-            padding: 8px 0 10px;
-            border-radius: 0;
-            border: none;
-            background: transparent;
-            box-shadow: none;
+            padding: 0;
         }
 
         .message-frame {
             display: flex;
             align-items: flex-start;
-            gap: 10px;
+            gap: 0;
             min-width: 0;
         }
 
+        .bubble-wrap {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            max-width: min(100%, 680px);
+        }
+
         .avatar {
-            min-width: 30px;
-            height: 30px;
-            padding: 0 7px;
-            flex-shrink: 0;
-            border-radius: 8px;
+            min-width: auto;
+            height: auto;
+            padding: 0;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.56rem;
+            font-size: 0.66rem;
             font-weight: 700;
-            letter-spacing: 0.05em;
-            border: 1px solid rgba(29, 58, 52, 0.1);
-            color: var(--brand-strong);
-            background: rgba(255, 255, 255, 0.82);
+            letter-spacing: 0.04em;
+            color: #7a8a86;
             white-space: nowrap;
+            background: transparent;
+            border: none;
+            margin-bottom: 5px;
         }
 
-        .assistant-avatar {
-            background: linear-gradient(135deg, #e6f6f2 0%, #ffffff 100%);
-        }
-
-        .user-avatar {
-            background: linear-gradient(135deg, rgba(15, 118, 110, 0.18) 0%, rgba(255, 255, 255, 0.96) 100%);
+        .message-row.user .message-frame {
+            flex-direction: column;
+            align-items: flex-end;
         }
 
         .bubble {
             max-width: 100%;
             min-width: 0;
-            border-radius: 0;
-            padding: 10px 14px;
-            line-height: 1.58;
-            font-size: 0.95rem;
+            border-radius: 18px;
+            padding: 11px 14px;
+            line-height: 1.62;
+            font-size: 0.96rem;
             word-break: break-word;
             overflow-wrap: anywhere;
-            border: 1px solid rgba(29, 58, 52, 0.08);
+            border: none;
             background: rgba(255, 255, 255, 0.72);
             color: var(--text);
-            box-shadow: 0 1px 4px rgba(20, 37, 33, 0.03);
+            box-shadow: none;
         }
 
         .bubble p {
@@ -481,14 +483,14 @@
         }
 
         .message-row.user .bubble {
-            background: rgba(255, 255, 255, 0.72);
+            background: rgba(15, 118, 110, 0.1);
             color: var(--text);
-            border-color: rgba(29, 58, 52, 0.08);
+            border-top-right-radius: 8px;
         }
 
         .message-row.assistant .bubble {
-            background: rgba(255, 255, 255, 0.72);
-            border-color: rgba(29, 58, 52, 0.08);
+            background: rgba(255, 255, 255, 0.78);
+            border-top-left-radius: 8px;
         }
 
         .bubble.system {
@@ -564,8 +566,8 @@
         .study-cards-shell {
             display: none;
             flex-direction: column;
-            gap: 8px;
-            padding: 0 14px 6px;
+            gap: 10px;
+            padding: 0 16px 10px;
         }
 
         .study-cards-shell.visible {
@@ -575,7 +577,7 @@
         .study-cards-grid {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
+            gap: 10px;
         }
 
         .study-entry-card,
@@ -589,14 +591,16 @@
         }
 
         .study-entry-card {
-            padding: 10px;
+            padding: 12px 12px 10px;
             display: flex;
             flex-direction: column;
-            gap: 7px;
+            gap: 8px;
             min-width: 0;
             cursor: pointer;
             text-align: left;
             justify-content: space-between;
+            min-height: 126px;
+            box-shadow: none;
         }
 
         .study-entry-top {
@@ -725,7 +729,7 @@
 
         .study-entry-card:hover,
         .study-option-button:hover {
-            border-color: rgba(15, 118, 110, 0.28);
+            border-color: rgba(15, 118, 110, 0.22);
             transform: translateY(-1px);
         }
 
@@ -915,29 +919,40 @@
         }
 
         .composer-shell {
-            position: relative;
-            z-index: 1;
-            padding: 12px 14px 14px;
-            background: linear-gradient(180deg, rgba(247, 250, 249, 0), rgba(247, 250, 249, 0.96) 34%);
+            position: sticky;
+            bottom: 0;
+            z-index: 12;
+            padding: 10px 14px 14px;
+            background: linear-gradient(180deg, rgba(247, 250, 249, 0), rgba(247, 250, 249, 0.97) 30%);
         }
 
         .composer-card {
             width: 100%;
-            border-radius: 26px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.92);
-            box-shadow: 0 16px 36px rgba(20, 37, 33, 0.08);
+            border-radius: 24px;
+            border: 1px solid rgba(29, 58, 52, 0.1);
+            background: rgba(255, 255, 255, 0.94);
+            box-shadow: 0 8px 24px rgba(20, 37, 33, 0.06);
             padding: 8px;
             display: flex;
             flex-direction: column;
             gap: 0;
+            position: relative;
         }
 
         .composer-mode-strip {
             display: none;
-            align-items: center;
+            position: absolute;
+            left: 8px;
+            right: 8px;
+            bottom: calc(100% + 10px);
+            padding: 8px;
+            border-radius: 20px;
+            border: 1px solid rgba(29, 58, 52, 0.08);
+            background: rgba(255, 255, 255, 0.96);
+            box-shadow: 0 18px 40px rgba(20, 37, 33, 0.08);
+            backdrop-filter: blur(18px);
+            flex-direction: column;
             gap: 8px;
-            padding: 0 0 8px;
         }
 
         .composer-mode-strip.open {
@@ -945,20 +960,21 @@
         }
 
         .composer-mode-button {
-            flex: 1;
-            min-height: 44px;
+            width: 100%;
+            min-height: 52px;
             border: none;
-            border-radius: 15px;
-            background: rgba(244, 249, 247, 0.98);
+            border-radius: 16px;
+            background: rgba(244, 249, 247, 0.86);
             color: var(--muted);
             display: inline-flex;
             align-items: center;
-            justify-content: center;
-            gap: 8px;
+            justify-content: flex-start;
+            gap: 12px;
             font: inherit;
-            font-size: 0.88rem;
+            font-size: 0.9rem;
             font-weight: 700;
             cursor: pointer;
+            padding: 0 14px;
         }
 
         .composer-mode-button svg {
@@ -974,20 +990,20 @@
 
         .composer-main {
             display: flex;
-            align-items: flex-end;
+            align-items: center;
             gap: 10px;
             min-width: 0;
             width: 100%;
         }
 
         .composer-plus-button {
-            width: 54px;
-            min-width: 54px;
-            height: 54px;
+            width: 48px;
+            min-width: 48px;
+            height: 48px;
             padding: 0;
-            border: 1px solid rgba(15, 118, 110, 0.14);
-            border-radius: 16px;
-            background: rgba(244, 249, 247, 0.98);
+            border: none;
+            border-radius: 15px;
+            background: rgba(15, 118, 110, 0.08);
             color: var(--brand-strong);
             display: inline-flex;
             align-items: center;
@@ -998,6 +1014,10 @@
         .composer-plus-button svg {
             width: 18px;
             height: 18px;
+        }
+
+        .composer-plus-button[aria-expanded="true"] {
+            background: rgba(15, 118, 110, 0.14);
         }
 
         .composer-input {
@@ -1012,9 +1032,9 @@
             font: inherit;
             font-size: 0.98rem;
             line-height: 1.4;
-            min-height: 54px;
+            min-height: 50px;
             max-height: 180px;
-            padding: 14px 12px;
+            padding: 13px 10px;
         }
 
         .composer-input::placeholder {
@@ -1040,15 +1060,15 @@
         }
 
         .primary-button {
-            width: 54px;
-            min-width: 54px;
-            height: 54px;
+            width: 48px;
+            min-width: 48px;
+            height: 48px;
             padding: 0;
-            border-radius: 16px;
+            border-radius: 15px;
             background: var(--user);
             color: white;
             font-weight: 700;
-            box-shadow: 0 12px 28px rgba(15, 118, 110, 0.24);
+            box-shadow: none;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -1148,20 +1168,16 @@
                 padding: 12px 20px 18px;
             }
 
-            .mode-row {
-                padding: 0;
-            }
-
             .chat-panel {
-                padding: 10px 10px 26px;
+                padding: 16px 4px 14px;
             }
 
             .composer-shell {
-                padding: 14px 20px 18px;
+                padding: 12px 20px 18px;
             }
 
             .study-cards-shell {
-                padding: 0 20px 8px;
+                padding: 0 20px 12px;
             }
         }
 
@@ -1185,8 +1201,8 @@
                 align-items: stretch;
                 justify-content: space-between;
                 gap: 10px;
-                min-height: 78px;
-                padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px 6px;
+                min-height: 74px;
+                padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 8px;
             }
 
             .brand {
@@ -1203,27 +1219,23 @@
             }
 
             .brand-kicker {
-                font-size: 1.12rem;
+                font-size: 1.03rem;
                 align-self: flex-start;
             }
 
             .brand-title {
-                font-size: 1.12rem;
+                font-size: 0.96rem;
                 line-height: 1.1;
                 text-align: left;
             }
 
             .content {
-                padding: 8px 8px 0;
+                padding: 10px 12px 0;
                 min-height: 0;
             }
 
-            .mode-row {
-                padding: 0;
-            }
-
             .chat-panel {
-                padding: 4px 0 14px;
+                padding: 10px 0 6px;
             }
 
             .message-row {
@@ -1236,21 +1248,17 @@
             }
 
             .message-frame {
-                gap: 8px;
+                gap: 0;
             }
 
             .avatar {
-                min-width: 26px;
-                height: 26px;
-                padding: 0 5px;
-                border-radius: 7px;
-                font-size: 0.46rem;
+                font-size: 0.62rem;
             }
 
             .bubble {
-                padding: 8px 11px;
-                font-size: 0.9rem;
-                border-radius: 0;
+                padding: 10px 12px;
+                font-size: 0.92rem;
+                border-radius: 16px;
             }
 
             .bubble ul {
@@ -1258,53 +1266,49 @@
             }
 
             .composer-shell {
-                padding: 6px 6px calc(env(safe-area-inset-bottom, 0px) + 6px);
+                padding: 8px 10px calc(env(safe-area-inset-bottom, 0px) + 10px);
             }
 
             .study-cards-shell {
-                padding: 0 6px 6px;
+                padding: 0 10px 10px;
             }
 
             .composer-card {
-                border-radius: 18px;
-                padding: 5px;
+                border-radius: 22px;
+                padding: 7px;
                 gap: 0;
             }
 
-            .composer-mode-strip {
-                padding-bottom: 6px;
-            }
-
             .composer-mode-button {
-                min-height: 42px;
-                font-size: 0.8rem;
-                border-radius: 14px;
+                min-height: 50px;
+                font-size: 0.86rem;
+                border-radius: 15px;
             }
 
             .composer-main {
                 gap: 8px;
                 display: grid;
-                grid-template-columns: 49px minmax(0, 1fr) 49px;
+                grid-template-columns: 46px minmax(0, 1fr) 46px;
                 align-items: center;
             }
 
             .composer-plus-button {
-                width: 49px;
-                min-width: 49px;
-                height: 49px;
+                width: 46px;
+                min-width: 46px;
+                height: 46px;
                 border-radius: 14px;
             }
 
             .composer-input {
-                min-height: 44px;
+                min-height: 46px;
                 font-size: 16px;
-                padding: 12px 10px;
+                padding: 11px 8px;
             }
 
             .primary-button {
-                width: 49px;
-                min-width: 49px;
-                height: 49px;
+                width: 46px;
+                min-width: 46px;
+                height: 46px;
                 padding: 0;
                 border-radius: 14px;
                 flex: 0 0 auto;
@@ -1327,8 +1331,8 @@
             }
 
             .study-entry-card {
-                min-height: min(30vw, 118px);
-                padding: 8px;
+                min-height: min(30vw, 112px);
+                padding: 10px 8px 9px;
                 gap: 6px;
                 border-radius: 12px;
             }
@@ -1449,7 +1453,7 @@
                 min-width: 0;
                 margin-left: auto;
                 gap: 8px;
-                align-items: stretch;
+                align-items: center;
                 justify-content: flex-end;
             }
 
@@ -1492,14 +1496,12 @@
                 font-size: 0.64rem;
             }
 
-            .mode-switch {
-                padding: 4px;
+            .context-strip {
+                padding-top: 2px;
             }
 
-            .mode-button {
-                min-height: 48px;
-                padding: 0 16px;
-                font-size: 0.84rem;
+            .context-subtitle {
+                font-size: 0.8rem;
             }
         }
 
@@ -1588,10 +1590,13 @@
         </header>
 
         <section class="content">
-            <div class="mode-row">
-                <div class="mode-switch" role="tablist" aria-label="Assistant mode">
-                    <button id="mode-clinical" class="mode-button active" onclick="switchAppMode('clinical')">Clinical</button>
-                    <button id="mode-scheduling" class="mode-button" onclick="switchAppMode('scheduling')">Scheduling</button>
+            <div class="context-strip">
+                <div class="context-copy">
+                    <div id="context-label" class="context-label">
+                        <span class="context-dot" aria-hidden="true"></span>
+                        <span id="context-label-text">Clinical</span>
+                    </div>
+                    <p id="context-subtitle" class="context-subtitle">Quick clinical support for short, high-focus sessions.</p>
                 </div>
             </div>
 
@@ -1626,7 +1631,7 @@
                     </button>
                 </div>
                 <div class="composer-main">
-                    <button id="composer-plus-button" class="composer-plus-button" type="button" aria-label="Open mode switch" onclick="toggleComposerModeStrip()">
+                    <button id="composer-plus-button" class="composer-plus-button" type="button" aria-label="Open quick actions" aria-expanded="false" onclick="toggleComposerModeStrip()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M12 5V19"></path>
                             <path d="M5 12H19"></path>
@@ -1699,12 +1704,23 @@
         function setComposerModeStripOpen(open) {
             composerModeStripOpen = !!open;
             const strip = document.getElementById("composer-mode-strip");
+            const trigger = document.getElementById("composer-plus-button");
             if (strip) {
                 strip.classList.toggle("open", composerModeStripOpen);
+            }
+            if (trigger) {
+                trigger.setAttribute("aria-expanded", composerModeStripOpen ? "true" : "false");
             }
         }
 
         function toggleComposerModeStrip() {
+            const input = document.getElementById("input");
+            if (composerModeStripOpen && input && document.activeElement === input) {
+                input.blur();
+            }
+            if (input) {
+                input.blur();
+            }
             setComposerModeStripOpen(!composerModeStripOpen);
         }
 
@@ -1831,11 +1847,19 @@
         }
 
         function renderModeState() {
-            document.getElementById("mode-clinical").classList.toggle("active", appMode === "clinical");
-            document.getElementById("mode-scheduling").classList.toggle("active", appMode === "scheduling");
             document.getElementById("composer-mode-clinical").classList.toggle("active", appMode === "clinical");
             document.getElementById("composer-mode-scheduling").classList.toggle("active", appMode === "scheduling");
             document.getElementById("settings-shell").classList.toggle("visible", appMode === "scheduling");
+            const contextLabelText = document.getElementById("context-label-text");
+            const contextSubtitle = document.getElementById("context-subtitle");
+            if (contextLabelText) {
+                contextLabelText.textContent = appMode === "scheduling" ? "Scheduling" : "Clinical";
+            }
+            if (contextSubtitle) {
+                contextSubtitle.textContent = appMode === "scheduling"
+                    ? "Plan shifts and calendar changes without leaving the main flow."
+                    : "Quick clinical support for short, high-focus sessions.";
+            }
             if (appMode !== "scheduling") {
                 closeSettingsMenu();
             }
@@ -1952,10 +1976,22 @@
             }
         });
 
+        document.addEventListener("click", (event) => {
+            const composerCard = document.querySelector(".composer-card");
+            if (!composerCard || !composerModeStripOpen) return;
+            if (!composerCard.contains(event.target)) {
+                setComposerModeStripOpen(false);
+            }
+        });
+
         function switchAppMode(nextMode) {
             if (appMode === nextMode) return;
             appMode = nextMode;
             setComposerModeStripOpen(false);
+            const input = document.getElementById("input");
+            if (input) {
+                input.blur();
+            }
             renderModeState();
             document.getElementById("chat").innerHTML = "";
             hideSessionBanner();
@@ -1989,8 +2025,12 @@
             avatar.className = `avatar ${role === "user" ? "user-avatar" : "assistant-avatar"}`;
             avatar.textContent = role === "user" ? "You" : "Assistant";
 
-            frame.appendChild(avatar);
-            frame.appendChild(bubble);
+            const bubbleWrap = document.createElement("div");
+            bubbleWrap.className = "bubble-wrap";
+            bubbleWrap.appendChild(avatar);
+            bubbleWrap.appendChild(bubble);
+
+            frame.appendChild(bubbleWrap);
 
             stack.appendChild(frame);
             row.appendChild(stack);
@@ -2399,6 +2439,11 @@
         async function openStudyCard(cardType, contentItemId) {
             dismissStudyCards();
             clearStudyCards();
+            const input = document.getElementById("input");
+            if (input) {
+                input.blur();
+            }
+            setComposerModeStripOpen(false);
             setThinkingState(true);
             try {
                 const response = await fetch("/study/open", {
@@ -2861,6 +2906,9 @@
             } else {
                 maybeShowStudyCards();
             }
+        });
+        document.getElementById("input").addEventListener("focus", function() {
+            setComposerModeStripOpen(false);
         });
         document.getElementById("input").addEventListener("keypress", function(event) {
             if (event.key === "Enter" && !event.shiftKey) {
