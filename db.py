@@ -27,9 +27,11 @@ study_user_state_collection = db["study_user_state"]
 
 def _ensure_indexes():
     try:
+        messages_collection.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
         search_cache_collection.create_index([("cache_type", ASCENDING), ("cache_key", ASCENDING)], unique=True)
         search_cache_collection.create_index([("expires_at", ASCENDING)], expireAfterSeconds=0)
         search_cache_collection.create_index([("last_used_at", ASCENDING)])
+        user_profiles_collection.create_index([("session_id", ASCENDING)], unique=True)
         scheduling_drafts_collection.create_index([("session_id", ASCENDING), ("status", ASCENDING), ("created_at", ASCENDING)])
         scheduled_events_collection.create_index([("session_id", ASCENDING), ("start_at", ASCENDING), ("end_at", ASCENDING)])
         scheduling_preferences_collection.create_index([("session_id", ASCENDING)], unique=True)

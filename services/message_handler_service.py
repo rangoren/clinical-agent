@@ -38,6 +38,7 @@ from services.text_formatting import format_basic_clinical_response, format_resp
 from services.trusted_source_registry import get_domain_tier, get_source_domain, infer_question_route
 from services.undo_service import clear_last_saved, record_last_saved
 import re
+import time
 
 
 def _build_message_response(
@@ -433,27 +434,34 @@ def _build_suggested_save_payload(intent, user_message):
 
 
 def _handle_regular_message(session_id, user_profile, user_message, save_user_message=True):
+    started_at = time.perf_counter()
+    timing = {}
+
+    def mark(stage_name, stage_started_at):
+        timing[stage_name] = round((time.perf_counter() - stage_started_at) * 1000, 1)
+
     touch_user_profile(session_id)
-    chat_history = load_chat(session_id)
-    principles = load_principles()
-    knowledge_items = load_knowledge()
-    protocol_items = load_protocols()
+    stage_started_at = time.perf_counter()
+    chat_history = load_chat(session_id, limit=8)
+    mark("load_chat_ms", stage_started_at)
+
+    stage_started_at = time.perf_counter()
     classifier_result = classify_message_intent(user_message, chat_history)
+    mark("intent_ms", stage_started_at)
     intent = classifier_result["label"]
     confidence = classifier_result["confidence"]
-    relevant_knowledge_entries = get_relevant_knowledge_entries(user_message, user_profile=user_profile)
-    relevant_protocol_entries = get_relevant_protocol_entries(user_message, user_profile=user_profile)
-    relevant_knowledge = [entry["text"] for entry in relevant_knowledge_entries]
-    relevant_protocols = [entry["text"] for entry in relevant_protocol_entries]
-    linked_sources = _collect_linked_sources(relevant_protocol_entries, relevant_knowledge_entries)
-    internal_sources = _collect_internal_sources(principles, relevant_protocol_entries, relevant_knowledge_entries)
-    external_sources = get_external_sources(
-        user_message,
-        user_profile=user_profile,
-        include_live=intent == "clinical_consult",
-    )
+    principles = []
+    knowledge_items = []
+    protocol_items = []
+    relevant_knowledge_entries = []
+    relevant_protocol_entries = []
+    relevant_knowledge = []
+    relevant_protocols = []
+    linked_sources = []
+    internal_sources = []
+    external_sources = []
     question_route = infer_question_route(user_message)
-    candidate_sources = linked_sources + external_sources + internal_sources
+    candidate_sources = []
     basic_clinical_question = intent == "clinical_consult" and _looks_like_basic_clinical_question(user_message)
     log_event(
         "intent_classified",
@@ -466,6 +474,11 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
     )
 
     if intent in {"protocol", "principle", "knowledge"} and confidence == "high":
+        stage_started_at = time.perf_counter()
+        principles = load_principles()
+        knowledge_items = load_knowledge()
+        protocol_items = load_protocols()
+        mark("memory_load_ms", stage_started_at)
         return _handle_memory_save(
             intent=intent,
             user_message=user_message,
@@ -492,6 +505,26 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         )
 
     if intent == "clinical_consult":
+        stage_started_at = time.perf_counter()
+        principles = load_principles()
+        relevant_knowledge_entries = get_relevant_knowledge_entries(user_message, user_profile=user_profile)
+        relevant_protocol_entries = get_relevant_protocol_entries(user_message, user_profile=user_profile)
+        relevant_knowledge = [entry["text"] for entry in relevant_knowledge_entries]
+        relevant_protocols = [entry["text"] for entry in relevant_protocol_entries]
+        linked_sources = _collect_linked_sources(relevant_protocol_entries, relevant_knowledge_entries)
+        internal_sources = _collect_internal_sources(principles, relevant_protocol_entries, relevant_knowledge_entries)
+        mark("memory_load_ms", stage_started_at)
+
+        stage_started_at = time.perf_counter()
+        external_sources = get_external_sources(
+            user_message,
+            user_profile=user_profile,
+            include_live=True,
+        )
+        mark("external_sources_ms", stage_started_at)
+        candidate_sources = linked_sources + external_sources + internal_sources
+
+        stage_started_at = time.perf_counter()
         if basic_clinical_question:
             system_prompt = build_basic_clinical_system_prompt(
                 principles=principles,
@@ -508,8 +541,11 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
                 external_sources=external_sources,
                 user_profile=user_profile,
             )
+        mark("prompt_build_ms", stage_started_at)
     else:
+        stage_started_at = time.perf_counter()
         system_prompt = build_general_system_prompt(user_profile)
+        mark("prompt_build_ms", stage_started_at)
 
     log_event(
         "memory_retrieved",
@@ -540,12 +576,15 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             ),
         },
     )
+    stage_started_at = time.perf_counter()
     raw_reply = generate_reply(
         system_prompt=system_prompt,
         chat_history=chat_history,
         user_message=user_message,
     )
+    mark("llm_reply_ms", stage_started_at)
 
+    stage_started_at = time.perf_counter()
     display_sources = _filter_sources_by_citation(raw_reply, candidate_sources)
     if intent == "clinical_consult" and not display_sources:
         display_sources = _fallback_display_sources(candidate_sources)
@@ -556,7 +595,9 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             reply = format_basic_clinical_response(reply, user_message=user_message)
         else:
             reply = format_response(reply)
+    mark("postprocess_ms", stage_started_at)
 
+    stage_started_at = time.perf_counter()
     if save_user_message:
         save_message("user", user_message, session_id)
     assistant_message_id = save_message(
@@ -571,6 +612,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             "confidence": confidence,
         },
     )
+    mark("save_messages_ms", stage_started_at)
     log_event(
         "response_generated",
         session_id,
@@ -581,6 +623,8 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             "feedback_enabled": intent == "clinical_consult" and len(reply) > 80,
             "source_count": len(display_sources),
             "basic_clinical_question": basic_clinical_question,
+            "timing_ms": timing,
+            "total_ms": round((time.perf_counter() - started_at) * 1000, 1),
         },
     )
 
