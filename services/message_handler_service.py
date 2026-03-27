@@ -144,9 +144,26 @@ def _fallback_display_sources(sources):
     if not sources:
         return []
 
-    external_sources = [source for source in sources if str(source.get("source_id", "")).startswith("E")]
-    if external_sources:
-        return external_sources[:3]
+    preferred_sources = []
+    seen_source_ids = set()
+
+    for source in sources:
+        source_id = str(source.get("source_id", ""))
+        if not source_id or source_id in seen_source_ids:
+            continue
+        if source.get("is_internal"):
+            continue
+        if source.get("url") or source_id.startswith(("E", "P", "K")):
+            preferred_sources.append(source)
+            seen_source_ids.add(source_id)
+
+    if preferred_sources:
+        external_first = sorted(
+            preferred_sources,
+            key=lambda source: (0 if str(source.get("source_id", "")).startswith("E") else 1),
+        )
+        return external_first[:3]
+
     return []
 
 
