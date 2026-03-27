@@ -10,6 +10,16 @@ from services.study_service import get_idle_study_cards
 router = APIRouter()
 
 
+def _friendly_route_error_reply(exc):
+    message = str(exc or "").strip()
+    normalized = message.lower()
+
+    if any(marker in normalized for marker in ("overloaded", "overloaded_error", "529", "rate limit", "timeout")):
+        return "I’m a bit busy right now. Please try again in a few seconds."
+
+    return "Something went wrong while generating the reply. Please try again."
+
+
 @router.post("/message")
 async def handle_message(request: Request):
     try:
@@ -22,7 +32,7 @@ async def handle_message(request: Request):
         return JSONResponse(process_message(user_message=user_message, session_id=session_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/message", "error": str(exc)}, level="error")
-        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+        return JSONResponse({"reply": _friendly_route_error_reply(exc)})
 
 
 @router.post("/session-state")
@@ -39,7 +49,7 @@ async def handle_session_state(request: Request):
         return JSONResponse(session_state)
     except Exception as exc:
         log_event("route_error", payload={"route": "/session-state", "error": str(exc)}, level="error")
-        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+        return JSONResponse({"reply": _friendly_route_error_reply(exc)})
 
 
 @router.post("/continue-onboarding")
@@ -50,7 +60,7 @@ async def handle_continue_onboarding(request: Request):
         return JSONResponse(continue_onboarding(session_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/continue-onboarding", "error": str(exc)}, level="error")
-        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+        return JSONResponse({"reply": _friendly_route_error_reply(exc)})
 
 
 @router.post("/chat-mode")
@@ -61,7 +71,7 @@ async def handle_chat_mode(request: Request):
         return JSONResponse(start_clean_chat_mode(session_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/chat-mode", "error": str(exc)}, level="error")
-        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+        return JSONResponse({"reply": _friendly_route_error_reply(exc)})
 
 
 @router.post("/reset-session")
@@ -72,7 +82,7 @@ async def handle_reset_session(request: Request):
         return JSONResponse(reset_session(session_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/reset-session", "error": str(exc)}, level="error")
-        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+        return JSONResponse({"reply": _friendly_route_error_reply(exc)})
 
 
 @router.post("/scheduling/confirm")
@@ -91,7 +101,7 @@ async def handle_scheduling_confirm(request: Request):
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/scheduling/confirm", "error": str(exc)}, level="error")
-        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+        return JSONResponse({"reply": _friendly_route_error_reply(exc)})
 
 
 @router.post("/scheduling/dismiss")
@@ -103,4 +113,4 @@ async def handle_scheduling_dismiss(request: Request):
         return JSONResponse(dismiss_scheduling_draft(session_id=session_id, draft_id=draft_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/scheduling/dismiss", "error": str(exc)}, level="error")
-        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+        return JSONResponse({"reply": _friendly_route_error_reply(exc)})
