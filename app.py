@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from routes.calendar_routes import router as calendar_router
 from routes.feedback_routes import router as feedback_router
@@ -12,6 +13,7 @@ from services.study_service import ensure_study_content_seed
 
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.on_event("startup")
