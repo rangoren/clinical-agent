@@ -1,11 +1,11 @@
 from pymongo import MongoClient
 from pymongo import ASCENDING
 
-from settings import MONGODB_URI
+from settings import MONGODB_DB_NAME, MONGODB_URI
 
 
 mongo_client = MongoClient(MONGODB_URI)
-db = mongo_client["clinical_assistant"]
+db = mongo_client[MONGODB_DB_NAME]
 
 messages_collection = db["messages"]
 principles_collection = db["principles"]

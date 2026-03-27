@@ -215,6 +215,22 @@
             align-items: center;
         }
 
+        .env-stamp {
+            flex-shrink: 0;
+            min-height: 32px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(180, 35, 24, 0.08);
+            border: 1px solid rgba(180, 35, 24, 0.18);
+            color: var(--danger);
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+        }
+
         .settings-shell {
             position: relative;
             display: none;
@@ -1470,6 +1486,12 @@
                 font-size: 0.68rem;
             }
 
+            .env-stamp {
+                min-height: 30px;
+                padding: 5px 8px;
+                font-size: 0.64rem;
+            }
+
             .mode-switch {
                 padding: 4px;
             }
@@ -1532,6 +1554,9 @@
             <div class="topbar-meta">
                 <div class="topbar-row">
                     <div class="topbar-tools">
+                        {% if app_env != "production" %}
+                        <div class="env-stamp">{{ app_env }}</div>
+                        {% endif %}
                         <div class="version-stamp">{{ app_version }}</div>
                         <div id="settings-shell" class="settings-shell">
                             <button
@@ -1625,6 +1650,7 @@
         let appMode = "clinical";
         let googleCalendarConnected = false;
         let studyCardsRequested = false;
+        let studyCardsDismissed = false;
         let composerModeStripOpen = false;
 
         if (!sessionId) {
@@ -1700,13 +1726,16 @@
             shell.classList.remove("visible");
         }
 
+        function dismissStudyCards() {
+            studyCardsDismissed = true;
+            hideStudyCards();
+        }
+
         function shouldShowStudyCards() {
-            const chat = document.getElementById("chat");
             const input = document.getElementById("input");
             return (
                 appMode === "clinical" &&
-                chat &&
-                chat.children.length === 0 &&
+                !studyCardsDismissed &&
                 input &&
                 !input.value.trim()
             );
@@ -1998,10 +2027,12 @@
         }
 
         function appendAssistantMessage(message, variant = "") {
+            dismissStudyCards();
             return appendMessage("assistant", formatAssistantMessageHtml(message), variant);
         }
 
         function appendUserMessage(message) {
+            dismissStudyCards();
             return appendMessage("user", escapeHtml(message));
         }
 
@@ -2366,6 +2397,7 @@
         }
 
         async function openStudyCard(cardType, contentItemId) {
+            dismissStudyCards();
             clearStudyCards();
             setThinkingState(true);
             try {
@@ -2529,6 +2561,7 @@
         }
 
         async function bootstrapSession() {
+            studyCardsDismissed = false;
             setComposerEnabled(false);
             setStatus("Checking");
 
@@ -2587,6 +2620,7 @@
 
         async function continueOnboarding() {
             setStatus("Resuming");
+            dismissStudyCards();
             clearStudyCards();
 
             try {
@@ -2613,6 +2647,7 @@
 
         async function startChatMode() {
             setStatus("Resetting");
+            dismissStudyCards();
             clearStudyCards();
 
             try {
@@ -2645,6 +2680,7 @@
             const message = input.value.trim();
             if (!message) return;
 
+            dismissStudyCards();
             clearStudyCards();
             appendUserMessage(message);
             input.value = "";
@@ -2821,7 +2857,7 @@
         document.getElementById("input").addEventListener("input", function() {
             autoResizeInput();
             if (this.value.trim()) {
-                hideStudyCards();
+                dismissStudyCards();
             } else {
                 maybeShowStudyCards();
             }

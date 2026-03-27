@@ -8,7 +8,16 @@ import requests
 
 from db import calendar_connections_collection, oauth_states_collection, user_calendars_collection
 from services.logging_service import log_event
-from settings import APP_BASE_URL, APP_TIMEZONE, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
+from settings import (
+    APP_BASE_URL,
+    APP_ENV,
+    APP_TIMEZONE,
+    ENABLE_EXTERNAL_SIDE_EFFECTS,
+    ENABLE_GOOGLE_CALENDAR_INTEGRATION,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI,
+)
 
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -53,7 +62,16 @@ def _normalize_google_datetime(raw_value):
 
 
 def google_calendar_enabled():
-    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI)
+    return bool(
+        ENABLE_GOOGLE_CALENDAR_INTEGRATION
+        and GOOGLE_CLIENT_ID
+        and GOOGLE_CLIENT_SECRET
+        and GOOGLE_REDIRECT_URI
+    )
+
+
+def google_calendar_write_enabled():
+    return google_calendar_enabled() and ENABLE_EXTERNAL_SIDE_EFFECTS
 
 
 def _auth_headers(access_token):
@@ -266,6 +284,11 @@ def get_google_calendar_name(session_id, provider_calendar_id):
 
 def begin_google_calendar_connect(session_id):
     if not google_calendar_enabled():
+        if APP_ENV != "production":
+            return {
+                "status": "unavailable",
+                "reply": "Google Calendar is disabled in this environment until DEV integration is explicitly enabled.",
+            }
         return {"status": "unavailable", "reply": "Google Calendar is not configured yet."}
 
     now = _utcnow()
@@ -693,7 +716,7 @@ def _delete_google_event_by_id(session_id, calendar_id, provider_event_id):
 
 
 def sync_google_create_event(session_id, event_doc, preferred_calendar_id=None):
-    if not google_calendar_enabled():
+    if not google_calendar_write_enabled():
         return {"status": "skipped"}
     try:
         payload = {
@@ -754,6 +777,8 @@ def sync_google_create_event(session_id, event_doc, preferred_calendar_id=None):
 
 
 def sync_google_update_event(session_id, provider_event_id, event_doc, preferred_calendar_id=None):
+    if not google_calendar_write_enabled():
+        return {"status": "skipped"}
     connection = _get_connection(session_id)
     calendar_id = _get_selected_google_calendar_id(
         session_id,
@@ -821,6 +846,8 @@ def sync_google_delete_event(
     event_doc=None,
     provider_calendar_id=None,
 ):
+    if not google_calendar_write_enabled():
+        return {"status": "skipped"}
     connection = _get_connection(session_id)
     if not connection:
         return {"status": "skipped"}
