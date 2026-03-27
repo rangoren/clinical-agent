@@ -9,18 +9,18 @@ from services.logging_service import log_event
 STAGE_B_AUTHORING_RUBRIC = {
     "warmup": [
         "Short stem with one clear clue",
-        "One real clinical decision point",
+        "One clear clinical decision point",
         "At least one tempting management distractor",
         "One best answer with one short why-not",
     ],
     "standard": [
         "Short-to-medium stem with one clear, not overly exposed clue",
-        "Board-relevant clinical decision point",
+        "One clear board-relevant clinical decision point",
         "At least one plausible management mistake as distractor",
         "Explanation must stay compressed: best answer, why, why-not, takeaway",
     ],
     "pearl": [
-        "One key fact, one practical implication, one board-relevant distinction or escalation rule",
+        "One key fact, one clinical meaning, one board takeaway or board focus",
         "Short, clinically meaningful, and not just a flashcard fact",
     ],
 }
@@ -157,9 +157,9 @@ STUDY_SEED_ITEMS = [
         "topic": "PPH",
         "title": "Quick Pearl: PPH",
         "key_fact": "Uterine atony is the most common cause of primary postpartum hemorrhage.",
-        "clinical_consequence": "Initial response is simultaneous resuscitation with uterine massage and oxytocin, not delayed stepwise treatment.",
-        "board_focus": "If bleeding persists, switch to the 4 Ts framework: Tone, Trauma, Tissue, Thrombin, to identify the cause and guide escalation.",
-        "board_rule": "Primary PPH: start with massage plus oxytocin, then use the 4 Ts to identify the cause and guide escalation.",
+        "clinical_consequence": "Initial management includes simultaneous resuscitation, uterine massage, and oxytocin rather than delayed stepwise treatment.",
+        "board_focus": "If bleeding persists, use the 4 Ts framework: Tone, Trauma, Tissue, Thrombin, to rapidly identify the cause and direct targeted treatment.",
+        "board_rule": "Primary PPH: initial management includes resuscitation, massage, and oxytocin; persistent bleeding should trigger rapid 4 Ts assessment and targeted treatment.",
         "board_relevance": "First-line treatment plus escalation framework",
         "estimated_time_seconds": 35,
         "source_id": "study_src_acog_pph",
@@ -177,9 +177,9 @@ STUDY_SEED_ITEMS = [
         "topic": "CTG",
         "title": "Quick Pearl: CTG",
         "key_fact": "Early decelerations usually reflect head compression, variable decelerations suggest cord compression, and late decelerations suggest uteroplacental insufficiency.",
-        "clinical_consequence": "The board question is not just pattern recognition; recurrent late decelerations or deep variables with slow recovery raise the level of concern.",
-        "board_focus": "CTG type should change management thinking: recurrent concerning variables or late decelerations should push you toward escalation, not simple labeling.",
-        "board_rule": "On boards, type recognition is not enough: recurrent variable or late decelerations matter because they change the level of concern and trigger escalation.",
+        "clinical_consequence": "The board question is not just pattern recognition; recurrent late decelerations or deep variables with slow recovery increase concern for fetal compromise.",
+        "board_focus": "CTG type should change management thinking: recurrent concerning variables or late decelerations should prompt escalation beyond simple labeling.",
+        "board_rule": "On boards, CTG pattern recognition must lead to action: recurrent concerning variables or late decelerations raise concern and should prompt escalation.",
         "board_relevance": "Pattern recognition plus clinical significance",
         "estimated_time_seconds": 30,
         "source_id": "study_src_nice_ctg",
@@ -198,8 +198,8 @@ STUDY_SEED_ITEMS = [
         "title": "Quick Pearl: HSIL",
         "key_fact": "HSIL cytology is a high-risk screening result and is not managed with routine repeat testing alone.",
         "clinical_consequence": "Management usually turns on the distinction between colposcopy and expedited treatment in nonpregnant patients aged 25 or older.",
-        "board_focus": "In pregnancy, HSIL still requires colposcopic evaluation, but expedited treatment is generally not the board answer.",
-        "board_rule": "HSIL: think colposcopy versus expedited treatment, and remember pregnancy changes management toward evaluation rather than immediate treatment.",
+        "board_focus": "In pregnancy, HSIL still requires colposcopic evaluation, but expedited treatment is generally not the correct board answer.",
+        "board_rule": "HSIL: think colposcopy versus expedited treatment; pregnancy shifts management toward evaluation rather than immediate treatment.",
         "board_relevance": "Risk-based management distinction",
         "estimated_time_seconds": 35,
         "source_id": "study_src_asccp_hsil",
@@ -209,6 +209,7 @@ STUDY_SEED_ITEMS = [
         "source_excerpt": "High-grade screening abnormalities require prompt risk-based evaluation and management.",
         "approved_for_stage_b": True,
         "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
         "enabled": True,
     },
 ]
@@ -238,47 +239,57 @@ def _normalize_study_item(item):
         return None
 
     normalized = dict(item)
-    if normalized.get("item_type") != "mcq":
-        return normalized
-
-    normalized["correct_answer_key"] = (
-        normalized.get("correct_answer_key")
-        or normalized.get("correct_option")
-    )
-    explanation = (normalized.get("explanation") or normalized.get("short_explanation") or "").strip()
-    explanation = re.sub(r"^(Correct|Not quite)\.\s*", "", explanation).strip()
-    normalized["explanation"] = explanation
-    normalized["exam_clue"] = (
-        normalized.get("exam_clue")
-        or normalized.get("key_clue")
-        or normalized.get("key_takeaway")
-        or normalized.get("subtopic")
-        or normalized.get("topic")
-    )
-    normalized["board_takeaway"] = (
-        normalized.get("board_takeaway")
-        or normalized.get("board_rule")
-        or normalized.get("key_takeaway")
-        or explanation
-    )
-    normalized["decision_point"] = (
-        normalized.get("decision_point")
-        or normalized.get("subtopic")
-        or normalized.get("topic")
-    )
-    normalized["difficulty_band"] = (
-        normalized.get("difficulty_band")
-        or normalized.get("difficulty")
-        or "standard"
-    )
     normalized["review_status"] = normalized.get("review_status") or "source_grounded"
-    normalized["tempting_wrong_option"] = normalized.get("tempting_wrong_option")
-    normalized["tempting_wrong_reason"] = normalized.get("tempting_wrong_reason")
+
+    if normalized.get("item_type") == "mcq":
+        normalized["correct_answer_key"] = (
+            normalized.get("correct_answer_key")
+            or normalized.get("correct_option")
+        )
+        explanation = (normalized.get("explanation") or normalized.get("short_explanation") or "").strip()
+        explanation = re.sub(r"^(Correct|Not quite)\.\s*", "", explanation).strip()
+        normalized["explanation"] = explanation
+        normalized["exam_clue"] = (
+            normalized.get("exam_clue")
+            or normalized.get("key_clue")
+            or normalized.get("key_takeaway")
+            or normalized.get("subtopic")
+            or normalized.get("topic")
+        )
+        normalized["board_takeaway"] = (
+            normalized.get("board_takeaway")
+            or normalized.get("board_rule")
+            or normalized.get("key_takeaway")
+            or explanation
+        )
+        normalized["decision_point"] = (
+            normalized.get("decision_point")
+            or normalized.get("subtopic")
+            or normalized.get("topic")
+        )
+        normalized["difficulty_band"] = (
+            normalized.get("difficulty_band")
+            or normalized.get("difficulty")
+            or "standard"
+        )
+        normalized["tempting_wrong_option"] = normalized.get("tempting_wrong_option")
+        normalized["tempting_wrong_reason"] = normalized.get("tempting_wrong_reason")
+
     if normalized.get("item_type") == "pearl":
         existing_bullets = [bullet for bullet in (normalized.get("bullets") or []) if bullet]
         key_fact = (normalized.get("key_fact") or "").strip()
-        clinical_consequence = (normalized.get("clinical_consequence") or "").strip()
-        board_focus = (normalized.get("board_focus") or "").strip()
+        clinical_consequence = (
+            normalized.get("clinical_consequence")
+            or normalized.get("clinical_implication")
+            or normalized.get("clinical_meaning")
+            or ""
+        ).strip()
+        board_focus = (
+            normalized.get("board_focus")
+            or normalized.get("board_takeaway")
+            or normalized.get("board_rule")
+            or ""
+        ).strip()
 
         if not key_fact and existing_bullets:
             key_fact = existing_bullets[0]
@@ -289,7 +300,9 @@ def _normalize_study_item(item):
 
         normalized["key_fact"] = key_fact
         normalized["clinical_consequence"] = clinical_consequence
+        normalized["clinical_meaning"] = clinical_consequence
         normalized["board_focus"] = board_focus
+        normalized["board_takeaway"] = normalized.get("board_takeaway") or board_focus
         normalized["bullets"] = [line for line in [key_fact, clinical_consequence, board_focus] if line]
     return normalized
 
@@ -387,8 +400,51 @@ def _difficulty_rank(item):
     return 2
 
 
+def _topic_seen_count(state, topic):
+    if not topic:
+        return 0
+    topics_seen = state.get("topics_seen") or []
+    return sum(1 for seen_topic in topics_seen if seen_topic == topic)
+
+
+def _recent_unique_topics(state, limit=4):
+    recent_topics = state.get("recent_topic_history") or []
+    deduped = []
+    seen = set()
+    for topic in reversed(recent_topics):
+        if not topic or topic in seen:
+            continue
+        seen.add(topic)
+        deduped.append(topic)
+        if len(deduped) >= limit:
+            break
+    return set(deduped)
+
+
+def _coverage_first_candidates(candidates, state, used_topics=None):
+    if not candidates:
+        return []
+
+    used_topics = set(used_topics or set())
+    recent_topics = _recent_unique_topics(state, limit=4)
+
+    fresh_topic_candidates = [
+        item for item in candidates
+        if item.get("topic") not in used_topics and item.get("topic") not in recent_topics
+    ]
+    if fresh_topic_candidates:
+        return fresh_topic_candidates
+
+    unused_in_card_candidates = [item for item in candidates if item.get("topic") not in used_topics]
+    if unused_in_card_candidates:
+        return unused_in_card_candidates
+
+    return candidates
+
+
 def _selection_score(item, state, preferred_topic=None, preferred_item_type=None, preferred_difficulty_band=None):
     score = 0
+    topic = item.get("topic")
 
     if preferred_item_type and item.get("item_type") == preferred_item_type:
         score += 30
@@ -423,8 +479,18 @@ def _selection_score(item, state, preferred_topic=None, preferred_item_type=None
         score += 4
 
     recent_topics = state.get("recent_topic_history") or []
-    if item.get("topic") in recent_topics[-2:]:
+    if topic in recent_topics[-2:]:
         score -= 8
+    if topic in recent_topics[-4:]:
+        score -= 4
+
+    topic_seen_count = _topic_seen_count(state, topic)
+    if topic_seen_count == 0:
+        score += 10
+    elif topic_seen_count == 1:
+        score += 4
+    elif topic_seen_count >= 4:
+        score -= min(10, (topic_seen_count - 3) * 2)
 
     cards_shown_history = state.get("cards_shown_history") or []
     if item.get("id") in cards_shown_history[-6:]:
@@ -626,6 +692,7 @@ def get_idle_study_cards(session_id):
     recent_topic = recent_topics[-1] if recent_topics else None
 
     used_ids = set()
+    used_topics = set()
 
     practice_pool = _get_items(item_type="mcq", topic=weak_topic, exclude_ids=recent_exclude_ids) or _get_items(item_type="mcq", exclude_ids=recent_exclude_ids)
     if not practice_pool:
@@ -641,10 +708,12 @@ def get_idle_study_cards(session_id):
     )
     if practice_item:
         used_ids.add(practice_item["id"])
+        used_topics.add(practice_item["topic"])
 
     pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids | recent_exclude_ids)
     if not pearl_pool:
         pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids)
+    pearl_pool = _coverage_first_candidates(pearl_pool, state, used_topics=used_topics)
     pearl_item = _pick_best_item(
         session_id,
         pearl_pool,
@@ -655,6 +724,7 @@ def get_idle_study_cards(session_id):
     )
     if pearl_item:
         used_ids.add(pearl_item["id"])
+        used_topics.add(pearl_item["topic"])
 
     dynamic_topic = weak_topic or recent_topic
     dynamic_pool = (
@@ -668,6 +738,7 @@ def get_idle_study_cards(session_id):
             if dynamic_topic
             else _get_items(exclude_ids=used_ids)
         )
+    dynamic_pool = _coverage_first_candidates(dynamic_pool, state, used_topics=used_topics)
     dynamic_item = _pick_best_item(
         session_id,
         dynamic_pool,
@@ -717,6 +788,7 @@ def get_idle_study_cards(session_id):
 
     if len(cards) < 3:
         fallback_pool = _get_items(exclude_ids=used_ids) or _get_items()
+        fallback_pool = _coverage_first_candidates(fallback_pool, state, used_topics=used_topics)
         scored_fallback = sorted(
             fallback_pool,
             key=lambda item: _selection_score(item, state, preferred_difficulty_band="standard"),
@@ -736,6 +808,7 @@ def get_idle_study_cards(session_id):
                     "topic": item["topic"],
                 }
             )
+            used_topics.add(item["topic"])
             if len(cards) == 3:
                 break
 
@@ -773,6 +846,7 @@ def _build_study_item_payload(item):
                 "title": item["title"],
                 "key_fact": item.get("key_fact"),
                 "clinical_consequence": item.get("clinical_consequence"),
+                "clinical_meaning": item.get("clinical_meaning") or item.get("clinical_consequence"),
                 "board_focus": item.get("board_focus"),
                 "bullets": item["bullets"],
                 "estimated_time_seconds": item.get("estimated_time_seconds", 30),
