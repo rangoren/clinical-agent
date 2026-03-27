@@ -433,7 +433,32 @@ def _build_suggested_save_payload(intent, user_message):
     }
 
 
+def _build_general_greeting_reply(user_profile):
+    training_stage = (user_profile or {}).get("training_stage")
+    if training_stage == "resident":
+        return "Hi. I’m here and ready when you are."
+    if training_stage == "specialist":
+        return "Hi. Ready when you are."
+    return "Hi. I’m here and ready to help."
+
+
 def _handle_regular_message(session_id, user_profile, user_message, save_user_message=True):
+    if is_general_greeting_message(user_message):
+        reply = _build_general_greeting_reply(user_profile)
+        if save_user_message:
+            save_message("user", user_message, session_id, metadata={"intent": "general_chat"})
+        assistant_message_id = save_message(
+            "assistant",
+            reply,
+            session_id,
+            metadata={"intent": "general_chat", "source": "greeting_shortcut"},
+        )
+        log_event("greeting_shortcut_used", session_id, {"message_length": len(user_message.strip())})
+        return _build_message_response(
+            reply=reply,
+            assistant_message_id=assistant_message_id,
+        )
+
     started_at = time.perf_counter()
     timing = {}
 
