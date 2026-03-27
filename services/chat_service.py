@@ -3,8 +3,13 @@ from datetime import datetime
 from db import feedback_logs_collection, messages_collection
 
 
-def load_chat(session_id):
-    docs = messages_collection.find({"session_id": session_id}).sort("created_at", 1)
+def load_chat(session_id, limit=None):
+    docs = list(
+        messages_collection.find({"session_id": session_id})
+        .sort("created_at", -1)
+        .limit(limit or 0)
+    )
+    docs.reverse()
     return [{"role": doc["role"], "content": doc["content"]} for doc in docs]
 
 
