@@ -399,6 +399,25 @@
             line-height: 1.45;
         }
 
+        .entry-guidance {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 16px 12px 14px;
+            color: #7c8985;
+            font-size: 0.82rem;
+            font-weight: 560;
+            letter-spacing: 0.01em;
+            line-height: 1.35;
+            user-select: none;
+            pointer-events: none;
+        }
+
+        .entry-guidance.visible {
+            display: flex;
+        }
+
         .session-banner-actions {
             display: flex;
             flex-wrap: wrap;
@@ -1664,6 +1683,7 @@
             <section id="chat" class="chat-panel" aria-live="polite"></section>
         </section>
 
+        <div id="entry-guidance" class="entry-guidance">Ask or choose a quick action</div>
         <div id="study-cards-shell" class="study-cards-shell"></div>
 
         <footer class="composer-shell">
@@ -1712,6 +1732,7 @@
         let googleCalendarConnected = false;
         let studyCardsRequested = false;
         let studyCardsDismissed = false;
+        let entryGuidanceDismissed = false;
         let composerModeStripOpen = false;
         let pullRefreshState = "idle";
         let pullTouchStartY = 0;
@@ -1963,23 +1984,51 @@
             return document.getElementById("study-cards-shell");
         }
 
+        function getEntryGuidance() {
+            return document.getElementById("entry-guidance");
+        }
+
+        function shouldShowEntryGuidance() {
+            if (entryGuidanceDismissed || appMode !== "clinical") return false;
+            const input = document.getElementById("input");
+            const chat = document.getElementById("chat");
+            if (!input || !chat) return false;
+            if (input.value.trim()) return false;
+            if (chat.children.length > 0) return false;
+            return true;
+        }
+
+        function refreshEntryGuidanceVisibility() {
+            const guidance = getEntryGuidance();
+            if (!guidance) return;
+            guidance.classList.toggle("visible", shouldShowEntryGuidance());
+        }
+
+        function dismissEntryGuidance() {
+            entryGuidanceDismissed = true;
+            refreshEntryGuidanceVisibility();
+        }
+
         function clearStudyCards() {
             const shell = getStudyCardsShell();
             if (!shell) return;
             shell.innerHTML = "";
             shell.classList.remove("visible");
             studyCardsRequested = false;
+            refreshEntryGuidanceVisibility();
         }
 
         function hideStudyCards() {
             const shell = getStudyCardsShell();
             if (!shell) return;
             shell.classList.remove("visible");
+            refreshEntryGuidanceVisibility();
         }
 
         function dismissStudyCards() {
             studyCardsDismissed = true;
             hideStudyCards();
+            dismissEntryGuidance();
             updateComposerState();
         }
 
@@ -2028,6 +2077,7 @@
             shell.innerHTML = "";
             shell.appendChild(grid);
             shell.classList.add("visible");
+            refreshEntryGuidanceVisibility();
         }
 
         async function maybeShowStudyCards(force = false) {
@@ -2041,6 +2091,7 @@
 
             if (!force && shell.children.length > 0) {
                 shell.classList.add("visible");
+                refreshEntryGuidanceVisibility();
                 return;
             }
 
@@ -2242,6 +2293,7 @@
             document.getElementById("chat").innerHTML = "";
             hideSessionBanner();
             clearStudyCards();
+            refreshEntryGuidanceVisibility();
             bootstrapSession();
         }
 
@@ -2281,6 +2333,7 @@
         function appendMessage(role, html, variant = "") {
             if (!html) return null;
             const chat = document.getElementById("chat");
+            dismissEntryGuidance();
             const row = createMessageRow(role, html, variant);
             chat.appendChild(row);
             scrollChatToBottom();
@@ -2850,6 +2903,7 @@
             studyCardsDismissed = false;
             setComposerEnabled(false);
             setStatus("Checking");
+            refreshEntryGuidanceVisibility();
 
             try {
                 const response = await fetch("/session-state", {
@@ -2896,6 +2950,7 @@
                 if (!data.cards || data.cards.length === 0) {
                     maybeShowStudyCards(true);
                 }
+                refreshEntryGuidanceVisibility();
                 attemptInitialComposerFocus();
             } catch (error) {
                 clearStudyCards();
@@ -3147,9 +3202,11 @@
         document.getElementById("input").addEventListener("input", function() {
             autoResizeInput();
             if (this.value.trim()) {
+                dismissEntryGuidance();
                 dismissStudyCards();
             } else {
                 maybeShowStudyCards();
+                refreshEntryGuidanceVisibility();
             }
             updateComposerState();
         });
@@ -3171,6 +3228,7 @@
         renderModeState();
         autoResizeInput();
         updateComposerState();
+        refreshEntryGuidanceVisibility();
         setupPullToRefreshOption();
         handleCalendarCallbackStatus();
         bootstrapSession();

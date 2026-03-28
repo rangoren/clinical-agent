@@ -812,6 +812,35 @@ def get_idle_study_cards(session_id):
             if len(cards) == 3:
                 break
 
+    # Entry-state contract: try hard to always return 3 actions.
+    # It's valid for this set to include two MCQs or two Pearls,
+    # as long as the content items are different.
+    if len(cards) < 3:
+        existing_ids = {card["content_item_id"] for card in cards}
+        final_fill_pool = _get_items(exclude_ids=existing_ids) or []
+        final_fill_pool = sorted(
+            final_fill_pool,
+            key=lambda item: _selection_score(item, state, preferred_difficulty_band="standard"),
+            reverse=True,
+        )
+        for item in final_fill_pool:
+            if item["id"] in existing_ids:
+                continue
+            cards.append(
+                {
+                    "id": f"entry_fill_{item['id']}",
+                    "type": "practice" if item["item_type"] == "mcq" else "pearl",
+                    "title": "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
+                    "subtitle": "1-min practice" if item["item_type"] == "mcq" else "Fast board takeaway",
+                    "cta": "Start" if item["item_type"] == "mcq" else "Open",
+                    "content_item_id": item["id"],
+                    "topic": item["topic"],
+                }
+            )
+            existing_ids.add(item["id"])
+            if len(cards) == 3:
+                break
+
     shown_history = _trim_history((state.get("cards_shown_history") or []) + [card["content_item_id"] for card in cards], 18)
     _save_state(
         session_id,
