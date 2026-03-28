@@ -63,8 +63,15 @@ def _build_message_response(
     sources=None,
     suggested_save=None,
 ):
+    normalized_reply = reply
+    if not _reply_has_visible_text(normalized_reply):
+        if sources:
+            normalized_reply = _fallback_empty_clinical_reply(sources)
+        else:
+            normalized_reply = "I couldn’t generate a reliable answer right now. Please try again."
+
     return {
-        "reply": reply,
+        "reply": normalized_reply,
         "undo": undo,
         "undo_type": undo_type,
         "show_feedback": show_feedback,
