@@ -404,14 +404,17 @@
             align-items: center;
             justify-content: center;
             text-align: center;
-            padding: 16px 12px 14px;
-            color: #7c8985;
+            min-height: clamp(52px, 9vh, 88px);
+            padding: 10px 18px 12px;
+            margin: 0 0 18px;
+            color: #7a8783;
             font-size: 0.82rem;
             font-weight: 560;
             letter-spacing: 0.01em;
             line-height: 1.35;
             user-select: none;
             pointer-events: none;
+            align-self: stretch;
         }
 
         .entry-guidance.visible {
@@ -614,7 +617,7 @@
         .study-cards-shell {
             display: none;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
             padding: 0 14px 8px;
             position: sticky;
             bottom: 96px;
@@ -629,7 +632,7 @@
         .study-cards-grid {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
+            gap: 7px;
         }
 
         .study-entry-card,
@@ -643,38 +646,40 @@
         }
 
         .study-entry-card {
-            padding: 11px 11px 11px;
+            padding: 10px 10px 10px;
             display: flex;
             flex-direction: column;
-            gap: 7px;
+            gap: 5px;
             min-width: 0;
             cursor: pointer;
             text-align: left;
             justify-content: space-between;
-            min-height: 108px;
+            min-height: 116px;
             box-shadow: none;
+            transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
         }
 
         .study-entry-top {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-start;
             align-items: flex-start;
             gap: 8px;
         }
 
         .study-entry-type {
-            font-size: 0.66rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
+            font-size: 0.62rem;
+            font-weight: 680;
+            letter-spacing: 0.09em;
             text-transform: uppercase;
-            color: #426862;
+            color: #4d6862;
         }
 
         .study-entry-topic {
-            font-size: 0.78rem;
-            color: #526763;
-            text-align: right;
+            font-size: 0.75rem;
+            color: #4f645f;
+            text-align: left;
             line-height: 1.3;
+            font-weight: 620;
             display: -webkit-box;
             -webkit-line-clamp: 1;
             -webkit-box-orient: vertical;
@@ -683,23 +688,24 @@
 
         .study-entry-title {
             margin: 0;
-            font-size: 0.96rem;
-            font-weight: 760;
+            font-size: 1.01rem;
+            font-weight: 790;
             color: var(--text);
-            line-height: 1.24;
+            line-height: 1.2;
             display: -webkit-box;
-            -webkit-line-clamp: 3;
+            -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
 
         .study-entry-subtitle {
             margin: 0;
-            color: #586d69;
-            font-size: 0.8rem;
-            line-height: 1.3;
+            color: #4f6460;
+            font-size: 0.77rem;
+            line-height: 1.28;
+            font-weight: 600;
             display: -webkit-box;
-            -webkit-line-clamp: 2;
+            -webkit-line-clamp: 1;
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
@@ -775,8 +781,14 @@
 
         .study-entry-card:hover,
         .study-option-button:hover {
-            border-color: rgba(15, 118, 110, 0.22);
+            border-color: rgba(15, 118, 110, 0.2);
+            background: rgba(255, 255, 255, 0.97);
             transform: translateY(-1px);
+        }
+
+        .study-entry-card:active {
+            transform: translateY(0);
+            background: rgba(236, 245, 242, 0.95);
         }
 
         .study-option-button:disabled {
@@ -1399,9 +1411,9 @@
             }
 
             .study-entry-card {
-                min-height: min(28vw, 98px);
+                min-height: min(30vw, 108px);
                 padding: 8px 8px 8px;
-                gap: 5px;
+                gap: 4px;
                 border-radius: 12px;
             }
 
@@ -1421,19 +1433,19 @@
             }
 
             .study-entry-topic {
-                font-size: 0.72rem;
+                font-size: 0.7rem;
                 text-align: left;
             }
 
             .study-entry-title {
-                font-size: 0.8rem;
-                -webkit-line-clamp: 3;
+                font-size: 0.84rem;
+                -webkit-line-clamp: 2;
             }
 
             .study-entry-subtitle {
                 display: -webkit-box;
-                font-size: 0.72rem;
-                -webkit-line-clamp: 2;
+                font-size: 0.7rem;
+                -webkit-line-clamp: 1;
             }
 
             .study-entry-cta {
@@ -2064,8 +2076,8 @@
                 button.innerHTML = `
                     <div class="study-entry-top">
                         <span class="study-entry-type">${escapeHtml(typeLabel)}</span>
-                        <span class="study-entry-topic">${escapeHtml(card.topic || "")}</span>
                     </div>
+                    <p class="study-entry-topic">${escapeHtml(card.topic || "")}</p>
                     <p class="study-entry-title">${escapeHtml(card.title)}</p>
                     <p class="study-entry-subtitle">${escapeHtml(card.subtitle)}</p>
                     <span class="study-entry-cta">${escapeHtml(card.cta)}</span>

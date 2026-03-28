@@ -540,7 +540,7 @@ def _title_for_dynamic(item, has_history):
 
 
 def _subtitle_for_dynamic(has_history):
-    return "Quick topic revisit" if has_history else "Fast board-oriented pick"
+    return "1-min revisit" if has_history else "1-min focus"
 
 
 def _source_payload(item):
@@ -755,7 +755,7 @@ def get_idle_study_cards(session_id):
                 "id": "practice_card",
                 "type": "practice",
                 "title": "Quick MCQ",
-                "subtitle": "1-minute exam-style practice",
+                "subtitle": "1-min practice",
                 "cta": "Start",
                 "content_item_id": practice_item["id"],
                 "topic": practice_item["topic"],
@@ -767,7 +767,7 @@ def get_idle_study_cards(session_id):
                 "id": "pearl_card",
                 "type": "pearl",
                 "title": "Quick Pearl",
-                "subtitle": "Fast board takeaway",
+                "subtitle": "1-min takeaway",
                 "cta": "Open",
                 "content_item_id": pearl_item["id"],
                 "topic": pearl_item["topic"],
@@ -802,7 +802,7 @@ def get_idle_study_cards(session_id):
                     "id": f"fallback_{item['id']}",
                     "type": "practice" if item["item_type"] == "mcq" else "pearl",
                     "title": "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
-                    "subtitle": "1-minute exam-style practice" if item["item_type"] == "mcq" else "Fast board takeaway",
+                    "subtitle": "1-min practice" if item["item_type"] == "mcq" else "1-min takeaway",
                     "cta": "Start" if item["item_type"] == "mcq" else "Open",
                     "content_item_id": item["id"],
                     "topic": item["topic"],
@@ -831,7 +831,7 @@ def get_idle_study_cards(session_id):
                     "id": f"entry_fill_{item['id']}",
                     "type": "practice" if item["item_type"] == "mcq" else "pearl",
                     "title": "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
-                    "subtitle": "1-min practice" if item["item_type"] == "mcq" else "Fast board takeaway",
+                    "subtitle": "1-min practice" if item["item_type"] == "mcq" else "1-min takeaway",
                     "cta": "Start" if item["item_type"] == "mcq" else "Open",
                     "content_item_id": item["id"],
                     "topic": item["topic"],
