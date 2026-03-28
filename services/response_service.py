@@ -43,20 +43,36 @@ def _is_transient_llm_error(exc):
 
 
 def _as_text_block_content(value):
-    text = "" if value is None else str(value)
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return None
     return [{"type": "text", "text": text}]
 
 
+def _build_message_entry(item):
+    role = item.get("role")
+    if role not in {"user", "assistant"}:
+        return None
+    content = _as_text_block_content(item.get("content"))
+    if not content:
+        return None
+    return {
+        "role": role,
+        "content": content,
+    }
+
+
 def generate_reply(system_prompt, chat_history, user_message):
-    messages = [
-        {
-            "role": item["role"],
-            "content": _as_text_block_content(item.get("content")),
-        }
-        for item in chat_history[-6:]
-        if item.get("role") in {"user", "assistant"}
-    ]
-    messages.append({"role": "user", "content": _as_text_block_content(user_message)})
+    messages = []
+    for item in chat_history[-6:]:
+        entry = _build_message_entry(item)
+        if entry:
+            messages.append(entry)
+
+    user_content = _as_text_block_content(user_message)
+    if not user_content:
+        raise ValueError("user_message must not be empty")
+    messages.append({"role": "user", "content": user_content})
 
     last_exc = None
     for attempt in range(MAX_REPLY_RETRIES + 1):
