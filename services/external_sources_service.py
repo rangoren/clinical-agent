@@ -155,6 +155,7 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://www.acog.org/womens-health/faqs/preeclampsia-and-high-blood-pressure-during-pregnancy",
         "source_type": "external guideline",
         "keywords": ["preeclampsia", "pre-eclampsia", "blood pressure", "magnesium", "severe features"],
+        "excerpt": "Preeclampsia with severe features requires stabilization and often delivery rather than routine expectant management, depending on gestational age and maternal-fetal status.",
     },
     {
         "title": "ACOG Practice Advisory: Low-Dose Aspirin Use for the Prevention of Preeclampsia",
@@ -209,6 +210,7 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://www.acog.org/clinical/clinical-guidance/practice-bulletin/articles/2020/03/prelabor-rupture-of-membranes",
         "source_type": "external guideline",
         "keywords": ["prom", "pprom", "rupture of membranes", "amniotic fluid leak"],
+        "excerpt": "In PPROM before 34 weeks without infection, labor, or fetal compromise, expectant management with corticosteroids and latency antibiotics is generally recommended while monitoring for chorioamnionitis or fetal deterioration.",
     },
     {
         "title": "CDC: Group B Strep Prevention in Newborns",
@@ -438,10 +440,13 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
         score += max(0, 40 - (stage_rank[domain] * 10))
 
         if routing_focus:
-            if _source_matches_focus(source, routing_focus, focus_query_terms):
+            matches_focus = _source_matches_focus(source, routing_focus, focus_query_terms)
+            if matches_focus:
                 score += 45
             else:
                 score -= 18
+                if focus_query_terms:
+                    continue
 
         scored.append((score, source, domain))
 
@@ -463,6 +468,8 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
                 "source_type": source["source_type"],
                 "domain": domain,
                 "tier": selected_tier,
+                "excerpt": source.get("excerpt"),
+                "updated_at": source.get("updated_at"),
             }
         )
         if len(selected) >= limit:
