@@ -155,6 +155,69 @@ LOCAL_OPERATIONAL_DOMAINS = {
     "meuhedet.co.il",
 }
 
+TOP_10_OBGYN_TAXONOMY = [
+    {
+        "id": "obstetrics",
+        "label": "Obstetrics",
+        "description": "Labor, delivery, postpartum, and core obstetric management.",
+        "specialty_tags": ["obstetrics"],
+    },
+    {
+        "id": "high_risk_pregnancy",
+        "label": "High-Risk Pregnancy",
+        "description": "Maternal-fetal medicine, complex pregnancy, and timing decisions.",
+        "specialty_tags": ["maternal_fetal_medicine"],
+    },
+    {
+        "id": "general_gynecology",
+        "label": "General Gynecology",
+        "description": "Common benign gynecology, bleeding, pain, and outpatient management.",
+        "specialty_tags": ["benign_gynecology"],
+    },
+    {
+        "id": "gynecologic_oncology",
+        "label": "Gynecologic Oncology",
+        "description": "Cancer red flags, workup, and next-step reasoning.",
+        "specialty_tags": ["gynecologic_oncology"],
+    },
+    {
+        "id": "fertility_and_ivf",
+        "label": "Fertility and IVF",
+        "description": "Infertility workup, ART, IVF, and reproductive endocrinology.",
+        "specialty_tags": ["fertility"],
+    },
+    {
+        "id": "ultrasound",
+        "label": "Ultrasound",
+        "description": "OB-GYN ultrasound interpretation and action-oriented implications.",
+        "specialty_tags": ["ultrasound"],
+    },
+    {
+        "id": "cervical_screening",
+        "label": "Cervical Screening",
+        "description": "HPV, Pap, colposcopy, and risk-based cervical management.",
+        "specialty_tags": ["cervical_screening"],
+    },
+    {
+        "id": "contraception_and_family_planning",
+        "label": "Contraception and Family Planning",
+        "description": "Contraceptive eligibility, emergency contraception, and family planning.",
+        "specialty_tags": ["contraception"],
+    },
+    {
+        "id": "menopause",
+        "label": "Menopause",
+        "description": "Perimenopause, HRT, and postmenopausal bleeding frameworks.",
+        "specialty_tags": ["menopause"],
+    },
+    {
+        "id": "early_pregnancy_and_emergency_gynecology",
+        "label": "Early Pregnancy and Emergency Gynecology",
+        "description": "Ectopic pregnancy, pregnancy of unknown location, miscarriage, and acute gyne presentations.",
+        "specialty_tags": ["early_pregnancy"],
+    },
+]
+
 SPECIALTY_DOMAIN_GROUPS = {
     "general_obgyn": [
         "acog.org",
@@ -162,6 +225,14 @@ SPECIALTY_DOMAIN_GROUPS = {
         "sogc.org",
         "ranzcog.edu.au",
         "figo.org",
+    ],
+    "obstetrics": [
+        "acog.org",
+        "rcog.org.uk",
+        "sogc.org",
+        "ranzcog.edu.au",
+        "figo.org",
+        "nice.org.uk",
     ],
     "cervical_screening": [
         "asccp.org",
@@ -190,6 +261,13 @@ SPECIALTY_DOMAIN_GROUPS = {
         "sgo.org",
         "acog.org",
     ],
+    "benign_gynecology": [
+        "acog.org",
+        "rcog.org.uk",
+        "nice.org.uk",
+        "sogc.org",
+        "figo.org",
+    ],
     "menopause": [
         "imsociety.org",
         "acog.org",
@@ -206,9 +284,33 @@ SPECIALTY_DOMAIN_GROUPS = {
         "who.int",
         "nice.org.uk",
     ],
+    "early_pregnancy": [
+        "nice.org.uk",
+        "acog.org",
+        "rcog.org.uk",
+        "sogc.org",
+        "figo.org",
+    ],
 }
 
 SPECIALTY_KEYWORDS = {
+    "obstetrics": [
+        "labor",
+        "labour",
+        "delivery",
+        "postpartum",
+        "pph",
+        "ctg",
+        "fetal monitoring",
+        "rupture of membranes",
+        "prom",
+        "pprom",
+        "induction",
+        "לידה",
+        "אחרי לידה",
+        "ירידת מים",
+        "מוניטור",
+    ],
     "cervical_screening": [
         "pap",
         "hpv",
@@ -255,6 +357,18 @@ SPECIALTY_KEYWORDS = {
         "oncology",
         "brca",
     ],
+    "benign_gynecology": [
+        "aub",
+        "abnormal uterine bleeding",
+        "heavy menstrual bleeding",
+        "intermenstrual bleeding",
+        "fibroid",
+        "leiomyoma",
+        "endometriosis",
+        "dysmenorrhea",
+        "chronic pelvic pain",
+        "pelvic pain",
+    ],
     "menopause": [
         "menopause",
         "perimenopause",
@@ -276,6 +390,19 @@ SPECIALTY_KEYWORDS = {
         "trich",
         "candida",
         "infection",
+    ],
+    "early_pregnancy": [
+        "ectopic",
+        "pregnancy of unknown location",
+        "pul",
+        "beta hcg",
+        "first trimester bleeding",
+        "early pregnancy loss",
+        "miscarriage",
+        "threatened abortion",
+        "הפלה",
+        "הריון חוץ רחמי",
+        "דימום בתחילת הריון",
     ],
 }
 
@@ -466,6 +593,10 @@ def infer_specialty_tags(user_message, user_profile=None):
         tags.append("general_obgyn")
 
     return tags
+
+
+def get_top_10_obgyn_taxonomy():
+    return list(TOP_10_OBGYN_TAXONOMY)
 
 
 def infer_question_route(user_message):
