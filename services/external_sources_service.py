@@ -344,14 +344,27 @@ def _detect_source_routing_focus(user_message):
     return None
 
 
-def _source_matches_focus(source, focus):
+def _matched_focus_query_terms(user_message, focus):
+    if not focus:
+        return []
+    normalized = _normalize_text(user_message)
+    rule = SOURCE_ROUTING_RULES.get(focus) or {}
+    return [keyword for keyword in rule.get("query_keywords", []) if keyword in normalized]
+
+
+def _source_matches_focus(source, focus, query_terms=None):
     if not focus:
         return False
     rule = SOURCE_ROUTING_RULES.get(focus) or {}
     combined_keywords = " ".join(source.get("keywords") or []).lower()
     title = str(source.get("title") or "").lower()
     excerpt = str(source.get("excerpt") or "").lower()
-    combined_text = " ".join(part for part in [combined_keywords, title, excerpt] if part).strip()
+    url = str(source.get("url") or "").lower()
+    combined_text = " ".join(part for part in [combined_keywords, title, excerpt, url] if part).strip()
+
+    narrowed_terms = [term for term in (query_terms or []) if len(term) >= 4]
+    if narrowed_terms and any(term in combined_text for term in narrowed_terms):
+        return True
 
     if any(keyword in combined_text for keyword in rule.get("source_keywords", [])):
         return True
@@ -384,6 +397,7 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
     israel_relevant = is_israel_relevant(user_message, user_profile=user_profile)
     stages = build_search_stages(user_message, user_profile=user_profile)
     routing_focus = _detect_source_routing_focus(user_message)
+    focus_query_terms = _matched_focus_query_terms(user_message, routing_focus)
     stage_rank = {}
     for index, stage in enumerate(stages):
         for domain in stage["domains"]:
@@ -424,7 +438,7 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
         score += max(0, 40 - (stage_rank[domain] * 10))
 
         if routing_focus:
-            if _source_matches_focus(source, routing_focus):
+            if _source_matches_focus(source, routing_focus, focus_query_terms):
                 score += 45
             else:
                 score -= 18
@@ -457,10 +471,10 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
     if include_live:
         live_sources = get_live_trusted_sources(user_message, user_profile=user_profile, limit=limit)
         if routing_focus:
-            focused_live_sources = [source for source in live_sources if _source_matches_focus(source, routing_focus)]
+            focused_live_sources = [source for source in live_sources if _source_matches_focus(source, routing_focus, focus_query_terms)]
             if focused_live_sources:
                 live_sources = focused_live_sources
-            elif any(_source_matches_focus(source, routing_focus) for source in selected):
+            elif any(_source_matches_focus(source, routing_focus, focus_query_terms) for source in selected):
                 live_sources = []
         selected = live_sources + selected
 
