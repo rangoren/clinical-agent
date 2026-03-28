@@ -88,6 +88,59 @@
             pointer-events: none;
         }
 
+        .pull-refresh-overlay {
+            position: absolute;
+            top: calc(env(safe-area-inset-top, 0px) + 8px);
+            left: 50%;
+            transform: translate(-50%, -12px);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 30;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 32px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(29, 58, 52, 0.08);
+            backdrop-filter: blur(16px);
+            color: var(--muted);
+            font-size: 0.75rem;
+            font-weight: 650;
+            letter-spacing: 0.01em;
+            transition: opacity 170ms ease, transform 200ms ease, background 170ms ease;
+        }
+
+        .pull-refresh-overlay.visible {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+
+        .pull-refresh-overlay.confirm {
+            pointer-events: auto;
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--brand-strong);
+            cursor: pointer;
+        }
+
+        .pull-refresh-overlay.refreshing {
+            pointer-events: none;
+            color: var(--brand-strong);
+        }
+
+        .pull-refresh-icon {
+            width: 14px;
+            height: 14px;
+            display: inline-block;
+            color: currentColor;
+            transform-origin: center;
+        }
+
+        .pull-refresh-overlay.refreshing .pull-refresh-icon {
+            animation: pullRefreshSpin 640ms linear infinite;
+        }
+
         .topbar {
             position: relative;
             z-index: 8;
@@ -1144,6 +1197,15 @@
             }
         }
 
+        @keyframes pullRefreshSpin {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
         @media (min-width: 820px) {
             body {
                 padding: 24px;
@@ -1540,6 +1602,14 @@
 </head>
 <body>
     <main class="app-shell">
+        <div id="pull-refresh-overlay" class="pull-refresh-overlay" aria-live="polite" aria-hidden="true">
+            <svg class="pull-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+                <path d="M21 3v9h-9"></path>
+            </svg>
+            <span id="pull-refresh-label">Pull to refresh</span>
+        </div>
+
         <header class="topbar">
             <div class="brand">
                 <div class="brand-text">
@@ -1650,6 +1720,13 @@
         let studyCardsRequested = false;
         let studyCardsDismissed = false;
         let composerModeStripOpen = false;
+        let pullRefreshState = "idle";
+        let pullTouchStartY = 0;
+        let pullDistance = 0;
+        let pullTracking = false;
+        let pullConfirmTimeoutId = null;
+        const pullShowThreshold = 12;
+        const pullArmThreshold = 56;
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -1693,6 +1770,170 @@
         }
 
         function setStatus(_text) {}
+
+        function getPullRefreshOverlay() {
+            return document.getElementById("pull-refresh-overlay");
+        }
+
+        function getPullRefreshLabel() {
+            return document.getElementById("pull-refresh-label");
+        }
+
+        function clearPullRefreshConfirmTimeout() {
+            if (!pullConfirmTimeoutId) return;
+            clearTimeout(pullConfirmTimeoutId);
+            pullConfirmTimeoutId = null;
+        }
+
+        function setPullRefreshHidden() {
+            const overlay = getPullRefreshOverlay();
+            if (!overlay) return;
+            overlay.classList.remove("visible", "confirm", "refreshing");
+            overlay.style.transform = "translate(-50%, -12px)";
+            overlay.setAttribute("aria-hidden", "true");
+            pullRefreshState = "idle";
+            clearPullRefreshConfirmTimeout();
+        }
+
+        function setPullRefreshPulling(distance) {
+            const overlay = getPullRefreshOverlay();
+            const label = getPullRefreshLabel();
+            if (!overlay || !label) return;
+
+            const normalizedDistance = Math.max(0, Math.min(90, distance));
+            overlay.classList.add("visible");
+            overlay.classList.remove("confirm", "refreshing");
+            overlay.style.transform = `translate(-50%, ${Math.min(8, normalizedDistance * 0.14)}px)`;
+            overlay.setAttribute("aria-hidden", "false");
+            label.textContent = "Pull to refresh";
+            pullRefreshState = "pulling";
+        }
+
+        function setPullRefreshConfirm() {
+            const overlay = getPullRefreshOverlay();
+            const label = getPullRefreshLabel();
+            if (!overlay || !label) return;
+
+            clearPullRefreshConfirmTimeout();
+            overlay.classList.add("visible", "confirm");
+            overlay.classList.remove("refreshing");
+            overlay.style.transform = "translate(-50%, 0)";
+            overlay.setAttribute("aria-hidden", "false");
+            label.textContent = "Tap to refresh";
+            pullRefreshState = "confirm";
+            pullConfirmTimeoutId = setTimeout(() => {
+                setPullRefreshHidden();
+            }, 2000);
+        }
+
+        function setPullRefreshRefreshing() {
+            const overlay = getPullRefreshOverlay();
+            const label = getPullRefreshLabel();
+            if (!overlay || !label) return;
+
+            clearPullRefreshConfirmTimeout();
+            overlay.classList.add("visible", "refreshing");
+            overlay.classList.remove("confirm");
+            overlay.style.transform = "translate(-50%, 0)";
+            overlay.setAttribute("aria-hidden", "false");
+            label.textContent = "Refreshing...";
+            pullRefreshState = "refreshing";
+        }
+
+        function shouldAllowPullGesture() {
+            if (pullRefreshState === "refreshing") return false;
+            const input = document.getElementById("input");
+            if (input && document.activeElement === input) return false;
+            if (composerModeStripOpen) return false;
+
+            const chat = document.getElementById("chat");
+            if (!chat) return false;
+            return chat.scrollTop <= 0;
+        }
+
+        function handlePullRefreshTap() {
+            if (pullRefreshState !== "confirm") return;
+            setPullRefreshRefreshing();
+            setTimeout(() => {
+                window.location.reload();
+            }, 420);
+        }
+
+        function setupPullToRefreshOption() {
+            const chat = document.getElementById("chat");
+            const overlay = getPullRefreshOverlay();
+            if (!chat || !overlay) return;
+
+            overlay.addEventListener("click", handlePullRefreshTap);
+
+            chat.addEventListener("touchstart", (event) => {
+                if (event.touches.length !== 1) {
+                    pullTracking = false;
+                    return;
+                }
+
+                if (!shouldAllowPullGesture()) {
+                    pullTracking = false;
+                    return;
+                }
+
+                pullTouchStartY = event.touches[0].clientY;
+                pullDistance = 0;
+                pullTracking = true;
+            }, { passive: true });
+
+            chat.addEventListener("touchmove", (event) => {
+                if (!pullTracking) return;
+
+                const touch = event.touches[0];
+                const deltaY = touch.clientY - pullTouchStartY;
+                if (deltaY <= 0) {
+                    return;
+                }
+
+                if (!shouldAllowPullGesture()) {
+                    pullTracking = false;
+                    setPullRefreshHidden();
+                    return;
+                }
+
+                if (deltaY > pullShowThreshold) {
+                    event.preventDefault();
+                    pullDistance = Math.min(92, deltaY * 0.5);
+                    setPullRefreshPulling(pullDistance);
+                }
+            }, { passive: false });
+
+            chat.addEventListener("touchend", () => {
+                if (!pullTracking) return;
+                pullTracking = false;
+
+                if (pullDistance >= pullArmThreshold) {
+                    setPullRefreshConfirm();
+                } else {
+                    setPullRefreshHidden();
+                }
+                pullDistance = 0;
+            });
+
+            chat.addEventListener("touchcancel", () => {
+                pullTracking = false;
+                pullDistance = 0;
+                setPullRefreshHidden();
+            });
+
+            chat.addEventListener("scroll", () => {
+                if (pullRefreshState === "confirm" && chat.scrollTop > 2) {
+                    setPullRefreshHidden();
+                }
+            }, { passive: true });
+
+            document.addEventListener("touchstart", (event) => {
+                if (pullRefreshState !== "confirm") return;
+                if (overlay.contains(event.target)) return;
+                setPullRefreshHidden();
+            }, { passive: true });
+        }
 
         function updateComposerState() {
             const composerCard = document.querySelector(".composer-card");
@@ -2946,6 +3187,9 @@
         });
         document.getElementById("input").addEventListener("focus", function() {
             setComposerModeStripOpen(false);
+            if (pullRefreshState === "confirm") {
+                setPullRefreshHidden();
+            }
             updateComposerState();
         });
         document.getElementById("input").addEventListener("blur", function() {
@@ -2961,6 +3205,7 @@
         renderModeState();
         autoResizeInput();
         updateComposerState();
+        setupPullToRefreshOption();
         handleCalendarCallbackStatus();
         bootstrapSession();
     </script>
