@@ -36,6 +36,50 @@ SOURCE_ROUTING_RULES = {
             "cervical", "asccp", "hpv", "pap",
         ],
     },
+    "contraception": {
+        "query_keywords": [
+            "contraception", "contraceptive", "ocp", "cocp", "combined pill", "combined hormonal",
+            "migraine with aura", "iud", "iucd", "implant", "larc", "emergency contraception",
+            "plan b", "ella", "levonorgestrel", "ulipristal", "גלולות", "מניעה", "התקן",
+        ],
+        "source_keywords": [
+            "contraception", "contraceptive eligibility", "combined ocp", "pill", "iud", "implant",
+            "larc", "emergency contraception", "levonorgestrel", "ulipristal",
+        ],
+        "title_keywords": [
+            "contraception", "medical eligibility", "emergency contraception", "long-acting reversible",
+        ],
+    },
+    "benign_gynecology": {
+        "query_keywords": [
+            "aub", "abnormal uterine bleeding", "heavy menstrual bleeding", "intermenstrual bleeding",
+            "endometriosis", "dysmenorrhea", "chronic pelvic pain", "menopause", "perimenopause",
+            "hot flashes", "hrt", "fibroid", "leiomyoma", "postmenopausal bleeding", "pmb",
+            "דימום רחמי חריג", "אנדומטריוזיס", "מנופאוזה", "גלי חום", "דימום אחרי מנופאוזה",
+        ],
+        "source_keywords": [
+            "abnormal uterine bleeding", "aub", "heavy periods", "endometriosis", "dysmenorrhea",
+            "chronic pelvic pain", "menopause", "perimenopause", "hrt", "hot flashes",
+        ],
+        "title_keywords": [
+            "abnormal uterine bleeding", "endometriosis", "menopause",
+        ],
+    },
+    "infectious_gynecology": {
+        "query_keywords": [
+            "pid", "pelvic inflammatory disease", "cervical motion tenderness", "adnexal tenderness",
+            "tubo-ovarian abscess", "bv", "bacterial vaginosis", "trich", "trichomoniasis",
+            "candida", "yeast infection", "vaginal discharge", "pelvic pain", "אגן דלקתי",
+            "הפרשה נרתיקית", "טריכומונס", "קנדידה",
+        ],
+        "source_keywords": [
+            "pid", "pelvic inflammatory disease", "infection", "bv", "trichomoniasis", "candida",
+            "vaginal discharge",
+        ],
+        "title_keywords": [
+            "pid", "bacterial vaginosis", "trichomoniasis", "candidiasis",
+        ],
+    },
 }
 
 
@@ -306,8 +350,10 @@ def _source_matches_focus(source, focus):
     rule = SOURCE_ROUTING_RULES.get(focus) or {}
     combined_keywords = " ".join(source.get("keywords") or []).lower()
     title = str(source.get("title") or "").lower()
+    excerpt = str(source.get("excerpt") or "").lower()
+    combined_text = " ".join(part for part in [combined_keywords, title, excerpt] if part).strip()
 
-    if any(keyword in combined_keywords for keyword in rule.get("source_keywords", [])):
+    if any(keyword in combined_text for keyword in rule.get("source_keywords", [])):
         return True
     if any(keyword in title for keyword in rule.get("title_keywords", [])):
         return True
@@ -409,6 +455,13 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
             break
 
     if include_live:
-        selected = get_live_trusted_sources(user_message, user_profile=user_profile, limit=limit) + selected
+        live_sources = get_live_trusted_sources(user_message, user_profile=user_profile, limit=limit)
+        if routing_focus:
+            focused_live_sources = [source for source in live_sources if _source_matches_focus(source, routing_focus)]
+            if focused_live_sources:
+                live_sources = focused_live_sources
+            elif any(_source_matches_focus(source, routing_focus) for source in selected):
+                live_sources = []
+        selected = live_sources + selected
 
     return _assign_source_ids(_dedupe_sources(selected)[:limit])
