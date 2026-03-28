@@ -2107,12 +2107,14 @@
 
             if (!status || status.available === false) {
                 googleCalendarConnected = false;
-                label.textContent = "Calendar Sync: Unavailable";
-                action.textContent = "Setup required";
-                action.disabled = true;
+                label.textContent = "Calendar Sync: Not configured";
+                action.textContent = "Connect calendar";
+                action.disabled = false;
+                action.dataset.unavailable = "true";
                 return;
             }
 
+            action.dataset.unavailable = "false";
             googleCalendarConnected = !!status.connected;
             action.disabled = false;
             if (status.connected) {
@@ -2146,6 +2148,15 @@
 
         async function toggleGoogleCalendarConnection() {
             if (appMode !== "scheduling") return;
+            const action = document.getElementById("calendar-action");
+            if (action && action.dataset.unavailable === "true") {
+                closeSettingsMenu();
+                appendAssistantMessage(
+                    "Calendar connection is not configured yet. To connect it, enable Google Calendar integration and set the callback URL for this environment.",
+                    "system"
+                );
+                return;
+            }
             if (googleCalendarConnected) {
                 try {
                     const response = await fetch("/calendar/disconnect/google", {
