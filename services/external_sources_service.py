@@ -82,6 +82,20 @@ SOURCE_ROUTING_RULES = {
     },
 }
 
+FOCUS_SUBSIGNATURES = {
+    "obstetric_acute": {
+        "pprom_prom": ["pprom", "prom", "rupture of membranes", "prelabor rupture", "amniotic fluid leak", "ירידת מים"],
+        "preeclampsia": ["preeclampsia", "pre-eclampsia", "gestational hypertension", "severe features", "רעלת"],
+        "pph": ["pph", "postpartum hemorrhage", "uterine atony", "דימום אחרי לידה"],
+        "ctg": ["ctg", "late decelerations", "variable decelerations", "fetal monitoring", "מוניטור"],
+        "preterm_labor": ["preterm labor", "לידה מוקדמת", "צירים"],
+    },
+    "cervical_screening": {
+        "hsil_pathway": ["hsil", "colposcopy", "cin", "דיספלזיה", "קולפוסקופיה"],
+        "hpv_screening": ["pap", "hpv", "ascus", "lsil", "cervical screening", "בדיקת פאפ", "צוואר הרחם"],
+    },
+}
+
 
 EXTERNAL_SOURCE_CATALOG = [
     {
@@ -354,6 +368,18 @@ def _matched_focus_query_terms(user_message, focus):
     return [keyword for keyword in rule.get("query_keywords", []) if keyword in normalized]
 
 
+def _matched_focus_subsignature_terms(user_message, focus):
+    if not focus:
+        return []
+    normalized = _normalize_text(user_message)
+    groups = FOCUS_SUBSIGNATURES.get(focus) or {}
+    for _, terms in groups.items():
+        matched = [term for term in terms if term in normalized]
+        if matched:
+            return matched
+    return []
+
+
 def _source_matches_focus(source, focus, query_terms=None):
     if not focus:
         return False
@@ -399,7 +425,7 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
     israel_relevant = is_israel_relevant(user_message, user_profile=user_profile)
     stages = build_search_stages(user_message, user_profile=user_profile)
     routing_focus = _detect_source_routing_focus(user_message)
-    focus_query_terms = _matched_focus_query_terms(user_message, routing_focus)
+    focus_query_terms = _matched_focus_subsignature_terms(user_message, routing_focus) or _matched_focus_query_terms(user_message, routing_focus)
     stage_rank = {}
     for index, stage in enumerate(stages):
         for domain in stage["domains"]:
