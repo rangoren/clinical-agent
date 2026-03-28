@@ -5,6 +5,40 @@ from services.source_preference_service import is_israel_relevant
 from services.trusted_source_registry import build_search_stages, get_domain_tier, get_source_domain, infer_question_route
 
 
+SOURCE_ROUTING_RULES = {
+    "obstetric_acute": {
+        "query_keywords": [
+            "pprom", "prom", "rupture of membranes", "prelabor rupture", "preterm labor",
+            "preeclampsia", "pre-eclampsia", "gestational hypertension", "severe features",
+            "pph", "postpartum hemorrhage", "uterine atony", "ctg", "late decelerations",
+            "variable decelerations", "fetal monitoring", "labor", "labour", "chorioamnionitis",
+            "ירידת מים", "לידה מוקדמת", "רעלת", "דימום אחרי לידה", "מוניטור", "צירים",
+        ],
+        "source_keywords": [
+            "pprom", "prom", "rupture of membranes", "preeclampsia", "severe features",
+            "postpartum hemorrhage", "pph", "uterine atony", "ctg", "fetal monitoring",
+            "labor", "labour", "group b strep", "gestational hypertension", "preterm",
+        ],
+        "title_keywords": [
+            "preeclampsia", "rupture of membranes", "postpartum hemorrhage",
+            "fetal monitoring", "labor", "group b strep",
+        ],
+    },
+    "cervical_screening": {
+        "query_keywords": [
+            "pap", "hpv", "ascus", "lsil", "hsil", "colposcopy", "cin", "cervical screening",
+            "בדיקת פאפ", "hpv", "קולפוסקופיה", "דיספלזיה", "צוואר הרחם",
+        ],
+        "source_keywords": [
+            "pap", "hpv", "ascus", "lsil", "hsil", "colposcopy", "cin", "cervical",
+        ],
+        "title_keywords": [
+            "cervical", "asccp", "hpv", "pap",
+        ],
+    },
+}
+
+
 EXTERNAL_SOURCE_CATALOG = [
     {
         "title": "Clalit: Cervical Screening (HPV) in Israel",
@@ -258,6 +292,28 @@ def _dedupe_sources(sources):
     return deduped
 
 
+def _detect_source_routing_focus(user_message):
+    normalized = _normalize_text(user_message)
+    for focus, rule in SOURCE_ROUTING_RULES.items():
+        if any(keyword in normalized for keyword in rule["query_keywords"]):
+            return focus
+    return None
+
+
+def _source_matches_focus(source, focus):
+    if not focus:
+        return False
+    rule = SOURCE_ROUTING_RULES.get(focus) or {}
+    combined_keywords = " ".join(source.get("keywords") or []).lower()
+    title = str(source.get("title") or "").lower()
+
+    if any(keyword in combined_keywords for keyword in rule.get("source_keywords", [])):
+        return True
+    if any(keyword in title for keyword in rule.get("title_keywords", [])):
+        return True
+    return False
+
+
 def _assign_source_ids(sources):
     assigned = []
     for index, source in enumerate(sources, start=1):
@@ -281,6 +337,7 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
     scored = []
     israel_relevant = is_israel_relevant(user_message, user_profile=user_profile)
     stages = build_search_stages(user_message, user_profile=user_profile)
+    routing_focus = _detect_source_routing_focus(user_message)
     stage_rank = {}
     for index, stage in enumerate(stages):
         for domain in stage["domains"]:
@@ -320,6 +377,12 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
 
         score += max(0, 40 - (stage_rank[domain] * 10))
 
+        if routing_focus:
+            if _source_matches_focus(source, routing_focus):
+                score += 45
+            else:
+                score -= 18
+
         scored.append((score, source, domain))
 
     scored.sort(key=lambda item: item[0], reverse=True)
@@ -332,13 +395,14 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
             best_stage_rank = current_stage_rank
         if best_stage_rank is not None and current_stage_rank > best_stage_rank and selected:
             break
+        selected_tier = get_domain_tier(domain)
         selected.append(
             {
                 "title": source["title"],
                 "url": source["url"],
                 "source_type": source["source_type"],
                 "domain": domain,
-                "tier": tier,
+                "tier": selected_tier,
             }
         )
         if len(selected) >= limit:
