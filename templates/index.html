@@ -117,13 +117,6 @@
             transform: translate(-50%, 0);
         }
 
-        .pull-refresh-overlay.confirm {
-            pointer-events: auto;
-            background: rgba(255, 255, 255, 0.9);
-            color: var(--brand-strong);
-            cursor: pointer;
-        }
-
         .pull-refresh-overlay.refreshing {
             pointer-events: none;
             color: var(--brand-strong);
@@ -1724,7 +1717,6 @@
         let pullTouchStartY = 0;
         let pullDistance = 0;
         let pullTracking = false;
-        let pullConfirmTimeoutId = null;
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
 
@@ -1779,20 +1771,13 @@
             return document.getElementById("pull-refresh-label");
         }
 
-        function clearPullRefreshConfirmTimeout() {
-            if (!pullConfirmTimeoutId) return;
-            clearTimeout(pullConfirmTimeoutId);
-            pullConfirmTimeoutId = null;
-        }
-
         function setPullRefreshHidden() {
             const overlay = getPullRefreshOverlay();
             if (!overlay) return;
-            overlay.classList.remove("visible", "confirm", "refreshing");
+            overlay.classList.remove("visible", "refreshing");
             overlay.style.transform = "translate(-50%, -12px)";
             overlay.setAttribute("aria-hidden", "true");
             pullRefreshState = "idle";
-            clearPullRefreshConfirmTimeout();
         }
 
         function setPullRefreshPulling(distance) {
@@ -1802,28 +1787,11 @@
 
             const normalizedDistance = Math.max(0, Math.min(90, distance));
             overlay.classList.add("visible");
-            overlay.classList.remove("confirm", "refreshing");
+            overlay.classList.remove("refreshing");
             overlay.style.transform = `translate(-50%, ${Math.min(8, normalizedDistance * 0.14)}px)`;
             overlay.setAttribute("aria-hidden", "false");
             label.textContent = "Pull to refresh";
             pullRefreshState = "pulling";
-        }
-
-        function setPullRefreshConfirm() {
-            const overlay = getPullRefreshOverlay();
-            const label = getPullRefreshLabel();
-            if (!overlay || !label) return;
-
-            clearPullRefreshConfirmTimeout();
-            overlay.classList.add("visible", "confirm");
-            overlay.classList.remove("refreshing");
-            overlay.style.transform = "translate(-50%, 0)";
-            overlay.setAttribute("aria-hidden", "false");
-            label.textContent = "Tap to refresh";
-            pullRefreshState = "confirm";
-            pullConfirmTimeoutId = setTimeout(() => {
-                setPullRefreshHidden();
-            }, 2000);
         }
 
         function setPullRefreshRefreshing() {
@@ -1831,9 +1799,7 @@
             const label = getPullRefreshLabel();
             if (!overlay || !label) return;
 
-            clearPullRefreshConfirmTimeout();
             overlay.classList.add("visible", "refreshing");
-            overlay.classList.remove("confirm");
             overlay.style.transform = "translate(-50%, 0)";
             overlay.setAttribute("aria-hidden", "false");
             label.textContent = "Refreshing...";
@@ -1851,8 +1817,7 @@
             return chat.scrollTop <= 0;
         }
 
-        function handlePullRefreshTap() {
-            if (pullRefreshState !== "confirm") return;
+        function triggerPullRefresh() {
             setPullRefreshRefreshing();
             setTimeout(() => {
                 window.location.reload();
@@ -1863,8 +1828,6 @@
             const chat = document.getElementById("chat");
             const overlay = getPullRefreshOverlay();
             if (!chat || !overlay) return;
-
-            overlay.addEventListener("click", handlePullRefreshTap);
 
             chat.addEventListener("touchstart", (event) => {
                 if (event.touches.length !== 1) {
@@ -1909,7 +1872,7 @@
                 pullTracking = false;
 
                 if (pullDistance >= pullArmThreshold) {
-                    setPullRefreshConfirm();
+                    triggerPullRefresh();
                 } else {
                     setPullRefreshHidden();
                 }
@@ -1923,15 +1886,9 @@
             });
 
             chat.addEventListener("scroll", () => {
-                if (pullRefreshState === "confirm" && chat.scrollTop > 2) {
+                if (pullRefreshState === "pulling" && chat.scrollTop > 2) {
                     setPullRefreshHidden();
                 }
-            }, { passive: true });
-
-            document.addEventListener("touchstart", (event) => {
-                if (pullRefreshState !== "confirm") return;
-                if (overlay.contains(event.target)) return;
-                setPullRefreshHidden();
             }, { passive: true });
         }
 
@@ -3187,9 +3144,7 @@
         });
         document.getElementById("input").addEventListener("focus", function() {
             setComposerModeStripOpen(false);
-            if (pullRefreshState === "confirm") {
-                setPullRefreshHidden();
-            }
+            setPullRefreshHidden();
             updateComposerState();
         });
         document.getElementById("input").addEventListener("blur", function() {
