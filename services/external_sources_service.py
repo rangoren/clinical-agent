@@ -365,8 +365,8 @@ def _source_matches_focus(source, focus, query_terms=None):
     combined_text = " ".join(part for part in [combined_keywords, title, excerpt, url] if part).strip()
 
     narrowed_terms = [term for term in (query_terms or []) if len(term) >= 4]
-    if narrowed_terms and any(term in combined_text for term in narrowed_terms):
-        return True
+    if narrowed_terms:
+        return any(term in combined_text for term in narrowed_terms)
 
     if any(keyword in combined_text for keyword in rule.get("source_keywords", [])):
         return True
