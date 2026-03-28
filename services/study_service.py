@@ -540,7 +540,7 @@ def _title_for_dynamic(item, has_history):
 
 
 def _subtitle_for_dynamic(has_history):
-    return "1-min revisit" if has_history else "1-min focus"
+    return "Quick revisit"
 
 
 def _source_payload(item):
@@ -767,7 +767,7 @@ def get_idle_study_cards(session_id):
                 "id": "pearl_card",
                 "type": "pearl",
                 "title": "Quick Pearl",
-                "subtitle": "1-min takeaway",
+                "subtitle": "Quick takeaway",
                 "cta": "Open",
                 "content_item_id": pearl_item["id"],
                 "topic": pearl_item["topic"],
@@ -802,7 +802,7 @@ def get_idle_study_cards(session_id):
                     "id": f"fallback_{item['id']}",
                     "type": "practice" if item["item_type"] == "mcq" else "pearl",
                     "title": "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
-                    "subtitle": "1-min practice" if item["item_type"] == "mcq" else "1-min takeaway",
+                    "subtitle": "1-min practice" if item["item_type"] == "mcq" else "Quick takeaway",
                     "cta": "Start" if item["item_type"] == "mcq" else "Open",
                     "content_item_id": item["id"],
                     "topic": item["topic"],
@@ -831,7 +831,7 @@ def get_idle_study_cards(session_id):
                     "id": f"entry_fill_{item['id']}",
                     "type": "practice" if item["item_type"] == "mcq" else "pearl",
                     "title": "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
-                    "subtitle": "1-min practice" if item["item_type"] == "mcq" else "1-min takeaway",
+                    "subtitle": "1-min practice" if item["item_type"] == "mcq" else "Quick takeaway",
                     "cta": "Start" if item["item_type"] == "mcq" else "Open",
                     "content_item_id": item["id"],
                     "topic": item["topic"],

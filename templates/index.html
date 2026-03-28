@@ -2296,6 +2296,7 @@
         function switchAppMode(nextMode) {
             if (appMode === nextMode) return;
             appMode = nextMode;
+            entryGuidanceDismissed = false;
             setComposerModeStripOpen(false);
             const input = document.getElementById("input");
             if (input) {
