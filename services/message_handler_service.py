@@ -41,6 +41,18 @@ import re
 import time
 
 
+def _reply_has_visible_text(reply):
+    if not reply:
+        return False
+    normalized = str(reply)
+    normalized = re.sub(r"<br\s*/?>", " ", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"</p\s*>", " ", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"<[^>]+>", "", normalized)
+    normalized = normalized.replace("&nbsp;", " ").strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+    return bool(normalized)
+
+
 def _build_message_response(
     reply,
     undo=False,
@@ -459,6 +471,18 @@ def _build_general_greeting_reply(user_profile):
     return "Hi. I’m here and ready to help."
 
 
+def _fallback_empty_clinical_reply(display_sources):
+    if display_sources:
+        return (
+            "I couldn’t produce a reliable board-style answer from the available context right now. "
+            "Please try once more, or ask a narrower next-step question."
+        )
+    return (
+        "I couldn’t generate a reliable clinical answer right now. "
+        "Please try again in a moment."
+    )
+
+
 def _handle_regular_message(session_id, user_profile, user_message, save_user_message=True):
     if is_general_greeting_message(user_message):
         reply = _build_general_greeting_reply(user_profile)
@@ -637,6 +661,17 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             reply = format_basic_clinical_response(reply, user_message=user_message)
         else:
             reply = format_response(reply)
+        if not _reply_has_visible_text(reply):
+            reply = _fallback_empty_clinical_reply(display_sources)
+            log_event(
+                "empty_clinical_reply_fallback",
+                session_id,
+                {
+                    "basic_clinical_question": basic_clinical_question,
+                    "source_count": len(display_sources),
+                },
+                level="warning",
+            )
     mark("postprocess_ms", stage_started_at)
 
     stage_started_at = time.perf_counter()
