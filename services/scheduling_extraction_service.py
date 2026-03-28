@@ -182,7 +182,7 @@ JSON schema:
             model=EXTRACTION_MODEL,
             max_tokens=350,
             system=system_prompt,
-            messages=[{"role": "user", "content": combined_message}],
+            messages=[{"role": "user", "content": [{"type": "text", "text": combined_message}]}],
         )
         raw_text = response.content[0].text
     except Exception as exc:

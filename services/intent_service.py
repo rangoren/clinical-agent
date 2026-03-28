@@ -206,7 +206,7 @@ def classify_message_intent(user_message, chat_history):
         response = client.messages.create(
             model=ANTHROPIC_MODEL,
             max_tokens=120,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
         )
         parsed = json.loads(response.content[0].text.strip())
     except Exception:

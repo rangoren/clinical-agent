@@ -42,9 +42,21 @@ def _is_transient_llm_error(exc):
     return any(marker in message for marker in transient_markers)
 
 
+def _as_text_block_content(value):
+    text = "" if value is None else str(value)
+    return [{"type": "text", "text": text}]
+
+
 def generate_reply(system_prompt, chat_history, user_message):
-    messages = [{"role": item["role"], "content": item["content"]} for item in chat_history[-6:]]
-    messages.append({"role": "user", "content": user_message})
+    messages = [
+        {
+            "role": item["role"],
+            "content": _as_text_block_content(item.get("content")),
+        }
+        for item in chat_history[-6:]
+        if item.get("role") in {"user", "assistant"}
+    ]
+    messages.append({"role": "user", "content": _as_text_block_content(user_message)})
 
     last_exc = None
     for attempt in range(MAX_REPLY_RETRIES + 1):
