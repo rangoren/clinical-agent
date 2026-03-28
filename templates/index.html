@@ -310,7 +310,7 @@
         .context-copy {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 0;
             min-width: 0;
         }
 
@@ -335,13 +335,6 @@
             height: 6px;
             border-radius: 999px;
             background: var(--brand);
-        }
-
-        .context-subtitle {
-            margin: 0;
-            color: var(--muted);
-            font-size: 0.88rem;
-            line-height: 1.35;
         }
 
         .session-banner {
@@ -1560,7 +1553,7 @@
                         {% if app_env != "production" %}
                         <div class="env-stamp">{{ app_env }}</div>
                         {% endif %}
-                        <div class="version-stamp">{{ app_version }}</div>
+                        <div id="version-stamp" class="version-stamp">{{ app_version }}</div>
                         <div id="settings-shell" class="settings-shell">
                             <button
                                 id="settings-trigger"
@@ -1597,7 +1590,6 @@
                         <span class="context-dot" aria-hidden="true"></span>
                         <span id="context-label-text">Clinical</span>
                     </div>
-                    <p id="context-subtitle" class="context-subtitle">Quick clinical support for short, high-focus sessions.</p>
                 </div>
             </div>
 
@@ -1896,15 +1888,13 @@
             document.getElementById("composer-mode-clinical").classList.toggle("active", appMode === "clinical");
             document.getElementById("composer-mode-scheduling").classList.toggle("active", appMode === "scheduling");
             document.getElementById("settings-shell").classList.toggle("visible", appMode === "scheduling");
+            const versionStamp = document.getElementById("version-stamp");
             const contextLabelText = document.getElementById("context-label-text");
-            const contextSubtitle = document.getElementById("context-subtitle");
             if (contextLabelText) {
                 contextLabelText.textContent = appMode === "scheduling" ? "Scheduling" : "Clinical";
             }
-            if (contextSubtitle) {
-                contextSubtitle.textContent = appMode === "scheduling"
-                    ? "Plan shifts and calendar changes without leaving the main flow."
-                    : "Quick clinical support for short, high-focus sessions.";
+            if (versionStamp) {
+                versionStamp.style.display = appMode === "clinical" ? "inline-flex" : "none";
             }
             if (appMode !== "scheduling") {
                 closeSettingsMenu();
