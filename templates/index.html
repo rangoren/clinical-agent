@@ -664,6 +664,13 @@
             transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
         }
 
+        .study-entry-card.placeholder {
+            cursor: default;
+            pointer-events: none;
+            background: rgba(252, 253, 252, 0.92);
+            border-color: rgba(29, 58, 52, 0.04);
+        }
+
         .study-entry-top {
             display: flex;
             justify-content: flex-start;
@@ -717,6 +724,13 @@
 
         .study-entry-cta {
             display: none;
+        }
+
+        .study-entry-card.placeholder .study-entry-type,
+        .study-entry-card.placeholder .study-entry-topic,
+        .study-entry-card.placeholder .study-entry-title,
+        .study-entry-card.placeholder .study-entry-subtitle {
+            color: rgba(39, 66, 61, 0.58);
         }
 
         .study-flow-card,
@@ -2122,6 +2136,39 @@
             refreshEntryGuidanceVisibility();
         }
 
+        function renderStudyCardPlaceholders() {
+            const shell = getStudyCardsShell();
+            if (!shell || !shouldShowStudyCards()) return;
+
+            const placeholderCards = [
+                { typeLabel: "Practice", topic: "Loading topic", title: "Quick MCQ", subtitle: "1-min practice" },
+                { typeLabel: "Pearl", topic: "Loading topic", title: "Quick Pearl", subtitle: "Quick takeaway" },
+                { typeLabel: "Revisit", topic: "Loading topic", title: "Revisit", subtitle: "Quick revisit" }
+            ];
+
+            const grid = document.createElement("div");
+            grid.className = "study-cards-grid";
+
+            placeholderCards.forEach((card) => {
+                const button = document.createElement("div");
+                button.className = "study-entry-card placeholder";
+                button.innerHTML = `
+                    <div class="study-entry-top">
+                        <span class="study-entry-type">${escapeHtml(card.typeLabel)}</span>
+                    </div>
+                    <p class="study-entry-topic">${escapeHtml(card.topic)}</p>
+                    <p class="study-entry-title">${escapeHtml(card.title)}</p>
+                    <p class="study-entry-subtitle">${escapeHtml(card.subtitle)}</p>
+                `;
+                grid.appendChild(button);
+            });
+
+            shell.innerHTML = "";
+            shell.appendChild(grid);
+            shell.classList.add("visible");
+            refreshEntryGuidanceVisibility();
+        }
+
         async function maybeShowStudyCards(force = false) {
             if (!shouldShowStudyCards()) {
                 hideStudyCards();
@@ -2139,6 +2186,7 @@
 
             if (studyCardsRequested) return;
             studyCardsRequested = true;
+            renderStudyCardPlaceholders();
 
             try {
                 const response = await fetch("/study/cards", {
@@ -3274,6 +3322,8 @@
         const initialCachedStudyCards = loadCachedStudyCards();
         if (appMode === "clinical" && initialCachedStudyCards && initialCachedStudyCards.length) {
             renderStudyCards(initialCachedStudyCards);
+        } else if (appMode === "clinical") {
+            renderStudyCardPlaceholders();
         }
         refreshEntryGuidanceVisibility();
         setupPullToRefreshOption();
