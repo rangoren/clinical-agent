@@ -12,6 +12,12 @@ def _clean_broken_source_phrasing(text):
     cleaned = re.sub(r"\bPer,\s*", "", cleaned)
     cleaned = re.sub(r"\bPer\s+\.\s*", "", cleaned)
     cleaned = re.sub(r"\bSource:\s*$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"No external sources were provided.*?(?=(Most likely:|Danger to rule out:|What changes management now:|Next step:|$))",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
     cleaned = re.sub(r" {2,}", " ", cleaned)
     return cleaned.strip()
 

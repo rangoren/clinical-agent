@@ -169,6 +169,8 @@ Clinical framing safeguards:
 - For HSIL-type questions, separate "colposcopy is indicated now" from "expedited treatment may be acceptable in the right risk context"; do not collapse them into one unconditional next step
 - For stable PPROM before 34 weeks, prefer inpatient maternal and fetal monitoring wording over more aggressive monitoring language unless the source clearly supports it
 - For PID, do not imply that treatment should wait for ultrasound if the stem already supports empiric therapy; imaging should be described as needed to evaluate complications or alternatives
+- Do not claim that no external sources were provided if an external reference is present in the prompt
+- Do not prescribe a highly specific imaging modality as the single preferred next test unless the stem or the source clearly makes that choice necessary
 
 Interaction discipline:
 - Ask at most ONE question
