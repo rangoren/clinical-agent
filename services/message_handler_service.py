@@ -218,6 +218,39 @@ def _with_source_confidence_note(sources):
     return normalized_sources
 
 
+def _maybe_override_fertility_display_source(user_message, sources):
+    normalized = (user_message or "").strip().lower()
+    if not sources:
+        return sources
+
+    fertility_markers = ("trying to conceive", "ttc", "infertility", "fertility")
+    evaluation_markers = ("next step in evaluation", "evaluation", "workup", "hsg", "semen analysis", "ovarian reserve")
+    if not any(marker in normalized for marker in fertility_markers):
+        return sources
+    if not any(marker in normalized for marker in evaluation_markers):
+        return sources
+
+    preferred_title = "ASRM: Fertility Evaluation of Infertile Women"
+    has_other_fertility_source = any(
+        source.get("title", "").startswith("ASRM:") or source.get("title", "").startswith("ESHRE")
+        for source in sources
+    )
+    already_preferred = any(source.get("title") == preferred_title for source in sources)
+    if not has_other_fertility_source or already_preferred:
+        return sources
+
+    preferred_source = get_forced_authoritative_source(user_message)
+    if not preferred_source:
+        return sources
+
+    filtered_sources = [
+        source
+        for source in sources
+        if source.get("title") != preferred_title and not source.get("title", "").startswith("ASRM:")
+    ]
+    return preferred_source + filtered_sources
+
+
 def _looks_like_basic_clinical_question(user_message):
     cleaned = user_message.strip().lower()
     acute_markers = (
@@ -695,6 +728,8 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         display_sources = _fallback_display_sources(candidate_sources)
     if intent == "clinical_consult" and not display_sources:
         display_sources = get_forced_authoritative_source(user_message)
+    if intent == "clinical_consult":
+        display_sources = _maybe_override_fertility_display_source(user_message, display_sources)
 
     reply = raw_reply
     if intent == "clinical_consult":
