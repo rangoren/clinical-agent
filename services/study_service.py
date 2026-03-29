@@ -731,6 +731,18 @@ def _recent_unique_topics(state, limit=4):
     return set(deduped)
 
 
+OBSTETRIC_ENTRY_TOPICS = {
+    "Preeclampsia",
+    "PPH",
+    "CTG",
+    "PPROM",
+}
+
+
+def _is_gyne_topic(topic):
+    return bool(topic) and topic not in OBSTETRIC_ENTRY_TOPICS
+
+
 def _coverage_first_candidates(candidates, state, used_topics=None):
     if not candidates:
         return []
@@ -1150,6 +1162,70 @@ def get_idle_study_cards(session_id):
             existing_ids.add(item["id"])
             if len(cards) == 3:
                 break
+
+    # Entry-state contract: keep at least one gynecology MCQ visible when possible,
+    # not just OB-heavy cards, so the home surface reflects the broader curriculum.
+    if cards:
+        card_items = {
+            card["content_item_id"]: _normalize_study_item(
+                study_content_collection.find_one(
+                    {"id": card["content_item_id"], "enabled": True},
+                    {"_id": 0},
+                )
+            )
+            for card in cards
+        }
+        has_gyne_mcq = any(
+            item
+            and item.get("item_type") == "mcq"
+            and _is_gyne_topic(item.get("topic"))
+            for item in card_items.values()
+        )
+        if not has_gyne_mcq:
+            existing_ids = {card["content_item_id"] for card in cards}
+            gyne_mcq_pool = _get_items(
+                item_type="mcq",
+                exclude_ids=existing_ids | recent_exclude_ids,
+            ) or _get_items(item_type="mcq", exclude_ids=existing_ids)
+            gyne_mcq_pool = [item for item in gyne_mcq_pool if _is_gyne_topic(item.get("topic"))]
+            gyne_mcq_pool = _coverage_first_candidates(gyne_mcq_pool, state, used_topics=used_topics)
+            gyne_mcq_item = _pick_best_item(
+                session_id,
+                gyne_mcq_pool,
+                "gyne_entry",
+                state,
+                preferred_item_type="mcq",
+                preferred_difficulty_band="standard",
+            )
+            if gyne_mcq_item:
+                replacement_index = None
+                for preferred_card_id in ("dynamic_card", "pearl_card"):
+                    for index, card in enumerate(cards):
+                        if card.get("id") == preferred_card_id:
+                            replacement_index = index
+                            break
+                    if replacement_index is not None:
+                        break
+                if replacement_index is None:
+                    for index, card in enumerate(cards):
+                        card_item = card_items.get(card["content_item_id"])
+                        if not (
+                            card_item
+                            and card_item.get("item_type") == "mcq"
+                            and _is_gyne_topic(card_item.get("topic"))
+                        ):
+                            replacement_index = index
+                            break
+                if replacement_index is not None:
+                    cards[replacement_index] = {
+                        "id": "gyne_entry_card",
+                        "type": "practice",
+                        "title": "Quick MCQ",
+                        "subtitle": "1-min practice",
+                        "cta": "Start",
+                        "content_item_id": gyne_mcq_item["id"],
+                        "topic": gyne_mcq_item["topic"],
+                    }
 
     shown_history = _trim_history((state.get("cards_shown_history") or []) + [card["content_item_id"] for card in cards], 18)
     _save_state(
