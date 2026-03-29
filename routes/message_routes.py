@@ -5,6 +5,7 @@ from services.logging_service import log_event
 from services.message_handler_service import continue_onboarding, get_session_state, process_message, reset_session, start_clean_chat_mode
 from services.scheduling_service import build_scheduling_welcome, confirm_scheduling_draft, dismiss_scheduling_draft, handle_scheduling_message
 from services.study_service import get_idle_study_cards
+from settings import APP_ENV
 
 
 router = APIRouter()
@@ -15,9 +16,15 @@ def _friendly_route_error_reply(exc):
     normalized = message.lower()
 
     if any(marker in normalized for marker in ("overloaded", "overloaded_error", "529", "rate limit", "timeout")):
-        return "I’m a bit busy right now. Please try again in a few seconds."
+        friendly = "I’m a bit busy right now. Please try again in a few seconds."
+        if APP_ENV != "production":
+            return f"{friendly}\n\nDEV error: {exc.__class__.__name__}: {message}"
+        return friendly
 
-    return "Something went wrong while generating the reply. Please try again."
+    friendly = "Something went wrong while generating the reply. Please try again."
+    if APP_ENV != "production":
+        return f"{friendly}\n\nDEV error: {exc.__class__.__name__}: {message}"
+    return friendly
 
 
 @router.post("/message")

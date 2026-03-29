@@ -7,6 +7,21 @@ def _strip_inline_source_citations(text):
     return cleaned.strip()
 
 
+def _clean_broken_source_phrasing(text):
+    cleaned = text
+    cleaned = re.sub(r"\bPer,\s*", "", cleaned)
+    cleaned = re.sub(r"\bPer\s+\.\s*", "", cleaned)
+    cleaned = re.sub(r"\bSource:\s*$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"No external sources were provided.*?(?=(Most likely:|Danger to rule out:|What changes management now:|Next step:|$))",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    cleaned = re.sub(r" {2,}", " ", cleaned)
+    return cleaned.strip()
+
+
 def format_response(text):
     sections = [
         "Most likely:",
@@ -16,6 +31,7 @@ def format_response(text):
     ]
 
     text = _strip_inline_source_citations(text.strip())
+    text = _clean_broken_source_phrasing(text)
     text = text.replace("**", "")
 
     lines = []
@@ -158,6 +174,7 @@ def _format_exception_line(line):
 
 def format_basic_clinical_response(text, user_message=None):
     text = _strip_inline_source_citations(text.strip().replace("**", ""))
+    text = _clean_broken_source_phrasing(text)
     text = _soften_basic_clinical_phrasing(text)
     cleaned_lines = _clean_basic_lines(text)
 

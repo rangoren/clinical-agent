@@ -42,9 +42,46 @@ def _is_transient_llm_error(exc):
     return any(marker in message for marker in transient_markers)
 
 
+def _as_text_block_content(value):
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return None
+    return [{"type": "text", "text": text}]
+
+
+def _build_message_entry(item):
+    role = item.get("role")
+    if role not in {"user", "assistant"}:
+        return None
+    content = _as_text_block_content(item.get("content"))
+    if not content:
+        return None
+    return {
+        "role": role,
+        "content": content,
+    }
+
+
 def generate_reply(system_prompt, chat_history, user_message):
-    messages = [{"role": item["role"], "content": item["content"]} for item in chat_history[-6:]]
-    messages.append({"role": "user", "content": user_message})
+    messages = []
+    normalized_user_message = (user_message or "").strip().lower()
+    is_fresh_case_prompt = (
+        "please answer in a board-prep style" in normalized_user_message
+        or "most appropriate next step" in normalized_user_message
+        or "what is the most likely diagnosis" in normalized_user_message
+    )
+
+    history_window = 2 if is_fresh_case_prompt else 6
+
+    for item in chat_history[-history_window:]:
+        entry = _build_message_entry(item)
+        if entry:
+            messages.append(entry)
+
+    user_content = _as_text_block_content(user_message)
+    if not user_content:
+        raise ValueError("user_message must not be empty")
+    messages.append({"role": "user", "content": user_content})
 
     last_exc = None
     for attempt in range(MAX_REPLY_RETRIES + 1):

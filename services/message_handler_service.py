@@ -1,5 +1,5 @@
 from services.chat_service import delete_messages_for_session, load_chat, save_message
-from services.external_sources_service import get_external_sources
+from services.external_sources_service import get_external_sources, get_forced_authoritative_source
 from services.intent_service import classify_message_intent
 from services.logging_service import log_event
 from services.memory_service import (
@@ -41,6 +41,18 @@ import re
 import time
 
 
+def _reply_has_visible_text(reply):
+    if not reply:
+        return False
+    normalized = str(reply)
+    normalized = re.sub(r"<br\s*/?>", " ", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"</p\s*>", " ", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"<[^>]+>", "", normalized)
+    normalized = normalized.replace("&nbsp;", " ").strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+    return bool(normalized)
+
+
 def _build_message_response(
     reply,
     undo=False,
@@ -51,8 +63,15 @@ def _build_message_response(
     sources=None,
     suggested_save=None,
 ):
+    normalized_reply = reply
+    if not _reply_has_visible_text(normalized_reply):
+        if sources:
+            normalized_reply = _fallback_empty_clinical_reply(sources)
+        else:
+            normalized_reply = "I couldn’t generate a reliable answer right now. Please try again."
+
     return {
-        "reply": reply,
+        "reply": normalized_reply,
         "undo": undo,
         "undo_type": undo_type,
         "show_feedback": show_feedback,
@@ -165,6 +184,96 @@ def _fallback_display_sources(sources):
         return external_first[:3]
 
     return []
+
+
+def _is_authoritative_source(source):
+    if not source or source.get("is_internal"):
+        return False
+    source_id = str(source.get("source_id", ""))
+    source_type = str(source.get("source_type", "")).lower()
+    domain = get_source_domain(source.get("url") or "")
+    tier = source.get("tier") or (get_domain_tier(domain) if domain else None)
+
+    if source_id.startswith(("E", "P", "K")) and tier in {"tier1", "tier2", "tier3", "tier4"}:
+        return True
+    if "guideline" in source_type and tier in {"tier1", "tier2", "tier3", "tier4"}:
+        return True
+    return False
+
+
+def _with_source_confidence_note(sources):
+    normalized_sources = list(sources or [])
+    if any(_is_authoritative_source(source) for source in normalized_sources):
+        return normalized_sources
+
+    normalized_sources.append(
+        {
+            "source_id": "SC1",
+            "title": "No clearly matching authoritative source identified for this answer.",
+            "url": None,
+            "source_type": "Source confidence",
+            "is_notice": True,
+        }
+    )
+    return normalized_sources
+
+
+def _maybe_override_fertility_display_source(user_message, sources):
+    normalized = (user_message or "").strip().lower()
+    if not sources:
+        return sources
+
+    fertility_markers = ("trying to conceive", "ttc", "infertility", "fertility")
+    evaluation_markers = ("next step in evaluation", "evaluation", "workup", "hsg", "semen analysis", "ovarian reserve")
+    if not any(marker in normalized for marker in fertility_markers):
+        return sources
+    if not any(marker in normalized for marker in evaluation_markers):
+        return sources
+
+    preferred_title = "ASRM: Fertility Evaluation of Infertile Women"
+    has_other_fertility_source = any(
+        source.get("title", "").startswith("ASRM:") or source.get("title", "").startswith("ESHRE")
+        for source in sources
+    )
+    already_preferred = any(source.get("title") == preferred_title for source in sources)
+    if not has_other_fertility_source or already_preferred:
+        return sources
+
+    preferred_source = get_forced_authoritative_source(user_message)
+    if not preferred_source:
+        return sources
+
+    filtered_sources = [
+        source
+        for source in sources
+        if source.get("title") != preferred_title and not source.get("title", "").startswith("ASRM:")
+    ]
+    return preferred_source + filtered_sources
+
+
+def _maybe_override_targeted_display_source(user_message, sources):
+    if not sources:
+        return sources
+
+    forced_sources = get_forced_authoritative_source(user_message)
+    if not forced_sources:
+        return sources
+
+    forced_title = forced_sources[0].get("title")
+    if any(source.get("title") == forced_title for source in sources):
+        return sources
+
+    override_titles = {
+        "AIUM Practice Parameter: Ultrasound in Pregnancy",
+        "AIUM Practice Topic: Gynecologic Ultrasound",
+        "ASRM: Definition of Infertility",
+    }
+    current_titles = {source.get("title") for source in sources}
+    if not any(title in override_titles for title in current_titles):
+        return sources
+
+    filtered_sources = [source for source in sources if source.get("title") not in override_titles]
+    return forced_sources + filtered_sources
 
 
 def _looks_like_basic_clinical_question(user_message):
@@ -459,6 +568,18 @@ def _build_general_greeting_reply(user_profile):
     return "Hi. I’m here and ready to help."
 
 
+def _fallback_empty_clinical_reply(display_sources):
+    if display_sources:
+        return (
+            "I couldn’t produce a reliable board-style answer from the available context right now. "
+            "Please try once more, or ask a narrower next-step question."
+        )
+    return (
+        "I couldn’t generate a reliable clinical answer right now. "
+        "Please try again in a moment."
+    )
+
+
 def _handle_regular_message(session_id, user_profile, user_message, save_user_message=True):
     if is_general_greeting_message(user_message):
         reply = _build_general_greeting_reply(user_profile)
@@ -630,6 +751,11 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
     display_sources = _filter_sources_by_citation(raw_reply, candidate_sources)
     if intent == "clinical_consult" and not display_sources:
         display_sources = _fallback_display_sources(candidate_sources)
+    if intent == "clinical_consult" and not display_sources:
+        display_sources = get_forced_authoritative_source(user_message)
+    if intent == "clinical_consult":
+        display_sources = _maybe_override_fertility_display_source(user_message, display_sources)
+        display_sources = _maybe_override_targeted_display_source(user_message, display_sources)
 
     reply = raw_reply
     if intent == "clinical_consult":
@@ -637,6 +763,17 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             reply = format_basic_clinical_response(reply, user_message=user_message)
         else:
             reply = format_response(reply)
+        if not _reply_has_visible_text(reply):
+            reply = _fallback_empty_clinical_reply(display_sources)
+            log_event(
+                "empty_clinical_reply_fallback",
+                session_id,
+                {
+                    "basic_clinical_question": basic_clinical_question,
+                    "source_count": len(display_sources),
+                },
+                level="warning",
+            )
     mark("postprocess_ms", stage_started_at)
 
     stage_started_at = time.perf_counter()
@@ -670,11 +807,15 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         },
     )
 
+    final_sources = display_sources if intent == "clinical_consult" else []
+    if intent == "clinical_consult":
+        final_sources = _with_source_confidence_note(final_sources)
+
     return _build_message_response(
         reply=reply,
         show_feedback=intent == "clinical_consult" and len(reply) > 80,
         assistant_message_id=assistant_message_id,
-        sources=display_sources if intent == "clinical_consult" else [],
+        sources=final_sources,
     )
 
 

@@ -5,6 +5,154 @@ from services.source_preference_service import is_israel_relevant
 from services.trusted_source_registry import build_search_stages, get_domain_tier, get_source_domain, infer_question_route
 
 
+SOURCE_ROUTING_RULES = {
+    "obstetric_acute": {
+        "query_keywords": [
+            "pprom", "prom", "rupture of membranes", "prelabor rupture", "preterm labor",
+            "preeclampsia", "pre-eclampsia", "gestational hypertension", "severe features",
+            "pph", "postpartum hemorrhage", "uterine atony", "ctg", "late decelerations",
+            "variable decelerations", "fetal monitoring", "labor", "labour", "chorioamnionitis",
+            "ירידת מים", "לידה מוקדמת", "רעלת", "דימום אחרי לידה", "מוניטור", "צירים",
+        ],
+        "source_keywords": [
+            "pprom", "prom", "rupture of membranes", "preeclampsia", "severe features",
+            "postpartum hemorrhage", "pph", "uterine atony", "ctg", "fetal monitoring",
+            "labor", "labour", "group b strep", "gestational hypertension", "preterm",
+        ],
+        "title_keywords": [
+            "preeclampsia", "rupture of membranes", "postpartum hemorrhage",
+            "fetal monitoring", "labor", "group b strep",
+        ],
+    },
+    "cervical_screening": {
+        "query_keywords": [
+            "pap", "hpv", "ascus", "lsil", "hsil", "colposcopy", "cin", "cervical screening",
+            "בדיקת פאפ", "hpv", "קולפוסקופיה", "דיספלזיה", "צוואר הרחם",
+        ],
+        "source_keywords": [
+            "pap", "hpv", "ascus", "lsil", "hsil", "colposcopy", "cin", "cervical",
+        ],
+        "title_keywords": [
+            "cervical", "asccp", "hpv", "pap",
+        ],
+    },
+    "contraception": {
+        "query_keywords": [
+            "contraception", "contraceptive", "ocp", "cocp", "combined pill", "combined hormonal",
+            "migraine with aura", "iud", "iucd", "implant", "larc", "emergency contraception",
+            "plan b", "ella", "levonorgestrel", "ulipristal", "גלולות", "מניעה", "התקן",
+        ],
+        "source_keywords": [
+            "contraception", "contraceptive eligibility", "combined ocp", "pill", "iud", "implant",
+            "larc", "emergency contraception", "levonorgestrel", "ulipristal",
+        ],
+        "title_keywords": [
+            "contraception", "medical eligibility", "emergency contraception", "long-acting reversible",
+        ],
+    },
+    "benign_gynecology": {
+        "query_keywords": [
+            "aub", "abnormal uterine bleeding", "heavy menstrual bleeding", "intermenstrual bleeding",
+            "endometriosis", "dysmenorrhea", "chronic pelvic pain", "menopause", "perimenopause",
+            "hot flashes", "hrt", "fibroid", "leiomyoma", "postmenopausal bleeding", "pmb",
+            "דימום רחמי חריג", "אנדומטריוזיס", "מנופאוזה", "גלי חום", "דימום אחרי מנופאוזה",
+        ],
+        "source_keywords": [
+            "abnormal uterine bleeding", "aub", "heavy periods", "endometriosis", "dysmenorrhea",
+            "chronic pelvic pain", "menopause", "perimenopause", "hrt", "hot flashes",
+        ],
+        "title_keywords": [
+            "abnormal uterine bleeding", "endometriosis", "menopause",
+        ],
+    },
+    "infectious_gynecology": {
+        "query_keywords": [
+            "pid", "pelvic inflammatory disease", "cervical motion tenderness", "adnexal tenderness",
+            "tubo-ovarian abscess", "bv", "bacterial vaginosis", "trich", "trichomoniasis",
+            "candida", "yeast infection", "vaginal discharge", "pelvic pain", "אגן דלקתי",
+            "הפרשה נרתיקית", "טריכומונס", "קנדידה",
+        ],
+        "source_keywords": [
+            "pid", "pelvic inflammatory disease", "infection", "bv", "trichomoniasis", "candida",
+            "vaginal discharge",
+        ],
+        "title_keywords": [
+            "pid", "bacterial vaginosis", "trichomoniasis", "candidiasis",
+        ],
+    },
+    "fertility": {
+        "query_keywords": [
+            "fertility", "infertility", "trying to conceive", "ttc", "ivf", "iui", "hsg",
+            "amh", "ovulation induction", "semen analysis", "egg reserve", "ovarian reserve",
+            "unexplained infertility", "controlled ovarian stimulation", "coh-iui",
+            "טיפולי פוריות", "אי פוריות", "פוריות",
+        ],
+        "source_keywords": [
+            "fertility", "infertility", "ivf", "iui", "hsg", "amh", "ovarian reserve",
+            "semen analysis", "ovulation induction", "unexplained infertility",
+        ],
+        "title_keywords": [
+            "fertility", "infertility", "ivf", "ovarian stimulation",
+        ],
+    },
+    "gynecologic_oncology": {
+        "query_keywords": [
+            "postmenopausal bleeding", "bleeding after menopause", "pmb", "endometrial biopsy",
+            "adnexal mass", "ovarian mass", "pelvic mass", "ovarian cancer", "endometrial cancer",
+            "early satiety", "bloating", "ca-125", "gynecologic oncology", "postmenopausal",
+        ],
+        "source_keywords": [
+            "postmenopausal bleeding", "endometrial biopsy", "adnexal mass", "ovarian cancer",
+            "ca-125", "gynecologic oncologist", "endometrial cancer",
+        ],
+        "title_keywords": [
+            "adnexal masses", "bleeding after menopause", "ovarian", "endometrial",
+        ],
+    },
+    "early_pregnancy": {
+        "query_keywords": [
+            "ectopic", "pregnancy of unknown location", "pul", "positive pregnancy test",
+            "first trimester bleeding", "spotting", "beta hcg", "hcg", "no intrauterine pregnancy",
+            "no iup", "early pregnancy loss", "miscarriage", "threatened abortion",
+            "הריון חוץ רחמי", "דימום בתחילת הריון", "בטא", "שק הריון",
+        ],
+        "source_keywords": [
+            "ectopic", "pregnancy of unknown location", "pul", "beta hcg", "hcg",
+            "miscarriage", "early pregnancy loss", "first trimester bleeding",
+        ],
+        "title_keywords": [
+            "ectopic", "miscarriage", "early pregnancy loss",
+        ],
+    },
+}
+
+FOCUS_SUBSIGNATURES = {
+    "obstetric_acute": {
+        "pprom_prom": ["pprom", "prom", "rupture of membranes", "prelabor rupture", "amniotic fluid leak", "ירידת מים"],
+        "preeclampsia": ["preeclampsia", "pre-eclampsia", "gestational hypertension", "severe features", "רעלת"],
+        "pph": ["pph", "postpartum hemorrhage", "uterine atony", "דימום אחרי לידה"],
+        "ctg": ["ctg", "late decelerations", "variable decelerations", "fetal monitoring", "מוניטור"],
+        "preterm_labor": ["preterm labor", "לידה מוקדמת", "צירים"],
+    },
+    "cervical_screening": {
+        "hsil_pathway": ["hsil", "colposcopy", "cin", "דיספלזיה", "קולפוסקופיה"],
+        "hpv_screening": ["pap", "hpv", "ascus", "lsil", "cervical screening", "בדיקת פאפ", "צוואר הרחם"],
+    },
+    "fertility": {
+        "infertility_eval": ["infertility", "trying to conceive", "ttc", "semen analysis", "hsg", "ovarian reserve", "amh", "אי פוריות", "פוריות"],
+        "ivf_art": ["ivf", "iui", "ovulation induction", "ovarian stimulation", "art", "unexplained infertility", "coh-iui", "טיפולי פוריות"],
+    },
+    "early_pregnancy": {
+        "pul_ectopic": ["pregnancy of unknown location", "pul", "ectopic", "no intrauterine pregnancy", "no iup", "beta hcg", "hcg", "positive pregnancy test", "הריון חוץ רחמי", "בטא"],
+        "early_loss": ["early pregnancy loss", "miscarriage", "first trimester bleeding", "spotting", "threatened abortion", "דימום בתחילת הריון"],
+    },
+    "gynecologic_oncology": {
+        "pmb_pathway": ["postmenopausal bleeding", "bleeding after menopause", "pmb", "endometrial biopsy", "postmenopausal"],
+        "adnexal_mass_pathway": ["adnexal mass", "ovarian mass", "pelvic mass", "ovarian cancer", "ca-125", "early satiety", "bloating"],
+    },
+}
+
+
 EXTERNAL_SOURCE_CATALOG = [
     {
         "title": "Clalit: Cervical Screening (HPV) in Israel",
@@ -77,6 +225,7 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://www.acog.org/womens-health/faqs/preeclampsia-and-high-blood-pressure-during-pregnancy",
         "source_type": "external guideline",
         "keywords": ["preeclampsia", "pre-eclampsia", "blood pressure", "magnesium", "severe features"],
+        "excerpt": "Preeclampsia with severe features requires stabilization and often delivery rather than routine expectant management, depending on gestational age and maternal-fetal status.",
     },
     {
         "title": "ACOG Practice Advisory: Low-Dose Aspirin Use for the Prevention of Preeclampsia",
@@ -94,7 +243,12 @@ EXTERNAL_SOURCE_CATALOG = [
         "title": "NICE Guideline: Ectopic Pregnancy and Miscarriage",
         "url": "https://www.nice.org.uk/guidance/ng126",
         "source_type": "external guideline",
-        "keywords": ["ectopic", "pregnancy of unknown location", "pul", "beta hcg", "ultrasound", "tvus"],
+        "keywords": [
+            "ectopic", "pregnancy of unknown location", "pul", "beta hcg", "hcg", "ultrasound", "tvus",
+            "positive pregnancy test", "no intrauterine pregnancy", "no iup", "serial hcg", "repeat hcg",
+            "48 hours", "spotting", "first trimester bleeding",
+        ],
+        "excerpt": "In a stable patient with pregnancy of unknown location, serial hCG testing and repeat ultrasound are used to distinguish early intrauterine pregnancy, failed pregnancy, and ectopic pregnancy.",
     },
     {
         "title": "ACOG: Early Pregnancy Loss",
@@ -107,6 +261,44 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://publications.smfm.org/publications/consult-series/",
         "source_type": "external guideline",
         "keywords": ["smfm", "maternal fetal medicine", "consult"],
+    },
+    {
+        "title": "ASRM: Fertility Evaluation of Infertile Women",
+        "url": "https://www.asrm.org/practice-guidance/practice-committee-documents/fertility-evaluation-of-infertile-women-a-committee-opinion-2021/",
+        "source_type": "external guideline",
+        "keywords": [
+            "fertility", "infertility", "ivf", "iui", "ovulation induction", "ovarian reserve",
+            "amh", "hsg", "semen analysis", "reproductive endocrinology",
+        ],
+        "excerpt": "Initial infertility evaluation depends on duration of infertility, age, ovulatory status, tubal assessment, and semen analysis rather than immediate IVF for every couple.",
+    },
+    {
+        "title": "ASRM: Definition of Infertility",
+        "url": "https://www.asrm.org/practice-guidance/practice-committee-documents/definition-of-infertility/",
+        "source_type": "external guideline",
+        "keywords": [
+            "infertility", "fertility workup", "trying to conceive", "evaluation timing", "when to evaluate infertility",
+        ],
+        "excerpt": "Infertility evaluation is usually initiated after 12 months of unprotected intercourse, or earlier when age or clinical factors increase concern.",
+    },
+    {
+        "title": "ESHRE Guideline: Ovarian Stimulation for IVF/ICSI",
+        "url": "https://www.eshre.eu/guidelines-and-legal/guidelines/ovarian-stimulation-guideline",
+        "source_type": "external guideline",
+        "keywords": [
+            "ivf", "icsi", "ovarian stimulation", "art", "egg retrieval", "fertility treatment",
+        ],
+        "excerpt": "IVF management questions should be grounded in patient age, ovarian response, and ART-specific context rather than general gynecology heuristics.",
+    },
+    {
+        "title": "ASRM: Evidence-based Treatments for Couples With Unexplained Infertility",
+        "url": "https://www.asrm.org/practice-guidance/practice-committee-documents/evidence-based-treatments-for-couples-with-unexplained-infertility-a-guideline-2020/",
+        "source_type": "external guideline",
+        "keywords": [
+            "unexplained infertility", "iui", "ivf", "coh-iui", "controlled ovarian stimulation",
+            "fertility escalation", "next step after normal workup",
+        ],
+        "excerpt": "For unexplained infertility, treatment usually escalates from ovarian stimulation with IUI toward IVF rather than prolonged expectant management in older patients.",
     },
     {
         "title": "ACOG: Gestational Diabetes",
@@ -131,6 +323,7 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://www.acog.org/clinical/clinical-guidance/practice-bulletin/articles/2020/03/prelabor-rupture-of-membranes",
         "source_type": "external guideline",
         "keywords": ["prom", "pprom", "rupture of membranes", "amniotic fluid leak"],
+        "excerpt": "In PPROM before 34 weeks without infection, labor, or fetal compromise, expectant management with corticosteroids and latency antibiotics is generally recommended while monitoring for chorioamnionitis or fetal deterioration.",
     },
     {
         "title": "CDC: Group B Strep Prevention in Newborns",
@@ -173,6 +366,16 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://www.acog.org/womens-health/faqs/endometriosis",
         "source_type": "external guideline",
         "keywords": ["endometriosis", "dysmenorrhea", "chronic pelvic pain"],
+    },
+    {
+        "title": "ACOG: Perimenopausal Bleeding and Bleeding After Menopause",
+        "url": "https://www.acog.org/womens-health/faqs/perimenopausal-bleeding-and-bleeding-after-menopause",
+        "source_type": "external guideline",
+        "keywords": [
+            "postmenopausal bleeding", "bleeding after menopause", "pmb", "endometrial biopsy",
+            "endometrial sampling", "endometrial thickness", "postmenopausal",
+        ],
+        "excerpt": "Postmenopausal bleeding requires evaluation. Endometrial biopsy and transvaginal ultrasound are key tools, with tissue diagnosis prioritized when malignancy must be excluded.",
     },
     {
         "title": "ACOG: Polycystic Ovary Syndrome",
@@ -240,6 +443,37 @@ EXTERNAL_SOURCE_CATALOG = [
         "source_type": "external guideline",
         "keywords": ["carrier screening", "cf carrier", "sma screening", "genetic carrier"],
     },
+    {
+        "title": "AIUM Practice Parameter: Ultrasound in Pregnancy",
+        "url": "https://www.aium.org/resources/practice-parameters/obstetric-%28standard%29",
+        "source_type": "external guideline",
+        "keywords": [
+            "ultrasound", "obstetric ultrasound", "dating scan", "anatomy scan", "biophysical profile",
+            "fetal biometry", "amniotic fluid", "doppler",
+        ],
+        "excerpt": "Ultrasound findings should be linked to the clinical question being answered, including dating, anatomy, growth, fluid assessment, and next-step management.",
+    },
+    {
+        "title": "AIUM Practice Topic: Gynecologic Ultrasound",
+        "url": "https://www.aium.org/practice-topics/gynecologic-ultrasound",
+        "source_type": "external guideline",
+        "keywords": [
+            "gynecologic ultrasound", "pelvic ultrasound", "tvus", "transvaginal ultrasound",
+            "adnexal mass", "ovarian cyst", "endometrial thickness", "sonohysterography",
+        ],
+        "excerpt": "Gynecologic ultrasound questions should be framed around the imaging finding and the next clinical action it supports.",
+    },
+    {
+        "title": "ACOG Practice Bulletin: Evaluation and Management of Adnexal Masses",
+        "url": "https://www.acog.org/clinical/clinical-guidance/practice-bulletin/articles/2016/11/evaluation-and-management-of-adnexal-masses",
+        "source_type": "external guideline",
+        "keywords": [
+            "adnexal mass", "ovarian mass", "pelvic mass", "ca-125", "gynecologic oncology referral",
+            "postmenopausal adnexal mass", "bloating", "early satiety", "ovarian cancer",
+        ],
+        "excerpt": "Evaluation of an adnexal mass focuses on excluding malignancy and identifying patients who warrant referral to or consultation with a gynecologic oncologist.",
+        "updated_at": "2025-01-01",
+    },
 ]
 
 
@@ -256,6 +490,55 @@ def _dedupe_sources(sources):
         seen_urls.add(source["url"])
         deduped.append(source)
     return deduped
+
+
+def _detect_source_routing_focus(user_message):
+    normalized = _normalize_text(user_message)
+    for focus, rule in SOURCE_ROUTING_RULES.items():
+        if any(keyword in normalized for keyword in rule["query_keywords"]):
+            return focus
+    return None
+
+
+def _matched_focus_query_terms(user_message, focus):
+    if not focus:
+        return []
+    normalized = _normalize_text(user_message)
+    rule = SOURCE_ROUTING_RULES.get(focus) or {}
+    return [keyword for keyword in rule.get("query_keywords", []) if keyword in normalized]
+
+
+def _matched_focus_subsignature_terms(user_message, focus):
+    if not focus:
+        return []
+    normalized = _normalize_text(user_message)
+    groups = FOCUS_SUBSIGNATURES.get(focus) or {}
+    for _, terms in groups.items():
+        matched = [term for term in terms if term in normalized]
+        if matched:
+            return matched
+    return []
+
+
+def _source_matches_focus(source, focus, query_terms=None):
+    if not focus:
+        return False
+    rule = SOURCE_ROUTING_RULES.get(focus) or {}
+    combined_keywords = " ".join(source.get("keywords") or []).lower()
+    title = str(source.get("title") or "").lower()
+    excerpt = str(source.get("excerpt") or "").lower()
+    url = str(source.get("url") or "").lower()
+    combined_text = " ".join(part for part in [combined_keywords, title, excerpt, url] if part).strip()
+
+    narrowed_terms = [term for term in (query_terms or []) if len(term) >= 4]
+    if narrowed_terms:
+        return any(term in combined_text for term in narrowed_terms)
+
+    if any(keyword in combined_text for keyword in rule.get("source_keywords", [])):
+        return True
+    if any(keyword in title for keyword in rule.get("title_keywords", [])):
+        return True
+    return False
 
 
 def _assign_source_ids(sources):
@@ -276,11 +559,118 @@ def _assign_source_ids(sources):
     return assigned
 
 
+def _catalog_source_by_title(title):
+    for source in EXTERNAL_SOURCE_CATALOG:
+        if source.get("title") == title:
+            return source
+    return None
+
+
+def get_forced_authoritative_source(user_message):
+    normalized = _normalize_text(user_message)
+
+    early_pregnancy_terms = [
+        "pregnancy of unknown location",
+        "pul",
+        "ectopic",
+        "no intrauterine pregnancy",
+        "no iup",
+        "positive pregnancy test",
+    ]
+    fertility_terms = [
+        "trying to conceive",
+        "ttc",
+        "infertility",
+        "fertility",
+        "hsg",
+        "semen analysis",
+        "ovarian reserve",
+    ]
+    high_risk_pregnancy_terms = [
+        "preeclampsia",
+        "pre-eclampsia",
+        "gestational hypertension",
+        "severe features",
+        "168/112",
+        "160/110",
+        "ruq pain",
+        "headache",
+        "רעלת",
+    ]
+    postmenopausal_bleeding_terms = [
+        "postmenopausal bleeding",
+        "bleeding after menopause",
+        "pmb",
+        "58-year-old",
+        "new postmenopausal bleeding",
+        "postmenopausal",
+    ]
+    adnexal_mass_terms = [
+        "adnexal mass",
+        "ovarian mass",
+        "pelvic mass",
+        "early satiety",
+        "bloating",
+        "ca-125",
+        "gynecologic oncology",
+    ]
+
+    forced_title = None
+    if any(term in normalized for term in early_pregnancy_terms):
+        forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
+    elif any(term in normalized for term in postmenopausal_bleeding_terms):
+        forced_title = "ACOG: Perimenopausal Bleeding and Bleeding After Menopause"
+    elif any(term in normalized for term in adnexal_mass_terms):
+        forced_title = "ACOG Practice Bulletin: Evaluation and Management of Adnexal Masses"
+    elif any(term in normalized for term in high_risk_pregnancy_terms):
+        forced_title = "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia"
+    elif any(term in normalized for term in fertility_terms):
+        if any(
+            term in normalized
+            for term in [
+                "next step in evaluation",
+                "evaluation",
+                "workup",
+                "hsg",
+                "semen analysis",
+                "ovarian reserve",
+                "trying to conceive",
+                "ttc",
+            ]
+        ):
+            forced_title = "ASRM: Fertility Evaluation of Infertile Women"
+        else:
+            forced_title = "ASRM: Definition of Infertility"
+
+    if not forced_title:
+        return []
+
+    source = _catalog_source_by_title(forced_title)
+    if not source:
+        return []
+
+    return _assign_source_ids(
+        [
+            {
+                "title": source["title"],
+                "url": source["url"],
+                "source_type": source["source_type"],
+                "domain": get_source_domain(source["url"]),
+                "tier": get_domain_tier(get_source_domain(source["url"])),
+                "excerpt": source.get("excerpt"),
+                "updated_at": source.get("updated_at"),
+            }
+        ]
+    )
+
+
 def get_external_sources(user_message, user_profile=None, limit=4, include_live=True):
     normalized_message = _normalize_text(user_message)
     scored = []
     israel_relevant = is_israel_relevant(user_message, user_profile=user_profile)
     stages = build_search_stages(user_message, user_profile=user_profile)
+    routing_focus = _detect_source_routing_focus(user_message)
+    focus_query_terms = _matched_focus_subsignature_terms(user_message, routing_focus) or _matched_focus_query_terms(user_message, routing_focus)
     stage_rank = {}
     for index, stage in enumerate(stages):
         for domain in stage["domains"]:
@@ -320,6 +710,15 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
 
         score += max(0, 40 - (stage_rank[domain] * 10))
 
+        if routing_focus:
+            matches_focus = _source_matches_focus(source, routing_focus, focus_query_terms)
+            if matches_focus:
+                score += 45
+            else:
+                score -= 18
+                if focus_query_terms:
+                    continue
+
         scored.append((score, source, domain))
 
     scored.sort(key=lambda item: item[0], reverse=True)
@@ -332,19 +731,48 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
             best_stage_rank = current_stage_rank
         if best_stage_rank is not None and current_stage_rank > best_stage_rank and selected:
             break
+        selected_tier = get_domain_tier(domain)
         selected.append(
             {
                 "title": source["title"],
                 "url": source["url"],
                 "source_type": source["source_type"],
                 "domain": domain,
-                "tier": tier,
+                "tier": selected_tier,
+                "excerpt": source.get("excerpt"),
+                "updated_at": source.get("updated_at"),
             }
         )
         if len(selected) >= limit:
             break
 
+    if routing_focus == "early_pregnancy" and any(
+        term in (focus_query_terms or [])
+        for term in ["pregnancy of unknown location", "pul", "ectopic", "no intrauterine pregnancy", "no iup"]
+    ):
+        nice_source = _catalog_source_by_title("NICE Guideline: Ectopic Pregnancy and Miscarriage")
+        if nice_source:
+            nice_domain = get_source_domain(nice_source["url"])
+            selected = [
+                {
+                    "title": nice_source["title"],
+                    "url": nice_source["url"],
+                    "source_type": nice_source["source_type"],
+                    "domain": nice_domain,
+                    "tier": get_domain_tier(nice_domain),
+                    "excerpt": nice_source.get("excerpt"),
+                    "updated_at": nice_source.get("updated_at"),
+                }
+            ] + [source for source in selected if source["url"] != nice_source["url"]]
+
     if include_live:
-        selected = get_live_trusted_sources(user_message, user_profile=user_profile, limit=limit) + selected
+        live_sources = get_live_trusted_sources(user_message, user_profile=user_profile, limit=limit)
+        if routing_focus:
+            focused_live_sources = [source for source in live_sources if _source_matches_focus(source, routing_focus, focus_query_terms)]
+            if focused_live_sources:
+                live_sources = focused_live_sources
+            elif any(_source_matches_focus(source, routing_focus, focus_query_terms) for source in selected):
+                live_sources = []
+        selected = live_sources + selected
 
     return _assign_source_ids(_dedupe_sources(selected)[:limit])
