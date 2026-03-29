@@ -743,6 +743,31 @@ def _is_gyne_topic(topic):
     return bool(topic) and topic not in OBSTETRIC_ENTRY_TOPICS
 
 
+def _topic_family(topic):
+    if topic in OBSTETRIC_ENTRY_TOPICS:
+        return "obstetrics"
+    if topic == "Fertility":
+        return "fertility"
+    if topic in {"Gynecologic oncology", "Cervical screening"}:
+        return "gynecologic_oncology"
+    return "gynecology"
+
+
+def _recent_unique_families(state, limit=4):
+    recent_topics = state.get("recent_topic_history") or []
+    deduped = []
+    seen = set()
+    for topic in reversed(recent_topics):
+        family = _topic_family(topic)
+        if not family or family in seen:
+            continue
+        seen.add(family)
+        deduped.append(family)
+        if len(deduped) >= limit:
+            break
+    return set(deduped)
+
+
 def _coverage_first_candidates(candidates, state, used_topics=None):
     if not candidates:
         return []
@@ -760,6 +785,32 @@ def _coverage_first_candidates(candidates, state, used_topics=None):
     unused_in_card_candidates = [item for item in candidates if item.get("topic") not in used_topics]
     if unused_in_card_candidates:
         return unused_in_card_candidates
+
+    return candidates
+
+
+def _family_first_candidates(candidates, state, used_topics=None, used_families=None):
+    candidates = _coverage_first_candidates(candidates, state, used_topics=used_topics)
+    if not candidates:
+        return []
+
+    used_families = set(used_families or set())
+    recent_families = _recent_unique_families(state, limit=4)
+
+    fresh_family_candidates = [
+        item for item in candidates
+        if _topic_family(item.get("topic")) not in used_families
+        and _topic_family(item.get("topic")) not in recent_families
+    ]
+    if fresh_family_candidates:
+        return fresh_family_candidates
+
+    unused_family_candidates = [
+        item for item in candidates
+        if _topic_family(item.get("topic")) not in used_families
+    ]
+    if unused_family_candidates:
+        return unused_family_candidates
 
     return candidates
 
@@ -1015,6 +1066,7 @@ def get_idle_study_cards(session_id):
 
     used_ids = set()
     used_topics = set()
+    used_families = set()
 
     practice_pool = _get_items(item_type="mcq", topic=weak_topic, exclude_ids=recent_exclude_ids) or _get_items(item_type="mcq", exclude_ids=recent_exclude_ids)
     if not practice_pool:
@@ -1031,11 +1083,17 @@ def get_idle_study_cards(session_id):
     if practice_item:
         used_ids.add(practice_item["id"])
         used_topics.add(practice_item["topic"])
+        used_families.add(_topic_family(practice_item["topic"]))
 
     pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids | recent_exclude_ids)
     if not pearl_pool:
         pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids)
-    pearl_pool = _coverage_first_candidates(pearl_pool, state, used_topics=used_topics)
+    pearl_pool = _family_first_candidates(
+        pearl_pool,
+        state,
+        used_topics=used_topics,
+        used_families=used_families,
+    )
     pearl_item = _pick_best_item(
         session_id,
         pearl_pool,
@@ -1047,6 +1105,7 @@ def get_idle_study_cards(session_id):
     if pearl_item:
         used_ids.add(pearl_item["id"])
         used_topics.add(pearl_item["topic"])
+        used_families.add(_topic_family(pearl_item["topic"]))
 
     dynamic_topic = weak_topic or recent_topic
     dynamic_pool = (
@@ -1060,7 +1119,12 @@ def get_idle_study_cards(session_id):
             if dynamic_topic
             else _get_items(exclude_ids=used_ids)
         )
-    dynamic_pool = _coverage_first_candidates(dynamic_pool, state, used_topics=used_topics)
+    dynamic_pool = _family_first_candidates(
+        dynamic_pool,
+        state,
+        used_topics=used_topics,
+        used_families=used_families,
+    )
     dynamic_item = _pick_best_item(
         session_id,
         dynamic_pool,
@@ -1110,7 +1174,12 @@ def get_idle_study_cards(session_id):
 
     if len(cards) < 3:
         fallback_pool = _get_items(exclude_ids=used_ids) or _get_items()
-        fallback_pool = _coverage_first_candidates(fallback_pool, state, used_topics=used_topics)
+        fallback_pool = _family_first_candidates(
+            fallback_pool,
+            state,
+            used_topics=used_topics,
+            used_families=used_families,
+        )
         scored_fallback = sorted(
             fallback_pool,
             key=lambda item: _selection_score(item, state, preferred_difficulty_band="standard"),
@@ -1131,6 +1200,7 @@ def get_idle_study_cards(session_id):
                 }
             )
             used_topics.add(item["topic"])
+            used_families.add(_topic_family(item["topic"]))
             if len(cards) == 3:
                 break
 
