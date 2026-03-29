@@ -509,6 +509,13 @@ def _assign_source_ids(sources):
     return assigned
 
 
+def _catalog_source_by_title(title):
+    for source in EXTERNAL_SOURCE_CATALOG:
+        if source.get("title") == title:
+            return source
+    return None
+
+
 def get_external_sources(user_message, user_profile=None, limit=4, include_live=True):
     normalized_message = _normalize_text(user_message)
     scored = []
@@ -590,6 +597,25 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
         )
         if len(selected) >= limit:
             break
+
+    if routing_focus == "early_pregnancy" and any(
+        term in (focus_query_terms or [])
+        for term in ["pregnancy of unknown location", "pul", "ectopic", "no intrauterine pregnancy", "no iup"]
+    ):
+        nice_source = _catalog_source_by_title("NICE Guideline: Ectopic Pregnancy and Miscarriage")
+        if nice_source:
+            nice_domain = get_source_domain(nice_source["url"])
+            selected = [
+                {
+                    "title": nice_source["title"],
+                    "url": nice_source["url"],
+                    "source_type": nice_source["source_type"],
+                    "domain": nice_domain,
+                    "tier": get_domain_tier(nice_domain),
+                    "excerpt": nice_source.get("excerpt"),
+                    "updated_at": nice_source.get("updated_at"),
+                }
+            ] + [source for source in selected if source["url"] != nice_source["url"]]
 
     if include_live:
         live_sources = get_live_trusted_sources(user_message, user_profile=user_profile, limit=limit)
