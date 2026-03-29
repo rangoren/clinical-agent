@@ -554,7 +554,19 @@ def get_forced_authoritative_source(user_message):
     elif any(term in normalized for term in high_risk_pregnancy_terms):
         forced_title = "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia"
     elif any(term in normalized for term in fertility_terms):
-        if any(term in normalized for term in ["hsg", "semen analysis", "ovarian reserve", "trying to conceive", "ttc"]):
+        if any(
+            term in normalized
+            for term in [
+                "next step in evaluation",
+                "evaluation",
+                "workup",
+                "hsg",
+                "semen analysis",
+                "ovarian reserve",
+                "trying to conceive",
+                "ttc",
+            ]
+        ):
             forced_title = "ASRM: Fertility Evaluation of Infertile Women"
         else:
             forced_title = "ASRM: Definition of Infertility"
