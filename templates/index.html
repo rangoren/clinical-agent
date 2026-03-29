@@ -1654,6 +1654,7 @@
 </head>
 <body>
     <main class="app-shell">
+        {% if app_env != "production" %}
         <div id="pull-refresh-overlay" class="pull-refresh-overlay" aria-live="polite" aria-hidden="true">
             <svg class="pull-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
@@ -1661,6 +1662,7 @@
             </svg>
             <span id="pull-refresh-label">Pull to refresh</span>
         </div>
+        {% endif %}
 
         <header class="topbar">
             <div class="brand">
@@ -3335,7 +3337,9 @@
             renderStudyCardPlaceholders();
         }
         refreshEntryGuidanceVisibility();
+        {% if app_env != "production" %}
         setupPullToRefreshOption();
+        {% endif %}
         handleCalendarCallbackStatus();
         bootstrapSession();
     </script>
