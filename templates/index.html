@@ -615,6 +615,15 @@
             margin-top: 8px;
         }
 
+        .source-item.notice .source-meta {
+            color: #6a7f7a;
+        }
+
+        .source-item.notice .source-text {
+            font-weight: 600;
+            color: #526863;
+        }
+
         .feedback-card {
             margin-bottom: 2px;
         }
@@ -2714,7 +2723,7 @@
             card.className = "sources-card";
 
             const itemsHtml = sources.map((source) => `
-                <div class="source-item">
+                <div class="source-item${source.is_notice ? " notice" : ""}">
                     <div class="source-meta">${escapeHtml(source.source_type)} · ${escapeHtml(source.source_id)}${source.updated_at ? ` · Updated ${escapeHtml(source.updated_at)}` : ""}</div>
                     ${source.url
                         ? `<a class="source-link" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a>`

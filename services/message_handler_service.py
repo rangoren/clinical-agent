@@ -186,6 +186,38 @@ def _fallback_display_sources(sources):
     return []
 
 
+def _is_authoritative_source(source):
+    if not source or source.get("is_internal"):
+        return False
+    source_id = str(source.get("source_id", ""))
+    source_type = str(source.get("source_type", "")).lower()
+    domain = get_source_domain(source.get("url") or "")
+    tier = source.get("tier") or (get_domain_tier(domain) if domain else None)
+
+    if source_id.startswith(("E", "P", "K")) and tier in {"tier1", "tier2", "tier3", "tier4"}:
+        return True
+    if "guideline" in source_type and tier in {"tier1", "tier2", "tier3", "tier4"}:
+        return True
+    return False
+
+
+def _with_source_confidence_note(sources):
+    normalized_sources = list(sources or [])
+    if any(_is_authoritative_source(source) for source in normalized_sources):
+        return normalized_sources
+
+    normalized_sources.append(
+        {
+            "source_id": "SC1",
+            "title": "No clearly matching authoritative source identified for this answer.",
+            "url": None,
+            "source_type": "Source confidence",
+            "is_notice": True,
+        }
+    )
+    return normalized_sources
+
+
 def _looks_like_basic_clinical_question(user_message):
     cleaned = user_message.strip().lower()
     acute_markers = (
@@ -712,11 +744,15 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         },
     )
 
+    final_sources = display_sources if intent == "clinical_consult" else []
+    if intent == "clinical_consult":
+        final_sources = _with_source_confidence_note(final_sources)
+
     return _build_message_response(
         reply=reply,
         show_feedback=intent == "clinical_consult" and len(reply) > 80,
         assistant_message_id=assistant_message_id,
-        sources=display_sources if intent == "clinical_consult" else [],
+        sources=final_sources,
     )
 
 
