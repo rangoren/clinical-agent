@@ -80,6 +80,35 @@ SOURCE_ROUTING_RULES = {
             "pid", "bacterial vaginosis", "trichomoniasis", "candidiasis",
         ],
     },
+    "fertility": {
+        "query_keywords": [
+            "fertility", "infertility", "trying to conceive", "ttc", "ivf", "iui", "hsg",
+            "amh", "ovulation induction", "semen analysis", "egg reserve", "ovarian reserve",
+            "טיפולי פוריות", "אי פוריות", "פוריות",
+        ],
+        "source_keywords": [
+            "fertility", "infertility", "ivf", "iui", "hsg", "amh", "ovarian reserve",
+            "semen analysis", "ovulation induction",
+        ],
+        "title_keywords": [
+            "fertility", "infertility", "ivf", "ovarian stimulation",
+        ],
+    },
+    "early_pregnancy": {
+        "query_keywords": [
+            "ectopic", "pregnancy of unknown location", "pul", "positive pregnancy test",
+            "first trimester bleeding", "spotting", "beta hcg", "hcg", "no intrauterine pregnancy",
+            "no iup", "early pregnancy loss", "miscarriage", "threatened abortion",
+            "הריון חוץ רחמי", "דימום בתחילת הריון", "בטא", "שק הריון",
+        ],
+        "source_keywords": [
+            "ectopic", "pregnancy of unknown location", "pul", "beta hcg", "hcg",
+            "miscarriage", "early pregnancy loss", "first trimester bleeding",
+        ],
+        "title_keywords": [
+            "ectopic", "miscarriage", "early pregnancy loss",
+        ],
+    },
 }
 
 FOCUS_SUBSIGNATURES = {
@@ -93,6 +122,14 @@ FOCUS_SUBSIGNATURES = {
     "cervical_screening": {
         "hsil_pathway": ["hsil", "colposcopy", "cin", "דיספלזיה", "קולפוסקופיה"],
         "hpv_screening": ["pap", "hpv", "ascus", "lsil", "cervical screening", "בדיקת פאפ", "צוואר הרחם"],
+    },
+    "fertility": {
+        "infertility_eval": ["infertility", "trying to conceive", "ttc", "semen analysis", "hsg", "ovarian reserve", "amh", "אי פוריות", "פוריות"],
+        "ivf_art": ["ivf", "iui", "ovulation induction", "ovarian stimulation", "art", "טיפולי פוריות"],
+    },
+    "early_pregnancy": {
+        "pul_ectopic": ["pregnancy of unknown location", "pul", "ectopic", "no intrauterine pregnancy", "no iup", "beta hcg", "hcg", "positive pregnancy test", "הריון חוץ רחמי", "בטא"],
+        "early_loss": ["early pregnancy loss", "miscarriage", "first trimester bleeding", "spotting", "threatened abortion", "דימום בתחילת הריון"],
     },
 }
 
