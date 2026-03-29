@@ -251,6 +251,31 @@ def _maybe_override_fertility_display_source(user_message, sources):
     return preferred_source + filtered_sources
 
 
+def _maybe_override_targeted_display_source(user_message, sources):
+    if not sources:
+        return sources
+
+    forced_sources = get_forced_authoritative_source(user_message)
+    if not forced_sources:
+        return sources
+
+    forced_title = forced_sources[0].get("title")
+    if any(source.get("title") == forced_title for source in sources):
+        return sources
+
+    override_titles = {
+        "AIUM Practice Parameter: Ultrasound in Pregnancy",
+        "AIUM Practice Topic: Gynecologic Ultrasound",
+        "ASRM: Definition of Infertility",
+    }
+    current_titles = {source.get("title") for source in sources}
+    if not any(title in override_titles for title in current_titles):
+        return sources
+
+    filtered_sources = [source for source in sources if source.get("title") not in override_titles]
+    return forced_sources + filtered_sources
+
+
 def _looks_like_basic_clinical_question(user_message):
     cleaned = user_message.strip().lower()
     acute_markers = (
@@ -730,6 +755,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         display_sources = get_forced_authoritative_source(user_message)
     if intent == "clinical_consult":
         display_sources = _maybe_override_fertility_display_source(user_message, display_sources)
+        display_sources = _maybe_override_targeted_display_source(user_message, display_sources)
 
     reply = raw_reply
     if intent == "clinical_consult":

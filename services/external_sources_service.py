@@ -339,6 +339,16 @@ EXTERNAL_SOURCE_CATALOG = [
         "keywords": ["endometriosis", "dysmenorrhea", "chronic pelvic pain"],
     },
     {
+        "title": "ACOG: Perimenopausal Bleeding and Bleeding After Menopause",
+        "url": "https://www.acog.org/womens-health/faqs/perimenopausal-bleeding-and-bleeding-after-menopause",
+        "source_type": "external guideline",
+        "keywords": [
+            "postmenopausal bleeding", "bleeding after menopause", "pmb", "endometrial biopsy",
+            "endometrial sampling", "endometrial thickness", "postmenopausal",
+        ],
+        "excerpt": "Postmenopausal bleeding requires evaluation. Endometrial biopsy and transvaginal ultrasound are key tools, with tissue diagnosis prioritized when malignancy must be excluded.",
+    },
+    {
         "title": "ACOG: Polycystic Ovary Syndrome",
         "url": "https://www.acog.org/womens-health/faqs/polycystic-ovary-syndrome-pcos",
         "source_type": "external guideline",
@@ -423,6 +433,17 @@ EXTERNAL_SOURCE_CATALOG = [
             "adnexal mass", "ovarian cyst", "endometrial thickness", "sonohysterography",
         ],
         "excerpt": "Gynecologic ultrasound questions should be framed around the imaging finding and the next clinical action it supports.",
+    },
+    {
+        "title": "ACOG Practice Bulletin: Evaluation and Management of Adnexal Masses",
+        "url": "https://www.acog.org/clinical/clinical-guidance/practice-bulletin/articles/2016/11/evaluation-and-management-of-adnexal-masses",
+        "source_type": "external guideline",
+        "keywords": [
+            "adnexal mass", "ovarian mass", "pelvic mass", "ca-125", "gynecologic oncology referral",
+            "postmenopausal adnexal mass", "bloating", "early satiety", "ovarian cancer",
+        ],
+        "excerpt": "Evaluation of an adnexal mass focuses on excluding malignancy and identifying patients who warrant referral to or consultation with a gynecologic oncologist.",
+        "updated_at": "2025-01-01",
     },
 ]
 
@@ -547,10 +568,31 @@ def get_forced_authoritative_source(user_message):
         "headache",
         "רעלת",
     ]
+    postmenopausal_bleeding_terms = [
+        "postmenopausal bleeding",
+        "bleeding after menopause",
+        "pmb",
+        "58-year-old",
+        "new postmenopausal bleeding",
+        "postmenopausal",
+    ]
+    adnexal_mass_terms = [
+        "adnexal mass",
+        "ovarian mass",
+        "pelvic mass",
+        "early satiety",
+        "bloating",
+        "ca-125",
+        "gynecologic oncology",
+    ]
 
     forced_title = None
     if any(term in normalized for term in early_pregnancy_terms):
         forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
+    elif any(term in normalized for term in postmenopausal_bleeding_terms):
+        forced_title = "ACOG: Perimenopausal Bleeding and Bleeding After Menopause"
+    elif any(term in normalized for term in adnexal_mass_terms):
+        forced_title = "ACOG Practice Bulletin: Evaluation and Management of Adnexal Masses"
     elif any(term in normalized for term in high_risk_pregnancy_terms):
         forced_title = "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia"
     elif any(term in normalized for term in fertility_terms):
