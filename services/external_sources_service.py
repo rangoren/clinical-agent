@@ -224,7 +224,12 @@ EXTERNAL_SOURCE_CATALOG = [
         "title": "NICE Guideline: Ectopic Pregnancy and Miscarriage",
         "url": "https://www.nice.org.uk/guidance/ng126",
         "source_type": "external guideline",
-        "keywords": ["ectopic", "pregnancy of unknown location", "pul", "beta hcg", "ultrasound", "tvus"],
+        "keywords": [
+            "ectopic", "pregnancy of unknown location", "pul", "beta hcg", "hcg", "ultrasound", "tvus",
+            "positive pregnancy test", "no intrauterine pregnancy", "no iup", "serial hcg", "repeat hcg",
+            "48 hours", "spotting", "first trimester bleeding",
+        ],
+        "excerpt": "In a stable patient with pregnancy of unknown location, serial hCG testing and repeat ultrasound are used to distinguish early intrauterine pregnancy, failed pregnancy, and ectopic pregnancy.",
     },
     {
         "title": "ACOG: Early Pregnancy Loss",
