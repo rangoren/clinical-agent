@@ -38,6 +38,8 @@ COUNTRY_SOURCE_DOMAINS = {
         "smfm.org",
         "publications.smfm.org",
         "cdc.gov",
+        "asrm.org",
+        "aium.org",
         "uspreventiveservicestaskforce.org",
         "nih.gov",
     ],
@@ -86,6 +88,7 @@ GLOBAL_CORE_DOMAINS = [
     "who.int",
     "figo.org",
     "isuog.org",
+    "aium.org",
 ]
 
 TIER1_REGULATOR_DOMAINS = {
@@ -100,6 +103,8 @@ TIER1_REGULATOR_DOMAINS = {
     "smfm.org",
     "publications.smfm.org",
     "cdc.gov",
+    "asrm.org",
+    "aium.org",
     "uspreventiveservicestaskforce.org",
     "rcog.org.uk",
     "nice.org.uk",
@@ -120,6 +125,7 @@ TIER1_REGULATOR_DOMAINS = {
     "who.int",
     "figo.org",
     "isuog.org",
+    "aium.org",
     "eshre.eu",
     "asrm.org",
     "esgo.org",
@@ -249,6 +255,7 @@ SPECIALTY_DOMAIN_GROUPS = {
     "ultrasound": [
         "isuog.org",
         "isuog.ima.org.il",
+        "aium.org",
         "rcog.org.uk",
     ],
     "fertility": [
@@ -335,10 +342,16 @@ SPECIALTY_KEYWORDS = {
         "ultrasound",
         "scan",
         "tvus",
+        "transvaginal ultrasound",
+        "transabdominal ultrasound",
         "nt",
         "anomaly",
         "doppler",
         "echocardiography",
+        "biophysical profile",
+        "fetal biometry",
+        "pelvic ultrasound",
+        "sonohysterography",
     ],
     "fertility": [
         "ivf",
@@ -348,6 +361,11 @@ SPECIALTY_KEYWORDS = {
         "egg reserve",
         "amh",
         "iui",
+        "assisted reproductive",
+        "art",
+        "semen analysis",
+        "hsg",
+        "reproductive endocrinology",
     ],
     "gynecologic_oncology": [
         "ovarian cancer",

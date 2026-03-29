@@ -202,6 +202,34 @@ EXTERNAL_SOURCE_CATALOG = [
         "keywords": ["smfm", "maternal fetal medicine", "consult"],
     },
     {
+        "title": "ASRM: Fertility Evaluation of Infertile Women",
+        "url": "https://www.asrm.org/practice-guidance/practice-committee-documents/fertility-evaluation-of-infertile-women-a-committee-opinion-2021/",
+        "source_type": "external guideline",
+        "keywords": [
+            "fertility", "infertility", "ivf", "iui", "ovulation induction", "ovarian reserve",
+            "amh", "hsg", "semen analysis", "reproductive endocrinology",
+        ],
+        "excerpt": "Initial infertility evaluation depends on duration of infertility, age, ovulatory status, tubal assessment, and semen analysis rather than immediate IVF for every couple.",
+    },
+    {
+        "title": "ASRM: Definition of Infertility",
+        "url": "https://www.asrm.org/practice-guidance/practice-committee-documents/definition-of-infertility/",
+        "source_type": "external guideline",
+        "keywords": [
+            "infertility", "fertility workup", "trying to conceive", "evaluation timing", "when to evaluate infertility",
+        ],
+        "excerpt": "Infertility evaluation is usually initiated after 12 months of unprotected intercourse, or earlier when age or clinical factors increase concern.",
+    },
+    {
+        "title": "ESHRE Guideline: Ovarian Stimulation for IVF/ICSI",
+        "url": "https://www.eshre.eu/guidelines-and-legal/guidelines/ovarian-stimulation-guideline",
+        "source_type": "external guideline",
+        "keywords": [
+            "ivf", "icsi", "ovarian stimulation", "art", "egg retrieval", "fertility treatment",
+        ],
+        "excerpt": "IVF management questions should be grounded in patient age, ovarian response, and ART-specific context rather than general gynecology heuristics.",
+    },
+    {
         "title": "ACOG: Gestational Diabetes",
         "url": "https://www.acog.org/womens-health/faqs/gestational-diabetes",
         "source_type": "external guideline",
@@ -333,6 +361,26 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://www.acog.org/womens-health/faqs/carrier-screening",
         "source_type": "external guideline",
         "keywords": ["carrier screening", "cf carrier", "sma screening", "genetic carrier"],
+    },
+    {
+        "title": "AIUM Practice Parameter: Ultrasound in Pregnancy",
+        "url": "https://www.aium.org/resources/practice-parameters/obstetric-%28standard%29",
+        "source_type": "external guideline",
+        "keywords": [
+            "ultrasound", "obstetric ultrasound", "dating scan", "anatomy scan", "biophysical profile",
+            "fetal biometry", "amniotic fluid", "doppler",
+        ],
+        "excerpt": "Ultrasound findings should be linked to the clinical question being answered, including dating, anatomy, growth, fluid assessment, and next-step management.",
+    },
+    {
+        "title": "AIUM Practice Topic: Gynecologic Ultrasound",
+        "url": "https://www.aium.org/practice-topics/gynecologic-ultrasound",
+        "source_type": "external guideline",
+        "keywords": [
+            "gynecologic ultrasound", "pelvic ultrasound", "tvus", "transvaginal ultrasound",
+            "adnexal mass", "ovarian cyst", "endometrial thickness", "sonohysterography",
+        ],
+        "excerpt": "Gynecologic ultrasound questions should be framed around the imaging finding and the next clinical action it supports.",
     },
 ]
 
