@@ -84,14 +84,29 @@ SOURCE_ROUTING_RULES = {
         "query_keywords": [
             "fertility", "infertility", "trying to conceive", "ttc", "ivf", "iui", "hsg",
             "amh", "ovulation induction", "semen analysis", "egg reserve", "ovarian reserve",
+            "unexplained infertility", "controlled ovarian stimulation", "coh-iui",
             "טיפולי פוריות", "אי פוריות", "פוריות",
         ],
         "source_keywords": [
             "fertility", "infertility", "ivf", "iui", "hsg", "amh", "ovarian reserve",
-            "semen analysis", "ovulation induction",
+            "semen analysis", "ovulation induction", "unexplained infertility",
         ],
         "title_keywords": [
             "fertility", "infertility", "ivf", "ovarian stimulation",
+        ],
+    },
+    "gynecologic_oncology": {
+        "query_keywords": [
+            "postmenopausal bleeding", "bleeding after menopause", "pmb", "endometrial biopsy",
+            "adnexal mass", "ovarian mass", "pelvic mass", "ovarian cancer", "endometrial cancer",
+            "early satiety", "bloating", "ca-125", "gynecologic oncology", "postmenopausal",
+        ],
+        "source_keywords": [
+            "postmenopausal bleeding", "endometrial biopsy", "adnexal mass", "ovarian cancer",
+            "ca-125", "gynecologic oncologist", "endometrial cancer",
+        ],
+        "title_keywords": [
+            "adnexal masses", "bleeding after menopause", "ovarian", "endometrial",
         ],
     },
     "early_pregnancy": {
@@ -125,11 +140,15 @@ FOCUS_SUBSIGNATURES = {
     },
     "fertility": {
         "infertility_eval": ["infertility", "trying to conceive", "ttc", "semen analysis", "hsg", "ovarian reserve", "amh", "אי פוריות", "פוריות"],
-        "ivf_art": ["ivf", "iui", "ovulation induction", "ovarian stimulation", "art", "טיפולי פוריות"],
+        "ivf_art": ["ivf", "iui", "ovulation induction", "ovarian stimulation", "art", "unexplained infertility", "coh-iui", "טיפולי פוריות"],
     },
     "early_pregnancy": {
         "pul_ectopic": ["pregnancy of unknown location", "pul", "ectopic", "no intrauterine pregnancy", "no iup", "beta hcg", "hcg", "positive pregnancy test", "הריון חוץ רחמי", "בטא"],
         "early_loss": ["early pregnancy loss", "miscarriage", "first trimester bleeding", "spotting", "threatened abortion", "דימום בתחילת הריון"],
+    },
+    "gynecologic_oncology": {
+        "pmb_pathway": ["postmenopausal bleeding", "bleeding after menopause", "pmb", "endometrial biopsy", "postmenopausal"],
+        "adnexal_mass_pathway": ["adnexal mass", "ovarian mass", "pelvic mass", "ovarian cancer", "ca-125", "early satiety", "bloating"],
     },
 }
 
@@ -270,6 +289,16 @@ EXTERNAL_SOURCE_CATALOG = [
             "ivf", "icsi", "ovarian stimulation", "art", "egg retrieval", "fertility treatment",
         ],
         "excerpt": "IVF management questions should be grounded in patient age, ovarian response, and ART-specific context rather than general gynecology heuristics.",
+    },
+    {
+        "title": "ASRM: Evidence-based Treatments for Couples With Unexplained Infertility",
+        "url": "https://www.asrm.org/practice-guidance/practice-committee-documents/evidence-based-treatments-for-couples-with-unexplained-infertility-a-guideline-2020/",
+        "source_type": "external guideline",
+        "keywords": [
+            "unexplained infertility", "iui", "ivf", "coh-iui", "controlled ovarian stimulation",
+            "fertility escalation", "next step after normal workup",
+        ],
+        "excerpt": "For unexplained infertility, treatment usually escalates from ovarian stimulation with IUI toward IVF rather than prolonged expectant management in older patients.",
     },
     {
         "title": "ACOG: Gestational Diabetes",
