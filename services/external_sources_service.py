@@ -536,12 +536,28 @@ def get_forced_authoritative_source(user_message):
         "semen analysis",
         "ovarian reserve",
     ]
+    high_risk_pregnancy_terms = [
+        "preeclampsia",
+        "pre-eclampsia",
+        "gestational hypertension",
+        "severe features",
+        "168/112",
+        "160/110",
+        "ruq pain",
+        "headache",
+        "רעלת",
+    ]
 
     forced_title = None
     if any(term in normalized for term in early_pregnancy_terms):
         forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
+    elif any(term in normalized for term in high_risk_pregnancy_terms):
+        forced_title = "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia"
     elif any(term in normalized for term in fertility_terms):
-        forced_title = "ASRM: Fertility Evaluation of Infertile Women"
+        if any(term in normalized for term in ["hsg", "semen analysis", "ovarian reserve", "trying to conceive", "ttc"]):
+            forced_title = "ASRM: Fertility Evaluation of Infertile Women"
+        else:
+            forced_title = "ASRM: Definition of Infertility"
 
     if not forced_title:
         return []
