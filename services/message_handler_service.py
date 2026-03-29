@@ -1,5 +1,5 @@
 from services.chat_service import delete_messages_for_session, load_chat, save_message
-from services.external_sources_service import get_external_sources
+from services.external_sources_service import get_external_sources, get_forced_authoritative_source
 from services.intent_service import classify_message_intent
 from services.logging_service import log_event
 from services.memory_service import (
@@ -693,6 +693,8 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
     display_sources = _filter_sources_by_citation(raw_reply, candidate_sources)
     if intent == "clinical_consult" and not display_sources:
         display_sources = _fallback_display_sources(candidate_sources)
+    if intent == "clinical_consult" and not display_sources:
+        display_sources = get_forced_authoritative_source(user_message)
 
     reply = raw_reply
     if intent == "clinical_consult":

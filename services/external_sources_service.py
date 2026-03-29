@@ -516,6 +516,55 @@ def _catalog_source_by_title(title):
     return None
 
 
+def get_forced_authoritative_source(user_message):
+    normalized = _normalize_text(user_message)
+
+    early_pregnancy_terms = [
+        "pregnancy of unknown location",
+        "pul",
+        "ectopic",
+        "no intrauterine pregnancy",
+        "no iup",
+        "positive pregnancy test",
+    ]
+    fertility_terms = [
+        "trying to conceive",
+        "ttc",
+        "infertility",
+        "fertility",
+        "hsg",
+        "semen analysis",
+        "ovarian reserve",
+    ]
+
+    forced_title = None
+    if any(term in normalized for term in early_pregnancy_terms):
+        forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
+    elif any(term in normalized for term in fertility_terms):
+        forced_title = "ASRM: Fertility Evaluation of Infertile Women"
+
+    if not forced_title:
+        return []
+
+    source = _catalog_source_by_title(forced_title)
+    if not source:
+        return []
+
+    return _assign_source_ids(
+        [
+            {
+                "title": source["title"],
+                "url": source["url"],
+                "source_type": source["source_type"],
+                "domain": get_source_domain(source["url"]),
+                "tier": get_domain_tier(get_source_domain(source["url"])),
+                "excerpt": source.get("excerpt"),
+                "updated_at": source.get("updated_at"),
+            }
+        ]
+    )
+
+
 def get_external_sources(user_message, user_profile=None, limit=4, include_live=True):
     normalized_message = _normalize_text(user_message)
     scored = []
