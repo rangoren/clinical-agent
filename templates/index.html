@@ -1757,6 +1757,7 @@
         let pullTracking = false;
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
+        const studyCardsCacheKey = "entry_study_cards_v1";
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -2005,6 +2006,29 @@
             return document.getElementById("entry-guidance");
         }
 
+        function loadCachedStudyCards() {
+            try {
+                const raw = localStorage.getItem(studyCardsCacheKey);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (!parsed || !Array.isArray(parsed.cards) || parsed.cards.length === 0) {
+                    return null;
+                }
+                return parsed.cards;
+            } catch (_error) {
+                return null;
+            }
+        }
+
+        function saveCachedStudyCards(cards) {
+            try {
+                if (!cards || !Array.isArray(cards) || cards.length === 0) return;
+                localStorage.setItem(studyCardsCacheKey, JSON.stringify({ cards }));
+            } catch (_error) {
+                return;
+            }
+        }
+
         function shouldShowEntryGuidance() {
             if (entryGuidanceDismissed || appMode !== "clinical") return false;
             const input = document.getElementById("input");
@@ -2094,6 +2118,7 @@
             shell.innerHTML = "";
             shell.appendChild(grid);
             shell.classList.add("visible");
+            saveCachedStudyCards(cards);
             refreshEntryGuidanceVisibility();
         }
 
@@ -3246,6 +3271,10 @@
         renderModeState();
         autoResizeInput();
         updateComposerState();
+        const initialCachedStudyCards = loadCachedStudyCards();
+        if (appMode === "clinical" && initialCachedStudyCards && initialCachedStudyCards.length) {
+            renderStudyCards(initialCachedStudyCards);
+        }
         refreshEntryGuidanceVisibility();
         setupPullToRefreshOption();
         handleCalendarCallbackStatus();
