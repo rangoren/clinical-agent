@@ -20,6 +20,65 @@ TRAINING_STAGE_ALIASES = {
     "פלו": "fellowship",
 }
 
+RESIDENCY_YEAR_WORD_ALIASES = {
+    "r1": "R1",
+    "first": "R1",
+    "1st": "R1",
+    "one": "R1",
+    "firest": "R1",
+    "frist": "R1",
+    "yr1": "R1",
+    "year 1": "R1",
+    "first year": "R1",
+    "r2": "R2",
+    "second": "R2",
+    "2nd": "R2",
+    "two": "R2",
+    "seccond": "R2",
+    "second year": "R2",
+    "year 2": "R2",
+    "yr2": "R2",
+    "r3": "R3",
+    "third": "R3",
+    "3rd": "R3",
+    "three": "R3",
+    "thrid": "R3",
+    "third year": "R3",
+    "year 3": "R3",
+    "yr3": "R3",
+    "r4": "R4",
+    "fourth": "R4",
+    "4th": "R4",
+    "four": "R4",
+    "forth": "R4",
+    "fourth year": "R4",
+    "year 4": "R4",
+    "yr4": "R4",
+    "r5": "R5",
+    "fifth": "R5",
+    "5th": "R5",
+    "five": "R5",
+    "fivth": "R5",
+    "fifth year": "R5",
+    "year 5": "R5",
+    "yr5": "R5",
+    "r6": "R6",
+    "sixth": "R6",
+    "6th": "R6",
+    "six": "R6",
+    "sixt": "R6",
+    "sixth year": "R6",
+    "year 6": "R6",
+    "yr6": "R6",
+    "r7": "R7",
+    "seventh": "R7",
+    "7th": "R7",
+    "seven": "R7",
+    "seventh year": "R7",
+    "year 7": "R7",
+    "yr7": "R7",
+}
+
 ANSWER_STYLE_ALIASES = {
     "concise": "concise",
     "brief": "concise",
@@ -156,11 +215,24 @@ def normalize_answer_style(value):
 
 
 def normalize_residency_year(value):
-    cleaned = value.strip().lower()
+    cleaned = re.sub(r"\s+", " ", value.strip().lower())
+    year_phrase_match = re.search(r"\b([1-7])\s*(?:st|nd|rd|th)?\s*year\b", cleaned)
+    if year_phrase_match:
+        return f"R{year_phrase_match.group(1)}"
+
+    resident_phrase_match = re.search(r"\b([1-7])\s*(?:st|nd|rd|th)?\s*(?:year\s+)?resident\b", cleaned)
+    if resident_phrase_match:
+        return f"R{resident_phrase_match.group(1)}"
+
     match = re.search(r"([1-7])", cleaned)
-    if not match:
-        return None
-    return f"R{match.group(1)}"
+    if match:
+        return f"R{match.group(1)}"
+
+    for alias, normalized in RESIDENCY_YEAR_WORD_ALIASES.items():
+        if re.search(rf"\b{re.escape(alias)}\b", cleaned):
+            return normalized
+
+    return None
 
 
 def normalize_country(value):
@@ -240,7 +312,7 @@ def _build_residency_year_question():
     return (
         "<b>Next question:</b><br>"
         "Which residency year are you in?<br>"
-        "For example: R1, R2, R3, R4, R5"
+        "For example: R1, R2, R3, R4, R5 or first year, second year"
     )
 
 
@@ -510,7 +582,8 @@ def handle_onboarding_step(session_id, profile, user_message):
                 "reply": (
                     "I need a residency year in a simple format.<br><br>"
                     "Please answer like:<br>"
-                    "R1 / R2 / R3 / R4 / R5"
+                    "R1 / R2 / R3 / R4 / R5<br>"
+                    "or first year / second year"
                 ),
                 "completed": False,
                 "intent": "onboarding_retry",
