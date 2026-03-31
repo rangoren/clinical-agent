@@ -2726,7 +2726,7 @@
 
             const itemsHtml = sources.map((source) => `
                 <div class="source-item${source.is_notice ? " notice" : ""}">
-                    <div class="source-meta">${escapeHtml(source.source_type)} · ${escapeHtml(source.source_id)}${source.updated_at ? ` · Updated ${escapeHtml(source.updated_at)}` : ""}</div>
+                    <div class="source-meta">${escapeHtml(source.source_type)} · ${escapeHtml(source.source_id)}${source.source_detail ? ` · ${escapeHtml(source.source_detail)}` : ""}${source.updated_at ? ` · Updated ${escapeHtml(source.updated_at)}` : ""}</div>
                     ${source.url
                         ? `<a class="source-link" href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a>`
                         : `<div class="source-text">${escapeHtml(source.title)}</div>`
