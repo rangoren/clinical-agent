@@ -110,7 +110,8 @@ def _collect_internal_sources(principles, protocol_entries, knowledge_entries):
                 "source_id": f"PR{index}",
                 "title": principle[:140],
                 "url": None,
-                "source_type": "Based on saved principle",
+                "source_type": "Internal source",
+                "source_detail": "Saved principle",
                 "is_internal": True,
             }
         )
@@ -124,7 +125,8 @@ def _collect_internal_sources(principles, protocol_entries, knowledge_entries):
                 "source_id": f"LP{protocol_index}",
                 "title": entry["text"][:140],
                 "url": None,
-                "source_type": "Based on local protocol memory",
+                "source_type": "Internal source",
+                "source_detail": "Local protocol memory",
                 "is_internal": True,
             }
         )
@@ -139,7 +141,8 @@ def _collect_internal_sources(principles, protocol_entries, knowledge_entries):
                 "source_id": f"IK{knowledge_index}",
                 "title": entry["text"][:140],
                 "url": None,
-                "source_type": "Based on user-provided internal knowledge",
+                "source_type": "Internal source",
+                "source_detail": "Internal knowledge memory",
                 "is_internal": True,
             }
         )
@@ -164,6 +167,7 @@ def _fallback_display_sources(sources):
         return []
 
     preferred_sources = []
+    internal_only_sources = []
     seen_source_ids = set()
 
     for source in sources:
@@ -171,6 +175,8 @@ def _fallback_display_sources(sources):
         if not source_id or source_id in seen_source_ids:
             continue
         if source.get("is_internal"):
+            internal_only_sources.append(source)
+            seen_source_ids.add(source_id)
             continue
         if source.get("url") or source_id.startswith(("E", "P", "K")):
             preferred_sources.append(source)
@@ -182,6 +188,9 @@ def _fallback_display_sources(sources):
             key=lambda source: (0 if str(source.get("source_id", "")).startswith("E") else 1),
         )
         return external_first[:3]
+
+    if internal_only_sources:
+        return internal_only_sources[:3]
 
     return []
 
@@ -203,15 +212,15 @@ def _is_authoritative_source(source):
 
 def _with_source_confidence_note(sources):
     normalized_sources = list(sources or [])
-    if any(_is_authoritative_source(source) for source in normalized_sources):
+    if normalized_sources:
         return normalized_sources
 
     normalized_sources.append(
         {
-            "source_id": "SC1",
-            "title": "No clearly matching authoritative source identified for this answer.",
+            "source_id": "MG1",
+            "title": "No explicit source available for this answer.",
             "url": None,
-            "source_type": "Source confidence",
+            "source_type": "Model-generated answer",
             "is_notice": True,
         }
     )
