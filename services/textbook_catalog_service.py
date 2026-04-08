@@ -276,26 +276,50 @@ def _range_for_cluster(cluster, padding=2):
     }
 
 
+def _map_single_gabbe_topic(topic_entry):
+    topic = topic_entry["topic"]
+    search_payload = search_gabbe_topic(topic)
+    matches = search_payload["matches"]
+    clusters = _cluster_match_pages(matches, gap=3)
+    candidate_ranges = [_range_for_cluster(cluster, padding=2) for cluster in clusters[:3]]
+
+    return {
+        **topic_entry,
+        "queries": search_payload["queries"],
+        "match_count": search_payload["match_count"],
+        "candidate_ranges": candidate_ranges,
+        "sample_matches": matches[:3],
+        "status": "mapped" if candidate_ranges else "unmapped",
+    }
+
+
+@lru_cache(maxsize=8)
+def build_gabbe_topic_mapping_batch(offset=0, limit=5, tier=None):
+    topic_entries = list(GABBE_TOPIC_MAP)
+    if tier:
+        topic_entries = [entry for entry in topic_entries if entry.get("tier") == tier]
+
+    selected_topics = topic_entries[offset : offset + limit]
+    mappings = []
+    for topic_entry in selected_topics:
+        mappings.append(_map_single_gabbe_topic(topic_entry))
+
+    return {
+        "book_id": "gabbe_9",
+        "offset": offset,
+        "limit": limit,
+        "tier": tier,
+        "batch_count": len(mappings),
+        "total_available_topics": len(topic_entries),
+        "topics": mappings,
+    }
+
+
 @lru_cache(maxsize=1)
 def build_gabbe_topic_mapping():
     mappings = []
     for topic_entry in GABBE_TOPIC_MAP:
-        topic = topic_entry["topic"]
-        search_payload = search_gabbe_topic(topic)
-        matches = search_payload["matches"]
-        clusters = _cluster_match_pages(matches, gap=3)
-        candidate_ranges = [_range_for_cluster(cluster, padding=2) for cluster in clusters[:3]]
-
-        mappings.append(
-            {
-                **topic_entry,
-                "queries": search_payload["queries"],
-                "match_count": search_payload["match_count"],
-                "candidate_ranges": candidate_ranges,
-                "sample_matches": matches[:3],
-                "status": "mapped" if candidate_ranges else "unmapped",
-            }
-        )
+        mappings.append(_map_single_gabbe_topic(topic_entry))
 
     return {
         "book_id": "gabbe_9",

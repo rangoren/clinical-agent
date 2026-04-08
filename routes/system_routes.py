@@ -3,8 +3,9 @@ from fastapi.responses import JSONResponse
 
 from routes.home_routes import APP_VERSION
 from services.logging_service import log_event
-from services.textbook_cache_service import get_textbook_cache, save_textbook_cache
+from services.textbook_cache_service import get_textbook_cache, merge_textbook_cache_topics
 from services.textbook_catalog_service import (
+    build_gabbe_topic_mapping_batch,
     build_gabbe_topic_mapping,
     build_gabbe_topic_mapping_summary,
     build_textbook_catalog,
@@ -116,25 +117,41 @@ def health_textbooks_gabbe_mapping():
 
 
 @router.post("/health/textbooks/gabbe/mapping/rebuild")
-def health_textbooks_gabbe_mapping_rebuild():
+def health_textbooks_gabbe_mapping_rebuild(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(5, ge=1, le=10),
+    tier: str | None = Query(None),
+):
     if APP_ENV == "production":
         return JSONResponse({"status": "forbidden"}, status_code=403)
 
-    payload = build_gabbe_topic_mapping()
-    cached = save_textbook_cache("gabbe_topic_mapping", payload)
+    payload = build_gabbe_topic_mapping_batch(offset=offset, limit=limit, tier=tier)
+    cached = merge_textbook_cache_topics(
+        "gabbe_topic_mapping",
+        payload.get("topics") or [],
+        metadata={"book_id": payload.get("book_id", "gabbe_9")},
+    )
+    cached_payload = cached.get("payload") or {}
     log_event(
         "gabbe_topic_mapping_rebuilt",
         payload={
-            "topic_count": payload.get("topic_count"),
-            "mapped_count": payload.get("mapped_count"),
-            "unmapped_count": payload.get("unmapped_count"),
+            "offset": offset,
+            "limit": limit,
+            "tier": tier,
+            "batch_count": payload.get("batch_count"),
+            "cached_topic_count": cached_payload.get("topic_count"),
         },
     )
     return JSONResponse(
         {
             "status": "ok",
-            "message": "Gabbe topic mapping rebuilt and cached.",
+            "message": "Gabbe topic mapping batch rebuilt and cached.",
+            "offset": offset,
+            "limit": limit,
+            "tier": tier,
+            "batch_count": payload.get("batch_count"),
+            "total_available_topics": payload.get("total_available_topics"),
             "cache_updated_at": cached.get("updated_at"),
-            **build_gabbe_topic_mapping_summary(payload),
+            **build_gabbe_topic_mapping_summary(cached_payload),
         }
     )
