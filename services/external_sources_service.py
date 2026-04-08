@@ -9,18 +9,21 @@ SOURCE_ROUTING_RULES = {
     "obstetric_acute": {
         "query_keywords": [
             "pprom", "prom", "rupture of membranes", "prelabor rupture", "preterm labor",
+            "tocolysis", "tocolytic", "atosiban", "nifedipine", "fetal neuroprotection",
+            "magnesium sulfate", "magnesium sulphate", "neuroprotection",
             "preeclampsia", "pre-eclampsia", "gestational hypertension", "severe features",
             "pph", "postpartum hemorrhage", "uterine atony", "ctg", "late decelerations",
             "variable decelerations", "fetal monitoring", "labor", "labour", "chorioamnionitis",
             "ירידת מים", "לידה מוקדמת", "רעלת", "דימום אחרי לידה", "מוניטור", "צירים",
         ],
         "source_keywords": [
-            "pprom", "prom", "rupture of membranes", "preeclampsia", "severe features",
+            "pprom", "prom", "rupture of membranes", "preterm labor", "tocolysis", "atosiban",
+            "nifedipine", "magnesium sulfate", "neuroprotection", "preeclampsia", "severe features",
             "postpartum hemorrhage", "pph", "uterine atony", "ctg", "fetal monitoring",
             "labor", "labour", "group b strep", "gestational hypertension", "preterm",
         ],
         "title_keywords": [
-            "preeclampsia", "rupture of membranes", "postpartum hemorrhage",
+            "preeclampsia", "rupture of membranes", "preterm labour", "preterm labor", "postpartum hemorrhage",
             "fetal monitoring", "labor", "group b strep",
         ],
     },
@@ -150,7 +153,10 @@ FOCUS_SUBSIGNATURES = {
         "preeclampsia": ["preeclampsia", "pre-eclampsia", "gestational hypertension", "severe features", "רעלת"],
         "pph": ["pph", "postpartum hemorrhage", "uterine atony", "דימום אחרי לידה"],
         "ctg": ["ctg", "late decelerations", "variable decelerations", "fetal monitoring", "מוניטור"],
-        "preterm_labor": ["preterm labor", "לידה מוקדמת", "צירים"],
+        "preterm_labor": [
+            "preterm labor", "tocolysis", "tocolytic", "atosiban", "nifedipine",
+            "magnesium sulfate", "magnesium sulphate", "neuroprotection", "לידה מוקדמת", "צירים",
+        ],
     },
     "cervical_screening": {
         "hsil_pathway": ["hsil", "colposcopy", "cin", "דיספלזיה", "קולפוסקופיה"],
@@ -289,6 +295,37 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://publications.smfm.org/publications/consult-series/",
         "source_type": "external guideline",
         "keywords": ["smfm", "maternal fetal medicine", "consult"],
+    },
+    {
+        "title": "NICE Guideline: Preterm Labour and Birth",
+        "url": "https://www.nice.org.uk/guidance/ng25/chapter/Recommendations",
+        "source_type": "external guideline",
+        "keywords": [
+            "preterm labor", "preterm labour", "tocolysis", "tocolytic", "atosiban", "nifedipine",
+            "magnesium sulfate", "magnesium sulphate", "fetal neuroprotection", "neuroprotection",
+            "threatened preterm labor", "imminent preterm birth",
+        ],
+        "excerpt": "Preterm labor management separates tocolysis from fetal neuroprotection. The need for magnesium sulfate depends on gestational age and risk of imminent birth, not on whether atosiban or another tocolytic is used.",
+    },
+    {
+        "title": "ACOG Practice Bulletin: Management of Preterm Labor",
+        "url": "https://www.acog.org/clinical/clinical-guidance/practice-bulletin/articles/2016/10/management-of-preterm-labor",
+        "source_type": "external guideline",
+        "keywords": [
+            "preterm labor", "preterm labour", "tocolysis", "tocolytic", "atosiban", "nifedipine",
+            "uterine contractions", "cervical change", "threatened preterm birth",
+        ],
+        "excerpt": "Tocolysis is used selectively in preterm labor to gain time for corticosteroids, maternal transfer, or other indicated interventions; it does not replace assessment of whether delivery is otherwise indicated.",
+    },
+    {
+        "title": "ACOG Committee Opinion: Magnesium Sulfate Before Anticipated Preterm Birth for Neuroprotection",
+        "url": "https://www.acog.org/clinical/clinical-guidance/committee-opinion/articles/2010/03/magnesium-sulfate-before-anticipated-preterm-birth-for-neuroprotection",
+        "source_type": "external guideline",
+        "keywords": [
+            "magnesium sulfate", "magnesium sulphate", "fetal neuroprotection", "neuroprotection",
+            "preterm birth", "imminent preterm birth", "preterm labor", "preterm labour",
+        ],
+        "excerpt": "Magnesium sulfate for fetal neuroprotection is an independent decision linked to anticipated early preterm birth, not a prerequisite for choosing a specific tocolytic agent.",
     },
     {
         "title": "ASRM: Fertility Evaluation of Infertile Women",
@@ -679,6 +716,24 @@ def get_forced_authoritative_source(user_message):
         "nonpregnant",
         "non pregnant",
     ]
+    preterm_labor_terms = [
+        "preterm labor",
+        "preterm labour",
+        "tocolysis",
+        "tocolytic",
+        "atosiban",
+        "nifedipine",
+        "threatened preterm labor",
+        "threatened preterm labour",
+    ]
+    magnesium_neuroprotection_terms = [
+        "magnesium sulfate",
+        "magnesium sulphate",
+        "fetal neuroprotection",
+        "neuroprotection",
+        "anticipated preterm birth",
+        "imminent preterm birth",
+    ]
     neuraxial_platelet_terms = [
         "platelets",
         "thrombocytopenia",
@@ -699,6 +754,10 @@ def get_forced_authoritative_source(user_message):
         forced_title = "CDC U.S. Medical Eligibility Criteria for Contraceptive Use"
     elif any(term in normalized for term in neuraxial_platelet_terms):
         forced_title = "SOAP Consensus Statement on Thrombocytopenia and Neuraxial Procedures"
+    elif any(term in normalized for term in preterm_labor_terms):
+        forced_title = "NICE Guideline: Preterm Labour and Birth"
+    elif any(term in normalized for term in magnesium_neuroprotection_terms):
+        forced_title = "ACOG Committee Opinion: Magnesium Sulfate Before Anticipated Preterm Birth for Neuroprotection"
     elif any(term in normalized for term in high_risk_pregnancy_terms):
         forced_title = "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia"
     elif any(term in normalized for term in lower_uti_overlap_terms) and not any(

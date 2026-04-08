@@ -326,3 +326,17 @@ Expected direction:
 
 Expected source family:
 - CDC U.S. MEC
+
+### 11. Atosiban and magnesium neuroprotection
+
+```text
+Is it appropriate to give atosiban without magnesium sulfate neuroprotection in threatened preterm labor? Please answer directly and include the source you are relying on.
+```
+
+Expected direction:
+- Separate tocolysis from fetal neuroprotection
+- Magnesium decision depends on gestational age and imminence of birth
+- No out-of-scope language
+
+Expected source family:
+- NICE preterm labour and birth or ACOG magnesium sulfate neuroprotection / preterm labor
