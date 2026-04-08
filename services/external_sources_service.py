@@ -80,6 +80,24 @@ SOURCE_ROUTING_RULES = {
             "pid", "bacterial vaginosis", "trichomoniasis", "candidiasis",
         ],
     },
+    "adjacent_core_overlap": {
+        "query_keywords": [
+            "uti", "urinary tract infection", "cystitis", "pyelonephritis", "flank pain",
+            "dysuria", "frequency", "non pregnant woman", "nonpregnant woman",
+            "dvt", "pe", "pulmonary embolism", "anticoagulation", "heparin", "enoxaparin",
+            "platelets", "thrombocytopenia", "neuraxial", "epidural",
+            "anemia", "iron deficiency", "ferritin", "b12",
+            "hyponatremia", "water intoxication", "lactation medication", "breastfeeding medication",
+            "uti not pregnant", "urinary infection", "cva tenderness",
+        ],
+        "source_keywords": [
+            "uti", "cystitis", "pyelonephritis", "urinary tract infection", "dvt", "anticoagulation",
+            "lactation", "breastfeeding", "platelets", "thrombocytopenia", "epidural", "hyponatremia",
+        ],
+        "title_keywords": [
+            "uti", "urinary tract infection", "lactmed", "contraceptive", "thrombocytopenia", "neuraxial",
+        ],
+    },
     "fertility": {
         "query_keywords": [
             "fertility", "infertility", "trying to conceive", "ttc", "ivf", "iui", "hsg",
@@ -177,6 +195,16 @@ EXTERNAL_SOURCE_CATALOG = [
         "keywords": ["hpv", "pap smear", "pap test", "hpv typing", "cervical screening", "cervical dysplasia"],
         "regions": ["israel"],
         "priority": 2,
+    },
+    {
+        "title": "NICE Guideline: Lower UTI (Women)",
+        "url": "https://www.nice.org.uk/guidance/ng109",
+        "source_type": "external guideline",
+        "keywords": [
+            "uti", "urinary tract infection", "cystitis", "dysuria", "frequency",
+            "nonpregnant woman", "non pregnant woman", "lower uti", "acute cystitis",
+        ],
+        "excerpt": "Lower UTI in nonpregnant women is usually managed with first-line oral antibiotics, selected with attention to local resistance patterns and stewardship.",
     },
     {
         "title": "LactMed Database",
@@ -347,7 +375,7 @@ EXTERNAL_SOURCE_CATALOG = [
         "title": "CDC U.S. Medical Eligibility Criteria for Contraceptive Use",
         "url": "https://www.cdc.gov/contraception/hcp/usmec/index.html",
         "source_type": "external guideline",
-        "keywords": ["combined ocp", "cocp", "ocp", "pill", "contraception", "contraceptive eligibility"],
+        "keywords": ["combined ocp", "cocp", "ocp", "pill", "contraception", "contraceptive eligibility", "dvt", "pe", "vte", "postpartum dvt"],
     },
     {
         "title": "ACOG: Emergency Contraception",
@@ -406,6 +434,13 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://www.acog.org/clinical/clinical-guidance/clinical-consensus/articles/2023/08/urinary-tract-infections-in-pregnant-individuals",
         "source_type": "external guideline",
         "keywords": ["uti", "asymptomatic bacteriuria", "pyelonephritis", "urinary infection", "pregnancy uti"],
+    },
+    {
+        "title": "SOAP Consensus Statement on Thrombocytopenia and Neuraxial Procedures",
+        "url": "https://soap.memberclicks.net/assets/docs/SOAP%20Consensus%20Statement%20Thrombocytopenia%202021.pdf",
+        "source_type": "consensus statement",
+        "keywords": ["platelets", "thrombocytopenia", "neuraxial", "epidural", "spinal", "preeclampsia platelets"],
+        "excerpt": "Thrombocytopenia changes neuraxial decision-making and requires risk assessment in context rather than automatic placement.",
     },
     {
         "title": "ACOG: Breastfeeding Your Baby",
@@ -614,6 +649,42 @@ def get_forced_authoritative_source(user_message):
         "ca-125",
         "gynecologic oncology",
     ]
+    lactation_medication_terms = [
+        "lactation",
+        "breastfeeding",
+        "breast feeding",
+        "safe in breastfeeding",
+        "compatible with breastfeeding",
+        "drug in breastfeeding",
+        "medication in breastfeeding",
+        "nitrofurantoin breastfeeding",
+    ]
+    vte_contraception_terms = [
+        "dvt",
+        "vte",
+        "pe",
+        "pulmonary embolism",
+        "combined oral contraceptive",
+        "combined pill",
+        "combined hormonal contraception",
+        "estrogen contraception",
+        "postpartum dvt",
+    ]
+    lower_uti_overlap_terms = [
+        "uti",
+        "urinary tract infection",
+        "cystitis",
+        "dysuria",
+        "frequency",
+        "nonpregnant",
+        "non pregnant",
+    ]
+    neuraxial_platelet_terms = [
+        "platelets",
+        "thrombocytopenia",
+        "neuraxial",
+        "epidural",
+    ]
 
     forced_title = None
     if any(term in normalized for term in early_pregnancy_terms):
@@ -622,8 +693,18 @@ def get_forced_authoritative_source(user_message):
         forced_title = "ACOG: Perimenopausal Bleeding and Bleeding After Menopause"
     elif any(term in normalized for term in adnexal_mass_terms):
         forced_title = "ACOG Practice Bulletin: Evaluation and Management of Adnexal Masses"
+    elif any(term in normalized for term in lactation_medication_terms):
+        forced_title = "LactMed Database"
+    elif any(term in normalized for term in vte_contraception_terms):
+        forced_title = "CDC U.S. Medical Eligibility Criteria for Contraceptive Use"
+    elif any(term in normalized for term in neuraxial_platelet_terms):
+        forced_title = "SOAP Consensus Statement on Thrombocytopenia and Neuraxial Procedures"
     elif any(term in normalized for term in high_risk_pregnancy_terms):
         forced_title = "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia"
+    elif any(term in normalized for term in lower_uti_overlap_terms) and not any(
+        term in normalized for term in ["pregnancy uti", "pregnant", "pyelonephritis in pregnancy"]
+    ):
+        forced_title = "NICE Guideline: Lower UTI (Women)"
     elif any(term in normalized for term in fertility_terms):
         if any(
             term in normalized

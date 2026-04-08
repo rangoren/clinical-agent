@@ -41,6 +41,36 @@ import re
 import time
 
 
+PROFILE_STATUS_PATTERNS = (
+    "what residency year do you have saved",
+    "what residency year is saved",
+    "what do you have saved for me",
+    "what you have saved on me",
+    "what do you have saved on me",
+    "what have you saved on me",
+    "what have you saved for me",
+    "what do you know about my training",
+    "what do you know about me",
+    "what is saved in my profile",
+    "what's saved in my profile",
+    "what training level do you have",
+    "what training stage do you have",
+)
+
+RESIDENCY_YEAR_STATUS_PATTERNS = (
+    "what residency year do you have saved",
+    "what residency year is saved",
+    "which residency year do you have",
+    "which residency year is saved",
+)
+
+TRAINING_STAGE_STATUS_PATTERNS = (
+    "what training level do you have",
+    "what training stage do you have",
+    "what do you know about my training",
+)
+
+
 def _reply_has_visible_text(reply):
     if not reply:
         return False
@@ -577,6 +607,146 @@ def _build_general_greeting_reply(user_profile):
     return "Hi. I’m here and ready to help."
 
 
+def _normalize_plain_text(text):
+    return re.sub(r"\s+", " ", (text or "").strip().lower())
+
+
+def _looks_like_profile_status_question(user_message):
+    normalized = _normalize_plain_text(user_message)
+    if not normalized or "?" not in normalized:
+        return False
+    if any(pattern in normalized for pattern in PROFILE_STATUS_PATTERNS):
+        return True
+    if "saved" in normalized and any(token in normalized for token in (" me", "profile", "training", "residency")):
+        return True
+    if "what do you know" in normalized and any(token in normalized for token in ("me", "training", "profile")):
+        return True
+    return False
+
+
+def _build_profile_status_reply(user_profile):
+    if not user_profile:
+        return "I don’t have a saved profile for you yet."
+
+    training_stage = user_profile.get("training_stage")
+    residency_year = user_profile.get("residency_year")
+    country = user_profile.get("country")
+    subspecialty = user_profile.get("subspecialty")
+    answer_style = user_profile.get("answer_style")
+
+    lines = []
+    if training_stage:
+        lines.append(f"Training stage saved: {training_stage}.")
+    else:
+        lines.append("I don’t have a training stage saved for you yet.")
+
+    if training_stage == "resident":
+        if residency_year:
+            lines.append(f"Residency year saved: {residency_year}.")
+        else:
+            lines.append("I don’t have a residency year saved for you yet.")
+    elif training_stage in {"specialist", "fellowship"}:
+        lines.append("Residency year is not applicable for your current training stage.")
+    elif residency_year:
+        lines.append(f"Residency year saved: {residency_year}.")
+
+    if country:
+        lines.append(f"Country saved: {country}.")
+    if subspecialty:
+        lines.append(f"Subspecialty saved: {subspecialty}.")
+    if answer_style:
+        lines.append(f"Preferred answer style: {answer_style}.")
+
+    return "<br>".join(lines)
+
+
+def _build_residency_year_status_reply(user_profile):
+    if not user_profile:
+        return "I don’t have a saved profile for you yet."
+
+    training_stage = user_profile.get("training_stage")
+    residency_year = user_profile.get("residency_year")
+
+    if training_stage == "resident" and residency_year:
+        return f"Residency year saved: {residency_year}."
+    if training_stage == "resident":
+        return "I don’t have a residency year saved for you yet."
+    if training_stage in {"specialist", "fellowship"}:
+        return "Residency year is not applicable for your current training stage."
+    if residency_year:
+        return f"Residency year saved: {residency_year}."
+    return "I don’t have a residency year saved for you yet."
+
+
+def _build_training_stage_status_reply(user_profile):
+    if not user_profile:
+        return "I don’t have a saved profile for you yet."
+
+    training_stage = user_profile.get("training_stage")
+    if training_stage:
+        return f"Training stage saved: {training_stage}."
+    return "I don’t have a training stage saved for you yet."
+
+
+def _handle_profile_status_message(session_id, user_profile, user_message):
+    normalized = _normalize_plain_text(user_message)
+    if any(pattern in normalized for pattern in RESIDENCY_YEAR_STATUS_PATTERNS):
+        reply = _build_residency_year_status_reply(user_profile)
+    elif any(pattern in normalized for pattern in TRAINING_STAGE_STATUS_PATTERNS):
+        reply = _build_training_stage_status_reply(user_profile)
+    else:
+        reply = _build_profile_status_reply(user_profile)
+    save_message("user", user_message, session_id, metadata={"intent": "profile_status"})
+    assistant_message_id = save_message(
+        "assistant",
+        reply,
+        session_id,
+        metadata={"intent": "profile_status_reply"},
+    )
+    return _build_message_response(
+        reply=reply,
+        assistant_message_id=assistant_message_id,
+    )
+
+
+def _handle_profile_update_message(session_id, user_profile, user_message, save_user_message=True):
+    extracted_updates, extracted_fields = extract_profile_updates_from_message(user_message, user_profile or {})
+    if not extracted_updates or not is_profile_only_message(user_message, extracted_fields):
+        return None
+
+    update_user_profile(session_id, extracted_updates)
+    refreshed_profile = get_user_profile(session_id)
+
+    lines = []
+    if "training_stage" in extracted_updates:
+        lines.append(f"Saved training stage: {refreshed_profile.get('training_stage')}.")
+    if "residency_year" in extracted_updates:
+        lines.append(f"Saved residency year: {refreshed_profile.get('residency_year')}.")
+    if "country" in extracted_updates:
+        lines.append(f"Saved country: {refreshed_profile.get('country')}.")
+    if "subspecialty" in extracted_updates:
+        lines.append(f"Saved subspecialty: {refreshed_profile.get('subspecialty')}.")
+    if "answer_style" in extracted_updates:
+        lines.append(f"Saved answer style: {refreshed_profile.get('answer_style')}.")
+    if not lines:
+        lines.append("I updated your profile.")
+
+    reply = "<br>".join(lines)
+    if save_user_message:
+        save_message("user", user_message, session_id, metadata={"intent": "profile_update"})
+    assistant_message_id = save_message(
+        "assistant",
+        reply,
+        session_id,
+        metadata={"intent": "profile_update_reply", "updated_fields": list(extracted_updates.keys())},
+    )
+    log_event("profile_updated_from_chat", session_id, {"updated_fields": list(extracted_updates.keys())})
+    return _build_message_response(
+        reply=reply,
+        assistant_message_id=assistant_message_id,
+    )
+
+
 def _fallback_empty_clinical_reply(display_sources):
     if display_sources:
         return (
@@ -605,6 +775,18 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             reply=reply,
             assistant_message_id=assistant_message_id,
         )
+
+    if _looks_like_profile_status_question(user_message):
+        return _handle_profile_status_message(session_id, user_profile, user_message)
+
+    profile_update_response = _handle_profile_update_message(
+        session_id,
+        user_profile,
+        user_message,
+        save_user_message=save_user_message,
+    )
+    if profile_update_response:
+        return profile_update_response
 
     started_at = time.perf_counter()
     timing = {}

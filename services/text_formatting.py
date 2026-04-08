@@ -18,6 +18,18 @@ def _clean_broken_source_phrasing(text):
         cleaned,
         flags=re.IGNORECASE | re.DOTALL,
     )
+    cleaned = re.sub(
+        r"This is outside my obstetrics and gynecology scope.*?(?=(Most likely:|Danger to rule out:|What changes management now:|Next step:|$))",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    cleaned = re.sub(
+        r"This is outside my .*? scope.*?(?=(Most likely:|Danger to rule out:|What changes management now:|Next step:|$))",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
     cleaned = re.sub(r" {2,}", " ", cleaned)
     return cleaned.strip()
 

@@ -223,10 +223,9 @@ def normalize_residency_year(value):
     resident_phrase_match = re.search(r"\b([1-7])\s*(?:st|nd|rd|th)?\s*(?:year\s+)?resident\b", cleaned)
     if resident_phrase_match:
         return f"R{resident_phrase_match.group(1)}"
-
-    match = re.search(r"([1-7])", cleaned)
-    if match:
-        return f"R{match.group(1)}"
+    r_format_match = re.search(r"\br\s*([1-7])\b", cleaned)
+    if r_format_match:
+        return f"R{r_format_match.group(1)}"
 
     for alias, normalized in RESIDENCY_YEAR_WORD_ALIASES.items():
         if re.search(rf"\b{re.escape(alias)}\b", cleaned):
@@ -416,6 +415,11 @@ def extract_profile_updates_from_message(user_message, profile):
 
     residency_year = normalize_residency_year(cleaned)
     stage_for_year = updates.get("training_stage") or profile.get("training_stage")
+    if residency_year and not stage_for_year:
+        updates["training_stage"] = "resident"
+        stage_for_year = "resident"
+        if "training_stage" not in extracted_fields:
+            extracted_fields.append("training_stage")
     if residency_year and stage_for_year == "resident":
         updates["residency_year"] = residency_year
         extracted_fields.append("residency_year")
@@ -649,7 +653,10 @@ def build_user_profile_context(profile):
 
     country = profile.get("country") or "Not provided"
     training_stage = profile.get("training_stage") or "Not provided"
-    residency_year = profile.get("residency_year") or "Not applicable"
+    if profile.get("training_stage") in {"specialist", "fellowship"}:
+        residency_year = "Not applicable"
+    else:
+        residency_year = profile.get("residency_year") or "Not saved"
     subspecialty = profile.get("subspecialty") or "Not provided"
     answer_style = profile.get("answer_style") or "balanced"
 
