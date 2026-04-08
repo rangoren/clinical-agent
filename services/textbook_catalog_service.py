@@ -306,6 +306,19 @@ def build_gabbe_topic_mapping():
     }
 
 
+def build_gabbe_topic_mapping_summary(payload):
+    topics = payload.get("topics") or []
+    return {
+        "book_id": payload.get("book_id", "gabbe_9"),
+        "topic_count": payload.get("topic_count", len(topics)),
+        "mapped_count": payload.get("mapped_count", sum(1 for item in topics if item.get("status") == "mapped")),
+        "unmapped_count": payload.get("unmapped_count", sum(1 for item in topics if item.get("status") != "mapped")),
+        "tier_a_count": sum(1 for item in topics if item.get("tier") == "A"),
+        "tier_b_count": sum(1 for item in topics if item.get("tier") == "B"),
+        "preview": topics[:12],
+    }
+
+
 @lru_cache(maxsize=4)
 def build_textbook_catalog(book_id):
     book = get_book_object(book_id)

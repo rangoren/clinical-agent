@@ -2,8 +2,11 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 from routes.home_routes import APP_VERSION
+from services.logging_service import log_event
+from services.textbook_cache_service import get_textbook_cache, save_textbook_cache
 from services.textbook_catalog_service import (
     build_gabbe_topic_mapping,
+    build_gabbe_topic_mapping_summary,
     build_textbook_catalog,
     get_gabbe_mvp_topic_map,
     search_gabbe_topic,
@@ -92,10 +95,46 @@ def health_textbooks_gabbe_mapping():
     if APP_ENV == "production":
         return JSONResponse({"status": "forbidden"}, status_code=403)
 
-    payload = build_gabbe_topic_mapping()
+    cached = get_textbook_cache("gabbe_topic_mapping")
+    if not cached:
+        return JSONResponse(
+            {
+                "status": "not_ready",
+                "message": "Gabbe topic mapping has not been precomputed yet.",
+            },
+            status_code=202,
+        )
+
+    payload = cached.get("payload") or {}
     return JSONResponse(
         {
             "status": "ok",
-            **payload,
+            "cache_updated_at": cached.get("updated_at"),
+            **build_gabbe_topic_mapping_summary(payload),
+        }
+    )
+
+
+@router.post("/health/textbooks/gabbe/mapping/rebuild")
+def health_textbooks_gabbe_mapping_rebuild():
+    if APP_ENV == "production":
+        return JSONResponse({"status": "forbidden"}, status_code=403)
+
+    payload = build_gabbe_topic_mapping()
+    cached = save_textbook_cache("gabbe_topic_mapping", payload)
+    log_event(
+        "gabbe_topic_mapping_rebuilt",
+        payload={
+            "topic_count": payload.get("topic_count"),
+            "mapped_count": payload.get("mapped_count"),
+            "unmapped_count": payload.get("unmapped_count"),
+        },
+    )
+    return JSONResponse(
+        {
+            "status": "ok",
+            "message": "Gabbe topic mapping rebuilt and cached.",
+            "cache_updated_at": cached.get("updated_at"),
+            **build_gabbe_topic_mapping_summary(payload),
         }
     )
