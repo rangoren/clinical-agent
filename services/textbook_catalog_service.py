@@ -29,6 +29,25 @@ SHORT_ALL_CAPS_RE = re.compile(r"^[A-Z][A-Z0-9,\-:;/()' ]{6,90}$")
 
 TEXT_SCAN_START_PAGE = 1
 TEXT_SCAN_END_PAGE = 250
+TOPIC_SEARCH_SCAN_END_PAGE = 900
+
+GABBE_TOPIC_QUERIES = {
+    "preeclampsia": ["preeclampsia", "pre-eclampsia", "severe features"],
+    "gestational hypertension": ["gestational hypertension", "hypertension in pregnancy"],
+    "preterm labor": ["preterm labor", "preterm labour", "tocolysis"],
+    "pprom": ["pprom", "prelabor rupture of membranes", "preterm premature rupture"],
+    "fetal growth restriction": ["fetal growth restriction", "growth restriction", "fgr"],
+    "placenta previa": ["placenta previa"],
+    "placenta accreta spectrum": ["placenta accreta", "accreta spectrum"],
+    "multiple gestation": ["multiple gestation", "twin pregnancy", "triplet pregnancy"],
+    "gestational diabetes": ["gestational diabetes", "gdm"],
+    "postpartum hemorrhage": ["postpartum hemorrhage", "pph", "uterine atony"],
+    "operative vaginal delivery": ["operative vaginal delivery", "vacuum extraction", "forceps delivery"],
+    "shoulder dystocia": ["shoulder dystocia"],
+    "fetal surveillance": ["fetal surveillance", "biophysical profile", "nonstress test", "ctg"],
+    "labor induction": ["labor induction", "labour induction", "cervical ripening"],
+    "trial of labor after cesarean": ["trial of labor after cesarean", "tOLAC", "VBAC", "vaginal birth after cesarean"],
+}
 
 
 def _clean_text(value):
@@ -45,6 +64,10 @@ def _page_text_lines(page):
         if cleaned:
             cleaned_lines.append(cleaned)
     return cleaned_lines
+
+
+def _page_text(page):
+    return "\n".join(_page_text_lines(page))
 
 
 def _candidate_heading(line):
@@ -118,6 +141,65 @@ def _scan_gabbe_text_catalog(reader):
         )
 
     return catalog
+
+
+def _snippet_around_match(text, match_start, radius=180):
+    start = max(0, match_start - radius)
+    end = min(len(text), match_start + radius)
+    snippet = text[start:end]
+    snippet = re.sub(r"\s+", " ", snippet).strip()
+    return snippet
+
+
+def _topic_queries(topic):
+    queries = GABBE_TOPIC_QUERIES.get(topic, [])
+    if queries:
+        return queries
+    return [topic]
+
+
+@lru_cache(maxsize=16)
+def search_gabbe_topic(topic):
+    book = get_book_object("gabbe_9")
+    client = get_r2_client()
+    response = client.get_object(Bucket=R2_BUCKET_NAME, Key=book["key"])
+    try:
+        pdf_bytes = response["Body"].read()
+    finally:
+        response["Body"].close()
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    page_limit = min(TOPIC_SEARCH_SCAN_END_PAGE, len(reader.pages))
+    normalized_queries = [query.lower() for query in _topic_queries(topic)]
+    results = []
+
+    for page_number in range(1, page_limit + 1):
+        text = _page_text(reader.pages[page_number - 1])
+        if not text:
+            continue
+        lower_text = text.lower()
+        for query in normalized_queries:
+            match_index = lower_text.find(query)
+            if match_index == -1:
+                continue
+            results.append(
+                {
+                    "query": query,
+                    "page": page_number,
+                    "snippet": _snippet_around_match(text, match_index),
+                }
+            )
+            break
+
+    return {
+        "topic": topic,
+        "queries": normalized_queries,
+        "scan_window": {"start_page": 1, "end_page": page_limit},
+        "match_count": len(results),
+        "matches": results[:12],
+    }
 
 
 @lru_cache(maxsize=4)
