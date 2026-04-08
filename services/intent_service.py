@@ -54,6 +54,21 @@ CLINICAL_HINTS = (
     "smear",
 )
 
+PROFILE_OR_ACCOUNT_HINTS = (
+    "profile",
+    "training level",
+    "training stage",
+    "residency year",
+    "what do you know about me",
+    "what do you have saved",
+    "what is saved",
+    "saved for me",
+    "remember me as",
+    "i am r",
+    "i'm r",
+    "year resident",
+)
+
 
 def build_intent_classifier_prompt(user_message, recent_context=""):
     return f"""
@@ -128,6 +143,8 @@ def _is_greeting_message(cleaned_message):
 
 
 def _looks_like_clinical_consult(cleaned_message):
+    if any(hint in cleaned_message for hint in PROFILE_OR_ACCOUNT_HINTS):
+        return False
     return any(hint in cleaned_message for hint in CLINICAL_HINTS) or "?" in cleaned_message
 
 
