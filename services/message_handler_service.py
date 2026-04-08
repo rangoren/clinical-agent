@@ -53,6 +53,19 @@ PROFILE_STATUS_PATTERNS = (
     "what training stage do you have",
 )
 
+RESIDENCY_YEAR_STATUS_PATTERNS = (
+    "what residency year do you have saved",
+    "what residency year is saved",
+    "which residency year do you have",
+    "which residency year is saved",
+)
+
+TRAINING_STAGE_STATUS_PATTERNS = (
+    "what training level do you have",
+    "what training stage do you have",
+    "what do you know about my training",
+)
+
 
 def _reply_has_visible_text(reply):
     if not reply:
@@ -637,8 +650,42 @@ def _build_profile_status_reply(user_profile):
     return "<br>".join(lines)
 
 
+def _build_residency_year_status_reply(user_profile):
+    if not user_profile:
+        return "I don’t have a saved profile for you yet."
+
+    training_stage = user_profile.get("training_stage")
+    residency_year = user_profile.get("residency_year")
+
+    if training_stage == "resident" and residency_year:
+        return f"Residency year saved: {residency_year}."
+    if training_stage == "resident":
+        return "I don’t have a residency year saved for you yet."
+    if training_stage in {"specialist", "fellowship"}:
+        return "Residency year is not applicable for your current training stage."
+    if residency_year:
+        return f"Residency year saved: {residency_year}."
+    return "I don’t have a residency year saved for you yet."
+
+
+def _build_training_stage_status_reply(user_profile):
+    if not user_profile:
+        return "I don’t have a saved profile for you yet."
+
+    training_stage = user_profile.get("training_stage")
+    if training_stage:
+        return f"Training stage saved: {training_stage}."
+    return "I don’t have a training stage saved for you yet."
+
+
 def _handle_profile_status_message(session_id, user_profile, user_message):
-    reply = _build_profile_status_reply(user_profile)
+    normalized = _normalize_plain_text(user_message)
+    if any(pattern in normalized for pattern in RESIDENCY_YEAR_STATUS_PATTERNS):
+        reply = _build_residency_year_status_reply(user_profile)
+    elif any(pattern in normalized for pattern in TRAINING_STAGE_STATUS_PATTERNS):
+        reply = _build_training_stage_status_reply(user_profile)
+    else:
+        reply = _build_profile_status_reply(user_profile)
     save_message("user", user_message, session_id, metadata={"intent": "profile_status"})
     assistant_message_id = save_message(
         "assistant",
