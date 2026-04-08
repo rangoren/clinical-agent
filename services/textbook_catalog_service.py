@@ -248,6 +248,64 @@ def search_gabbe_topic(topic):
     }
 
 
+def _cluster_match_pages(matches, gap=3):
+    pages = sorted({match["page"] for match in matches})
+    if not pages:
+        return []
+
+    clusters = []
+    current_start = pages[0]
+    current_end = pages[0]
+
+    for page in pages[1:]:
+        if page - current_end <= gap:
+            current_end = page
+            continue
+        clusters.append({"page_start": current_start, "page_end": current_end})
+        current_start = page
+        current_end = page
+
+    clusters.append({"page_start": current_start, "page_end": current_end})
+    return clusters
+
+
+def _range_for_cluster(cluster, padding=2):
+    return {
+        "page_start": max(1, cluster["page_start"] - padding),
+        "page_end": cluster["page_end"] + padding,
+    }
+
+
+@lru_cache(maxsize=1)
+def build_gabbe_topic_mapping():
+    mappings = []
+    for topic_entry in GABBE_TOPIC_MAP:
+        topic = topic_entry["topic"]
+        search_payload = search_gabbe_topic(topic)
+        matches = search_payload["matches"]
+        clusters = _cluster_match_pages(matches, gap=3)
+        candidate_ranges = [_range_for_cluster(cluster, padding=2) for cluster in clusters[:3]]
+
+        mappings.append(
+            {
+                **topic_entry,
+                "queries": search_payload["queries"],
+                "match_count": search_payload["match_count"],
+                "candidate_ranges": candidate_ranges,
+                "sample_matches": matches[:3],
+                "status": "mapped" if candidate_ranges else "unmapped",
+            }
+        )
+
+    return {
+        "book_id": "gabbe_9",
+        "topic_count": len(mappings),
+        "mapped_count": sum(1 for item in mappings if item["status"] == "mapped"),
+        "unmapped_count": sum(1 for item in mappings if item["status"] != "mapped"),
+        "topics": mappings,
+    }
+
+
 @lru_cache(maxsize=4)
 def build_textbook_catalog(book_id):
     book = get_book_object(book_id)

@@ -2,7 +2,12 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 from routes.home_routes import APP_VERSION
-from services.textbook_catalog_service import build_textbook_catalog, get_gabbe_mvp_topic_map, search_gabbe_topic
+from services.textbook_catalog_service import (
+    build_gabbe_topic_mapping,
+    build_textbook_catalog,
+    get_gabbe_mvp_topic_map,
+    search_gabbe_topic,
+)
 from services.textbook_audit_service import audit_textbook_objects
 from settings import (
     APP_BASE_URL,
@@ -77,6 +82,20 @@ def health_textbooks_gabbe_search(topic: str = Query(..., min_length=2)):
         {
             "status": "ok",
             "book_id": "gabbe_9",
+            **payload,
+        }
+    )
+
+
+@router.get("/health/textbooks/gabbe/mapping")
+def health_textbooks_gabbe_mapping():
+    if APP_ENV == "production":
+        return JSONResponse({"status": "forbidden"}, status_code=403)
+
+    payload = build_gabbe_topic_mapping()
+    return JSONResponse(
+        {
+            "status": "ok",
             **payload,
         }
     )
