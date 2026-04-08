@@ -42,6 +42,13 @@ def get_book_objects():
     return list(BOOK_OBJECTS)
 
 
+def get_book_object(book_id):
+    for book in BOOK_OBJECTS:
+        if book["book_id"] == book_id:
+            return dict(book)
+    return None
+
+
 @lru_cache(maxsize=1)
 def get_r2_client():
     if not is_r2_configured():

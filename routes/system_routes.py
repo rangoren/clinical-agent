@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from routes.home_routes import APP_VERSION
+from services.textbook_catalog_service import build_textbook_catalog, get_gabbe_mvp_topic_map
 from services.textbook_audit_service import audit_textbook_objects
 from settings import (
     APP_BASE_URL,
@@ -41,3 +42,25 @@ def health_textbooks():
     if APP_ENV == "production":
         return JSONResponse({"status": "forbidden"}, status_code=403)
     return JSONResponse(audit_textbook_objects())
+
+
+@router.get("/health/textbooks/gabbe")
+def health_textbooks_gabbe():
+    if APP_ENV == "production":
+        return JSONResponse({"status": "forbidden"}, status_code=403)
+
+    catalog_payload = build_textbook_catalog("gabbe_9")
+    preview = catalog_payload["catalog"][:40]
+    return JSONResponse(
+        {
+            "status": "ok",
+            "book_id": catalog_payload["book_id"],
+            "title": catalog_payload["title"],
+            "edition": catalog_payload["edition"],
+            "domain": catalog_payload["domain"],
+            "page_count": catalog_payload["page_count"],
+            "outline_entry_count": catalog_payload["outline_entry_count"],
+            "catalog_preview": preview,
+            "gabbe_mvp_topic_map": get_gabbe_mvp_topic_map(),
+        }
+    )
