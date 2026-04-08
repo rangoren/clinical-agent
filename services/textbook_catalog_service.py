@@ -24,85 +24,99 @@ GABBE_TOPIC_MAP = [
     {"topic": "trial of labor after cesarean", "domain": "obstetrics", "priority": "high", "why": "counseling and contraindications"},
 ]
 
+CHAPTER_TITLE_RE = re.compile(r"^\s*(\d{1,3})\s*[.\-]?\s+([A-Z][A-Za-z0-9,\-:;/()' ]{6,120})\s*$")
+SHORT_ALL_CAPS_RE = re.compile(r"^[A-Z][A-Z0-9,\-:;/()' ]{6,90}$")
 
-def _clean_title(value):
-    text = re.sub(r"\s+", " ", str(value or "")).strip()
-    text = re.sub(r"[^\x20-\x7E]+", " ", text)
+TEXT_SCAN_START_PAGE = 1
+TEXT_SCAN_END_PAGE = 250
+
+
+def _clean_text(value):
+    text = re.sub(r"[^\x20-\x7E]+", " ", str(value or ""))
     text = re.sub(r"\s+", " ", text).strip()
-    text = text.replace(" ?", "")
-    return text or "Untitled"
+    return text
 
 
-def _destination_page_number(reader, destination):
-    try:
-        return reader.get_destination_page_number(destination) + 1
-    except Exception:
+def _page_text_lines(page):
+    raw_text = page.extract_text() or ""
+    cleaned_lines = []
+    for line in raw_text.splitlines():
+        cleaned = _clean_text(line)
+        if cleaned:
+            cleaned_lines.append(cleaned)
+    return cleaned_lines
+
+
+def _candidate_heading(line):
+    if not line:
         return None
 
-
-def _flatten_outline(reader, outline, depth=0, entries=None):
-    entries = entries or []
-    for item in outline or []:
-        if isinstance(item, list):
-            _flatten_outline(reader, item, depth=depth + 1, entries=entries)
-            continue
-
-        title = _clean_title(getattr(item, "title", None) or getattr(item, "/Title", None) or str(item))
-        page = _destination_page_number(reader, item)
-        entry = {
-            "title": title,
-            "page": page,
-            "depth": depth,
+    chapter_match = CHAPTER_TITLE_RE.match(line)
+    if chapter_match:
+        return {
+            "title": f"{chapter_match.group(1)}. {chapter_match.group(2).strip()}",
+            "level": "chapter",
         }
-        entries.append(entry)
-    return entries
+
+    if SHORT_ALL_CAPS_RE.match(line):
+        if any(token in line.lower() for token in ("copyright", "elsevier", "isbn", "printed")):
+            return None
+        return {
+            "title": line.title(),
+            "level": "section",
+        }
+
+    return None
 
 
-def _dedupe_and_sort_entries(flat_entries):
-    deduped = []
+def _dedupe_preserve_order(entries):
     seen = set()
-    for entry in flat_entries:
-        title = _clean_title(entry.get("title"))
-        page = entry.get("page")
-        depth = int(entry.get("depth") or 0)
-        if not page:
-            continue
-        key = (title.lower(), page, depth)
+    deduped = []
+    for entry in entries:
+        key = (entry["title"].lower(), entry["page_start"], entry["level"])
         if key in seen:
             continue
         seen.add(key)
-        deduped.append({"title": title, "page": page, "depth": depth})
-
-    deduped.sort(key=lambda entry: (entry["page"], entry["depth"], entry["title"].lower()))
+        deduped.append(entry)
     return deduped
 
 
-def _to_catalog(flat_entries, page_count, max_depth=2):
-    filtered_entries = [entry for entry in _dedupe_and_sort_entries(flat_entries) if entry["depth"] <= max_depth]
+def _scan_gabbe_text_catalog(reader):
+    page_limit = min(TEXT_SCAN_END_PAGE, len(reader.pages))
+    candidates = []
+
+    for page_number in range(TEXT_SCAN_START_PAGE, page_limit + 1):
+        page = reader.pages[page_number - 1]
+        for line in _page_text_lines(page)[:18]:
+            heading = _candidate_heading(line)
+            if not heading:
+                continue
+            candidates.append(
+                {
+                    "title": heading["title"],
+                    "level": heading["level"],
+                    "page_start": page_number,
+                }
+            )
+
+    deduped = _dedupe_preserve_order(candidates)
+
     catalog = []
-    for index, entry in enumerate(filtered_entries):
-        current_page = entry.get("page")
-        next_page = None
-        for later in filtered_entries[index + 1:]:
-            later_page = later.get("page")
-            if later_page and current_page and later_page >= current_page:
-                next_page = later_page
+    for index, entry in enumerate(deduped):
+        next_page = page_limit
+        for later in deduped[index + 1:]:
+            if later["page_start"] > entry["page_start"]:
+                next_page = later["page_start"] - 1
                 break
-
-        page_end = page_count
-        if current_page and next_page and next_page > current_page:
-            page_end = next_page - 1
-        elif current_page:
-            page_end = page_count
-
         catalog.append(
             {
                 "title": entry["title"],
-                "depth": entry["depth"],
-                "page_start": current_page,
-                "page_end": page_end,
+                "level": entry["level"],
+                "page_start": entry["page_start"],
+                "page_end": next_page,
             }
         )
+
     return catalog
 
 
@@ -122,15 +136,20 @@ def build_textbook_catalog(book_id):
     from pypdf import PdfReader
 
     reader = PdfReader(io.BytesIO(pdf_bytes))
-    outline = []
-    try:
-        outline = reader.outline or []
-    except Exception:
-        outline = []
 
-    flat_entries = _flatten_outline(reader, outline, depth=0, entries=[])
-    catalog = _to_catalog(flat_entries, len(reader.pages), max_depth=2)
-    chapter_catalog = [entry for entry in catalog if entry["depth"] <= 1]
+    if book_id != "gabbe_9":
+        return {
+            "book_id": book["book_id"],
+            "title": book["title"],
+            "edition": book["edition"],
+            "domain": book["domain"],
+            "page_count": len(reader.pages),
+            "catalog": [],
+            "catalog_entry_count": 0,
+            "scan_window": {"start_page": TEXT_SCAN_START_PAGE, "end_page": min(TEXT_SCAN_END_PAGE, len(reader.pages))},
+        }
+
+    catalog = _scan_gabbe_text_catalog(reader)
 
     return {
         "book_id": book["book_id"],
@@ -138,11 +157,9 @@ def build_textbook_catalog(book_id):
         "edition": book["edition"],
         "domain": book["domain"],
         "page_count": len(reader.pages),
-        "outline_entry_count": len(flat_entries),
         "catalog_entry_count": len(catalog),
-        "chapter_entry_count": len(chapter_catalog),
         "catalog": catalog,
-        "chapter_catalog": chapter_catalog,
+        "scan_window": {"start_page": TEXT_SCAN_START_PAGE, "end_page": min(TEXT_SCAN_END_PAGE, len(reader.pages))},
     }
 
 
