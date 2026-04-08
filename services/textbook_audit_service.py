@@ -20,6 +20,10 @@ def _isoformat(value):
     return str(value)
 
 
+def to_isoformat(value):
+    return _isoformat(value)
+
+
 def _download_range(client, key, byte_range):
     response = client.get_object(Bucket=R2_BUCKET_NAME, Key=key, Range=byte_range)
     try:

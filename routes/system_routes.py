@@ -13,7 +13,7 @@ from services.textbook_catalog_service import (
     get_gabbe_mvp_topic_map,
     search_gabbe_topic,
 )
-from services.textbook_audit_service import audit_textbook_objects
+from services.textbook_audit_service import audit_textbook_objects, to_isoformat
 from settings import (
     APP_BASE_URL,
     APP_ENV,
@@ -111,7 +111,7 @@ def health_textbooks_gabbe_mapping():
     return JSONResponse(
         {
             "status": "ok",
-            "cache_updated_at": cached.get("updated_at"),
+            "cache_updated_at": to_isoformat(cached.get("updated_at")),
             **build_gabbe_topic_mapping_summary(payload),
         }
     )
@@ -129,7 +129,7 @@ def health_textbooks_gabbe_page_cache_rebuild(
     return JSONResponse(
         {
             "status": "ok",
-            **payload,
+            **{**payload, "cache_updated_at": to_isoformat(payload.get("cache_updated_at"))},
         }
     )
 
@@ -169,7 +169,7 @@ def health_textbooks_gabbe_mapping_rebuild(
             "tier": tier,
             "batch_count": payload.get("batch_count"),
             "total_available_topics": payload.get("total_available_topics"),
-            "cache_updated_at": cached.get("updated_at"),
+            "cache_updated_at": to_isoformat(cached.get("updated_at")),
             **build_gabbe_topic_mapping_summary(cached_payload),
         }
     )

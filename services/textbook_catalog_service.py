@@ -292,7 +292,12 @@ def cache_gabbe_page_text_batch(start_page=1, limit=25):
     )
     return {
         "cache_updated_at": cached.get("updated_at"),
-        **payload,
+        "book_id": payload["book_id"],
+        "start_page": payload["start_page"],
+        "end_page": payload["end_page"],
+        "batch_count": payload["batch_count"],
+        "total_pages": payload["total_pages"],
+        "sample_pages": [page["page"] for page in payload["pages"][:5]],
     }
 
 
