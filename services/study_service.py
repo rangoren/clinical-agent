@@ -4,6 +4,7 @@ import re
 
 from db import study_content_collection, study_user_state_collection
 from services.logging_service import log_event
+from services.profile_service import get_user_profile
 
 
 STAGE_B_AUTHORING_RUBRIC = {
@@ -24,6 +25,108 @@ STAGE_B_AUTHORING_RUBRIC = {
         "Short, clinically meaningful, and not just a flashcard fact",
     ],
 }
+
+DIFFICULTY_LEVEL_DISTRIBUTIONS = {
+    "R1": {1: 70, 2: 20, 3: 10},
+    "R2": {2: 50, 3: 30, 1: 20},
+    "R3": {3: 50, 4: 30, 2: 20},
+    "R4": {4: 50, 5: 30, 3: 20},
+    "R5": {5: 60, 6: 30, 4: 10},
+    "R6": {6: 70, 5: 20, 4: 10},
+}
+
+DIFFICULTY_LEVEL_BOUNDS = {
+    "R1": (1, 3),
+    "R2": (1, 3),
+    "R3": (2, 4),
+    "R4": (3, 5),
+    "R5": (4, 6),
+    "R6": (4, 6),
+}
+
+QUESTION_STYLE_DISTRIBUTIONS = {
+    1: {
+        "clinical_decision": 50,
+        "diagnosis_refinement": 20,
+        "overlap": 10,
+        "pearl": 10,
+        "trap": 10,
+    },
+    2: {
+        "clinical_decision": 50,
+        "diagnosis_refinement": 20,
+        "overlap": 10,
+        "pearl": 10,
+        "trap": 10,
+    },
+    3: {
+        "clinical_decision": 60,
+        "diagnosis_refinement": 15,
+        "overlap": 10,
+        "trap": 10,
+        "pearl": 5,
+    },
+    4: {
+        "clinical_decision": 60,
+        "diagnosis_refinement": 15,
+        "overlap": 10,
+        "trap": 10,
+        "pearl": 5,
+    },
+    5: {
+        "clinical_decision": 65,
+        "trap": 15,
+        "overlap": 10,
+        "diagnosis_refinement": 5,
+        "pearl": 5,
+    },
+    6: {
+        "clinical_decision": 65,
+        "trap": 15,
+        "overlap": 10,
+        "diagnosis_refinement": 5,
+        "pearl": 5,
+    },
+}
+
+SEED_ITEM_METADATA_OVERRIDES = {
+    "mcq_preeclampsia_delivery": {"difficulty_level": 5, "question_style": "clinical_decision"},
+    "mcq_pph_first_step": {"difficulty_level": 1, "question_style": "clinical_decision"},
+    "mcq_ctg_late_decels": {"difficulty_level": 4, "question_style": "diagnosis_refinement"},
+    "mcq_pprom_antibiotics": {"difficulty_level": 5, "question_style": "clinical_decision"},
+    "pearl_pph_atony": {"difficulty_level": 2, "question_style": "pearl"},
+    "pearl_ctg_core": {"difficulty_level": 3, "question_style": "pearl"},
+    "pearl_cervix_hsil": {"difficulty_level": 4, "question_style": "pearl"},
+    "mcq_contraception_migraine_aura": {"difficulty_level": 4, "question_style": "overlap"},
+    "mcq_pid_inpatient_toa": {"difficulty_level": 4, "question_style": "clinical_decision"},
+    "pearl_aub_palm_coein": {"difficulty_level": 3, "question_style": "pearl"},
+    "pearl_emergency_contraception": {"difficulty_level": 3, "question_style": "pearl"},
+    "pearl_endometriosis_first_line": {"difficulty_level": 4, "question_style": "pearl"},
+    "pearl_menopause_bleeding": {"difficulty_level": 4, "question_style": "pearl"},
+    "mcq_unexplained_infertility_escalation": {"difficulty_level": 5, "question_style": "clinical_decision"},
+    "mcq_adnexal_mass_referral": {"difficulty_level": 6, "question_style": "trap"},
+    "mcq_postmenopausal_bleeding_biopsy": {"difficulty_level": 5, "question_style": "trap"},
+    "mcq_aub_age45_sampling": {"difficulty_level": 5, "question_style": "trap"},
+    "pearl_adnexal_mass_referral": {"difficulty_level": 5, "question_style": "pearl"},
+    "pearl_postmenopausal_bleeding_workup": {"difficulty_level": 5, "question_style": "pearl"},
+    "mcq_uti_nonpregnant_first_line": {"difficulty_level": 5, "question_style": "overlap"},
+    "mcq_postpartum_endometritis_antibiotics": {"difficulty_level": 5, "question_style": "clinical_decision"},
+    "mcq_postpartum_pe_headache": {"difficulty_level": 6, "question_style": "trap"},
+    "mcq_vte_postpartum_estrogen": {"difficulty_level": 5, "question_style": "overlap"},
+    "mcq_pregnancy_pyelo_admit": {"difficulty_level": 5, "question_style": "overlap"},
+    "mcq_platelets_neuraxial_preeclampsia": {"difficulty_level": 6, "question_style": "trap"},
+    "mcq_hypoosmolar_hyponatremia_labor": {"difficulty_level": 6, "question_style": "overlap"},
+    "pearl_postpartum_hypertension": {"difficulty_level": 5, "question_style": "pearl"},
+    "pearl_overlap_uti_vs_pyelo": {"difficulty_level": 4, "question_style": "pearl"},
+}
+
+PROMOTION_WINDOW = 4
+DEMOTION_WINDOW = 6
+PROMOTION_THRESHOLD = 4
+DEMOTION_THRESHOLD = 4
+MAX_CONSECUTIVE_TOPIC_REPEATS = 2
+STYLE_HISTORY_WINDOW = 12
+LEVEL_HISTORY_WINDOW = 12
 
 
 STUDY_SEED_ITEMS = [
@@ -522,11 +625,484 @@ STUDY_SEED_ITEMS = [
         "last_reviewed_at": "2025-01-01",
         "enabled": True,
     },
+    {
+        "id": "mcq_uti_nonpregnant_first_line",
+        "item_type": "mcq",
+        "topic": "Infectious gynecology",
+        "subtopic": "Adjacent medicine overlap",
+        "question_stem": "A 27-year-old nonpregnant patient has dysuria, urinary frequency, no fever, no flank pain, and no vaginal discharge. What is the best first-line treatment approach?",
+        "options": [
+            {"key": "A", "text": "Treat as uncomplicated cystitis with a first-line oral regimen guided by local resistance patterns"},
+            {"key": "B", "text": "Use pyelonephritis-level intravenous therapy because any urinary symptoms may ascend quickly"},
+            {"key": "C", "text": "Avoid treatment until urine culture returns because empiric therapy is never appropriate"},
+            {"key": "D", "text": "Start antifungal therapy because dysuria without pregnancy is most likely candidiasis"},
+        ],
+        "correct_answer_key": "A",
+        "explanation": "This is a classic uncomplicated cystitis presentation in a nonpregnant patient, so empiric first-line oral therapy is appropriate, guided by local susceptibility patterns and antibiotic stewardship.",
+        "exam_clue": "Dysuria and frequency without fever, flank pain, or vaginal symptoms",
+        "board_takeaway": "Lower urinary tract symptoms without systemic features point to uncomplicated cystitis, not pyelonephritis.",
+        "decision_point": "Distinguish uncomplicated cystitis from pyelonephritis or vaginitis in an OB-GYN overlap scenario",
+        "difficulty_band": "standard",
+        "tempting_wrong_option": "B",
+        "tempting_wrong_reason": "Escalation to pyelonephritis-level therapy is for systemic illness or upper tract features, not isolated lower urinary symptoms.",
+        "estimated_time_seconds": 60,
+        "source_id": "study_src_nice_uti",
+        "source_name": "NICE Guideline: Lower UTI (Women)",
+        "source_type": "Guideline",
+        "source_url": "https://www.nice.org.uk/guidance/ng109",
+        "source_excerpt": "Uncomplicated lower UTI in nonpregnant women is managed with first-line oral antibiotics while reserving escalation for features suggesting upper tract infection.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
+    {
+        "id": "mcq_postpartum_endometritis_antibiotics",
+        "item_type": "mcq",
+        "topic": "Obstetrics",
+        "subtopic": "Postpartum infection overlap",
+        "question_stem": "A day-2 post-cesarean patient has fever, uterine tenderness, and foul-smelling lochia. What is the most appropriate initial antibiotic approach?",
+        "options": [
+            {"key": "A", "text": "Broad-spectrum intravenous therapy covering polymicrobial postpartum endometritis"},
+            {"key": "B", "text": "Outpatient nitrofurantoin because postpartum fever is usually urinary only"},
+            {"key": "C", "text": "Immediate hysterectomy before antibiotics"},
+            {"key": "D", "text": "Observation until blood cultures identify the organism"},
+        ],
+        "correct_answer_key": "A",
+        "explanation": "Postpartum endometritis is typically polymicrobial and should be treated promptly with broad-spectrum intravenous antibiotics rather than delayed pending culture data.",
+        "exam_clue": "Post-cesarean fever with uterine tenderness and foul lochia",
+        "board_takeaway": "Postpartum fever with uterine tenderness is endometritis until proved otherwise and needs broad-spectrum IV therapy.",
+        "decision_point": "Recognize postpartum endometritis and start appropriate empiric treatment",
+        "difficulty_band": "standard",
+        "tempting_wrong_option": "D",
+        "tempting_wrong_reason": "Cultures can help later, but board management is to start empiric broad-spectrum therapy immediately.",
+        "estimated_time_seconds": 60,
+        "source_id": "study_src_acog_postpartum_infection",
+        "source_name": "ACOG: Postpartum Care and Infection Principles",
+        "source_type": "Guideline",
+        "source_url": "https://www.acog.org/womens-health/faqs/postpartum-birth-control",
+        "source_excerpt": "Suspected postpartum uterine infection requires prompt treatment and should not wait for confirmatory testing before therapy begins.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
+    {
+        "id": "mcq_postpartum_pe_headache",
+        "item_type": "mcq",
+        "topic": "Obstetrics",
+        "subtopic": "Postpartum severe hypertension",
+        "question_stem": "Five days postpartum, a patient presents with severe headache, blood pressure 170/112, and visual symptoms. What is the most appropriate next step?",
+        "options": [
+            {"key": "A", "text": "Treat as postpartum preeclampsia with severe features, begin acute blood pressure control, and give magnesium sulfate"},
+            {"key": "B", "text": "Reassure her because preeclampsia only occurs before delivery"},
+            {"key": "C", "text": "Delay treatment until urine protein results return"},
+            {"key": "D", "text": "Manage as simple postpartum headache with oral analgesics only"},
+        ],
+        "correct_answer_key": "A",
+        "explanation": "Postpartum preeclampsia can present after discharge. Severe hypertension with neurologic symptoms requires urgent treatment and seizure prophylaxis rather than waiting for proteinuria confirmation.",
+        "exam_clue": "Postpartum severe-range blood pressure with headache and visual symptoms",
+        "board_takeaway": "Severe postpartum hypertension is still preeclampsia territory and needs urgent treatment now.",
+        "decision_point": "Recognize and treat postpartum preeclampsia with severe features",
+        "difficulty_band": "standard",
+        "tempting_wrong_option": "C",
+        "tempting_wrong_reason": "Proteinuria is not required before treating severe postpartum hypertension with neurologic symptoms.",
+        "estimated_time_seconds": 60,
+        "source_id": "study_src_acog_preeclampsia",
+        "source_name": "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia",
+        "source_type": "Guideline",
+        "source_url": "https://www.acog.org/clinical/clinical-guidance/practice-bulletin/articles/2020/06/gestational-hypertension-and-preeclampsia",
+        "source_excerpt": "Severe-range blood pressure with severe symptoms requires urgent treatment and magnesium prophylaxis even in the postpartum setting.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
+    {
+        "id": "mcq_vte_postpartum_estrogen",
+        "item_type": "mcq",
+        "topic": "Contraception",
+        "subtopic": "VTE risk overlap",
+        "question_stem": "A 3-week postpartum patient wants combined hormonal contraception. She is breastfeeding and had a postpartum DVT. What is the best next step?",
+        "options": [
+            {"key": "A", "text": "Avoid estrogen-containing contraception and offer a non-estrogen method"},
+            {"key": "B", "text": "Start combined pills because breastfeeding lowers thrombosis risk"},
+            {"key": "C", "text": "Use combined contraception if her leg symptoms have improved"},
+            {"key": "D", "text": "Delay all contraception until six months postpartum"},
+        ],
+        "correct_answer_key": "A",
+        "explanation": "Recent postpartum VTE is a strong reason to avoid estrogen-containing contraception. The board move is to offer an effective non-estrogen option instead of withholding contraception entirely.",
+        "exam_clue": "Recent postpartum DVT plus request for combined hormonal contraception",
+        "board_takeaway": "Postpartum thrombosis history pushes you away from estrogen, not away from contraception.",
+        "decision_point": "Choose contraception safely in the setting of recent postpartum VTE",
+        "difficulty_band": "standard",
+        "tempting_wrong_option": "D",
+        "tempting_wrong_reason": "The safer move is to choose a non-estrogen method now, not to leave the patient without contraception.",
+        "estimated_time_seconds": 55,
+        "source_id": "study_src_cdc_usmec",
+        "source_name": "CDC U.S. Medical Eligibility Criteria for Contraceptive Use",
+        "source_type": "Guideline",
+        "source_url": "https://www.cdc.gov/contraception/hcp/usmec/index.html",
+        "source_excerpt": "Recent postpartum thrombosis and breastfeeding status are key reasons to avoid estrogen-containing contraceptive methods.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
+    {
+        "id": "mcq_pregnancy_pyelo_admit",
+        "item_type": "mcq",
+        "topic": "Obstetrics",
+        "subtopic": "Pregnancy UTI overlap",
+        "question_stem": "A 24-week pregnant patient has fever, flank pain, tachycardia, and CVA tenderness. What is the most appropriate management now?",
+        "options": [
+            {"key": "A", "text": "Hospitalize for pyelonephritis treatment with parenteral antibiotics and maternal-fetal monitoring"},
+            {"key": "B", "text": "Treat as uncomplicated cystitis with outpatient nitrofurantoin"},
+            {"key": "C", "text": "Wait for culture results before starting antibiotics"},
+            {"key": "D", "text": "Manage with oral hydration only if fetal heart rate is normal"},
+        ],
+        "correct_answer_key": "A",
+        "explanation": "Pregnancy pyelonephritis is a maternal-fetal risk condition and should be managed inpatient with prompt parenteral therapy, not like simple cystitis.",
+        "exam_clue": "Pregnancy plus fever, flank pain, and CVA tenderness",
+        "board_takeaway": "Pyelonephritis in pregnancy is an admit-and-treat problem, not an outpatient cystitis problem.",
+        "decision_point": "Differentiate pyelonephritis from lower UTI in pregnancy and escalate appropriately",
+        "difficulty_band": "standard",
+        "tempting_wrong_option": "B",
+        "tempting_wrong_reason": "Systemic features and flank pain move this out of uncomplicated cystitis and into inpatient pyelonephritis management.",
+        "estimated_time_seconds": 60,
+        "source_id": "study_src_acog_uti_pregnancy",
+        "source_name": "ACOG: Urinary Tract Infections in Pregnancy",
+        "source_type": "Guideline",
+        "source_url": "https://www.acog.org/clinical/clinical-guidance/clinical-consensus/articles/2023/08/urinary-tract-infections-in-pregnant-individuals",
+        "source_excerpt": "Pyelonephritis in pregnancy requires prompt inpatient treatment with parenteral antibiotics because of maternal and obstetric risk.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
+    {
+        "id": "mcq_platelets_neuraxial_preeclampsia",
+        "item_type": "mcq",
+        "topic": "Obstetrics",
+        "subtopic": "Procedural overlap",
+        "question_stem": "A patient with severe preeclampsia in labor has platelets of 68,000 and requests epidural analgesia. What is the best next step?",
+        "options": [
+            {"key": "A", "text": "Avoid routine neuraxial placement at this platelet count and discuss alternative analgesia while the obstetric plan proceeds"},
+            {"key": "B", "text": "Place the epidural because thrombocytopenia from preeclampsia never changes neuraxial decisions"},
+            {"key": "C", "text": "Delay all obstetric management until platelets normalize"},
+            {"key": "D", "text": "Give aspirin and then proceed with epidural placement"},
+        ],
+        "correct_answer_key": "A",
+        "explanation": "Significant thrombocytopenia changes neuraxial risk assessment. The board point is not to freeze the entire obstetric plan, but to recognize that epidural placement may be unsafe at this range.",
+        "exam_clue": "Severe preeclampsia with platelets 68,000",
+        "board_takeaway": "Low platelets can change neuraxial decisions without changing the need to keep the delivery plan moving.",
+        "decision_point": "Recognize when thrombocytopenia changes neuraxial analgesia decisions in obstetrics",
+        "difficulty_band": "standard",
+        "tempting_wrong_option": "C",
+        "tempting_wrong_reason": "The mistake is stopping the obstetric plan entirely; the real pivot is the neuraxial decision, not whether preeclampsia still needs management.",
+        "estimated_time_seconds": 65,
+        "source_id": "study_src_society_ob_anesthesia",
+        "source_name": "SOAP Consensus Statement on Thrombocytopenia and Neuraxial Procedures",
+        "source_type": "Consensus statement",
+        "source_url": "https://soap.memberclicks.net/assets/docs/SOAP%20Consensus%20Statement%20Thrombocytopenia%202021.pdf",
+        "source_excerpt": "Thrombocytopenia changes neuraxial decision-making and requires weighing hematoma risk against obstetric context rather than treating all counts as interchangeable.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
+    {
+        "id": "mcq_hypoosmolar_hyponatremia_labor",
+        "item_type": "mcq",
+        "topic": "Obstetrics",
+        "subtopic": "Fluid overlap",
+        "question_stem": "During a prolonged induction, a laboring patient becomes confused and nauseated after receiving large volumes of hypotonic fluid with oxytocin. What is the most likely problem?",
+        "options": [
+            {"key": "A", "text": "Water intoxication with hyponatremia"},
+            {"key": "B", "text": "Amniotic fluid embolism"},
+            {"key": "C", "text": "Occult placental abruption"},
+            {"key": "D", "text": "Normal oxytocin side effects that do not change management"},
+        ],
+        "correct_answer_key": "A",
+        "explanation": "Oxytocin can contribute to water retention, and excessive hypotonic fluids can lead to symptomatic hyponatremia. The clue is neurologic change during prolonged labor management rather than sudden cardiopulmonary collapse.",
+        "exam_clue": "Confusion after prolonged oxytocin exposure and hypotonic fluids",
+        "board_takeaway": "Not every deterioration on oxytocin is obstetric catastrophe; fluid-related hyponatremia is a real overlap problem.",
+        "decision_point": "Recognize oxytocin-associated water intoxication and separate it from obstetric emergencies",
+        "difficulty_band": "standard",
+        "tempting_wrong_option": "B",
+        "tempting_wrong_reason": "Amniotic fluid embolism presents dramatically with cardiopulmonary collapse, not isolated progressive neurologic symptoms after excess hypotonic fluid exposure.",
+        "estimated_time_seconds": 70,
+        "source_id": "study_src_nhs_hyponatremia_labor",
+        "source_name": "NHS Guideline: Hyponatremia in Labour",
+        "source_type": "Guideline",
+        "source_url": "https://wisdom.nhs.wales/health-board-guidelines/",
+        "source_excerpt": "Excess hypotonic fluids during labor can lead to symptomatic hyponatremia, especially with oxytocin exposure.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
+    {
+        "id": "pearl_postpartum_hypertension",
+        "item_type": "pearl",
+        "topic": "Obstetrics",
+        "title": "Quick Pearl: Postpartum Hypertension",
+        "key_fact": "Severe postpartum headache with severe-range blood pressure is postpartum preeclampsia until proved otherwise.",
+        "clinical_consequence": "The trap is waiting for proteinuria or assuming delivery has already removed the risk.",
+        "board_focus": "Postpartum severe hypertension should trigger urgent treatment thinking, not reassurance or delayed workup.",
+        "board_rule": "Delivery does not end preeclampsia risk; postpartum severe symptoms still demand urgent management.",
+        "board_relevance": "High-risk postpartum trap",
+        "estimated_time_seconds": 30,
+        "source_id": "study_src_acog_preeclampsia",
+        "source_name": "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia",
+        "source_type": "Guideline",
+        "source_url": "https://www.acog.org/clinical/clinical-guidance/practice-bulletin/articles/2020/06/gestational-hypertension-and-preeclampsia",
+        "source_excerpt": "Postpartum preeclampsia can present after discharge and severe symptoms require urgent evaluation and treatment.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
+    {
+        "id": "pearl_overlap_uti_vs_pyelo",
+        "item_type": "pearl",
+        "topic": "Infectious gynecology",
+        "title": "Quick Pearl: Cystitis vs Pyelonephritis",
+        "key_fact": "Dysuria and frequency alone suggest cystitis; fever, flank pain, and CVA tenderness move the question to pyelonephritis.",
+        "clinical_consequence": "That distinction changes outpatient versus inpatient thinking, especially in pregnancy.",
+        "board_focus": "On boards, the pivot is not just naming the infection but recognizing when systemic features demand escalation.",
+        "board_rule": "Urinary symptoms plus systemic or upper tract features should change the site and intensity of management.",
+        "board_relevance": "Adjacent-medicine escalation logic",
+        "estimated_time_seconds": 30,
+        "source_id": "study_src_acog_uti_pregnancy",
+        "source_name": "ACOG: Urinary Tract Infections in Pregnancy",
+        "source_type": "Guideline",
+        "source_url": "https://www.acog.org/clinical/clinical-guidance/clinical-consensus/articles/2023/08/urinary-tract-infections-in-pregnant-individuals",
+        "source_excerpt": "Upper tract features and systemic illness change UTI management intensity and often require inpatient care in pregnancy.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
 ]
 
 
 def _utc_now():
     return datetime.utcnow()
+
+
+def _difficulty_band_for_level(level):
+    try:
+        normalized = int(level)
+    except (TypeError, ValueError):
+        normalized = 3
+    if normalized <= 2:
+        return "warmup"
+    if normalized >= 5:
+        return "challenge"
+    return "standard"
+
+
+def _level_for_legacy_band(band):
+    normalized = (band or "").strip().lower()
+    if normalized == "warmup":
+        return 2
+    if normalized == "challenge":
+        return 5
+    return 4
+
+
+def _infer_question_style(item):
+    if not item:
+        return "clinical_decision"
+    if item.get("item_type") == "pearl":
+        return "pearl"
+
+    stem = (item.get("question_stem") or "").lower()
+    decision_point = (item.get("decision_point") or "").lower()
+    topic = (item.get("topic") or "").lower()
+
+    overlap_markers = (
+        "migraine",
+        "antibiotic",
+        "abscess",
+        "urology",
+        "hematology",
+        "infection",
+    )
+    diagnosis_markers = (
+        "most likely",
+        "underlying problem",
+        "interpret",
+        "diagnosis",
+    )
+    trap_markers = (
+        "known fibroid",
+        "postmenopausal bleeding",
+        "adnexal mass",
+        "despite",
+        "normal workup",
+    )
+
+    combined = " ".join([stem, decision_point, topic])
+    if any(marker in combined for marker in overlap_markers):
+        return "overlap"
+    if any(marker in combined for marker in diagnosis_markers):
+        return "diagnosis_refinement"
+    if any(marker in combined for marker in trap_markers):
+        return "trap"
+    return "clinical_decision"
+
+
+def _residency_year_from_profile(user_profile):
+    if not user_profile:
+        return None
+    residency_year = (user_profile.get("residency_year") or "").strip().upper()
+    if residency_year in DIFFICULTY_LEVEL_DISTRIBUTIONS:
+        return residency_year
+    training_stage = (user_profile.get("training_stage") or "").strip().lower()
+    if training_stage in {"specialist", "fellowship"}:
+        return "R6"
+    return None
+
+
+def _difficulty_policy_for_profile(user_profile):
+    residency_year = _residency_year_from_profile(user_profile) or "R4"
+    distribution = dict(DIFFICULTY_LEVEL_DISTRIBUTIONS.get(residency_year, DIFFICULTY_LEVEL_DISTRIBUTIONS["R4"]))
+    min_level, max_level = DIFFICULTY_LEVEL_BOUNDS.get(residency_year, (3, 5))
+    baseline_level = max(distribution, key=distribution.get)
+    return {
+        "residency_year": residency_year,
+        "distribution": distribution,
+        "baseline_level": baseline_level,
+        "min_level": min_level,
+        "max_level": max_level,
+    }
+
+
+def _distribution_for_level(level):
+    try:
+        normalized = int(level)
+    except (TypeError, ValueError):
+        normalized = 4
+    normalized = max(1, min(6, normalized))
+    return QUESTION_STYLE_DISTRIBUTIONS[normalized]
+
+
+def _recent_answer_topic_counts(state, limit=6):
+    topics = state.get("recent_answer_topics") or []
+    counts = {}
+    for topic in topics[-limit:]:
+        counts[topic] = counts.get(topic, 0) + 1
+    return counts
+
+
+def _recent_topic_streak(state, topic):
+    if not topic:
+        return 0
+    recent_topics = state.get("recent_answer_topics") or []
+    streak = 0
+    for recent_topic in reversed(recent_topics):
+        if recent_topic != topic:
+            break
+        streak += 1
+    return streak
+
+
+def _desired_bucket(candidates, distribution, recent_values):
+    if not candidates:
+        return None
+
+    total_recent = len(recent_values)
+    counts = {}
+    for value in recent_values:
+        counts[value] = counts.get(value, 0) + 1
+
+    scored = []
+    for candidate in candidates:
+        desired = distribution.get(candidate, 0) / 100.0
+        actual = (counts.get(candidate, 0) / total_recent) if total_recent else 0
+        scored.append((desired - actual, candidate))
+
+    scored.sort(key=lambda entry: (entry[0], distribution.get(entry[1], 0)), reverse=True)
+    return scored[0][1]
+
+
+def _current_difficulty_level(state, policy):
+    current_level = state.get("current_difficulty_level")
+    if current_level is None:
+        current_level = policy["baseline_level"]
+    try:
+        current_level = int(current_level)
+    except (TypeError, ValueError):
+        current_level = policy["baseline_level"]
+    return max(policy["min_level"], min(policy["max_level"], current_level))
+
+
+def _target_difficulty_level(state, policy, available_levels):
+    if not available_levels:
+        return policy["baseline_level"]
+
+    clamped_levels = sorted({level for level in available_levels if policy["min_level"] <= level <= policy["max_level"]})
+    if not clamped_levels:
+        clamped_levels = sorted(set(available_levels))
+
+    current_level = _current_difficulty_level(state, policy)
+    recent_levels = [
+        level for level in (state.get("recent_answer_levels") or [])[-LEVEL_HISTORY_WINDOW:]
+        if level in clamped_levels
+    ]
+    desired_level = _desired_bucket(clamped_levels, policy["distribution"], recent_levels) or current_level
+
+    if desired_level > current_level:
+        return min(current_level + 1, max(clamped_levels))
+    if desired_level < current_level:
+        return max(current_level - 1, min(clamped_levels))
+    return current_level
+
+
+def _target_question_style(state, level, available_styles):
+    if not available_styles:
+        return None
+
+    distribution = _distribution_for_level(level)
+    recent_styles = [
+        style for style in (state.get("recent_answer_styles") or [])[-STYLE_HISTORY_WINDOW:]
+        if style in available_styles
+    ]
+    return _desired_bucket(sorted(set(available_styles)), distribution, recent_styles)
+
+
+def _prune_distribution(distribution, allowed_values):
+    allowed = set(allowed_values or [])
+    if not allowed:
+        return {}
+    return {key: value for key, value in distribution.items() if key in allowed}
+
+
+def _pending_reinforcement(state):
+    topic = state.get("pending_reinforcement_topic")
+    if not topic:
+        return None
+    return {
+        "topic": topic,
+        "decision_point": state.get("pending_reinforcement_decision_point"),
+        "remaining": int(state.get("pending_reinforcement_remaining") or 0),
+    }
+
+
+def _next_difficulty_level_after_answer(state, policy, answered_levels, answered_results):
+    current_level = _current_difficulty_level(state, policy)
+    last_promotion_window = answered_results[-PROMOTION_WINDOW:]
+    last_demotion_window = answered_results[-DEMOTION_WINDOW:]
+
+    if len(last_promotion_window) == PROMOTION_WINDOW and sum(1 for result in last_promotion_window if result) >= PROMOTION_THRESHOLD:
+        return min(policy["max_level"], current_level + 1)
+
+    if len(last_demotion_window) == DEMOTION_WINDOW and sum(1 for result in last_demotion_window if not result) >= DEMOTION_THRESHOLD:
+        return max(policy["min_level"], current_level - 1)
+
+    return current_level
 
 
 def ensure_study_content_seed():
@@ -549,7 +1125,14 @@ def _normalize_study_item(item):
         return None
 
     normalized = dict(item)
+    normalized.update(SEED_ITEM_METADATA_OVERRIDES.get(normalized.get("id"), {}))
     normalized["review_status"] = normalized.get("review_status") or "source_grounded"
+    normalized["difficulty_level"] = int(
+        normalized.get("difficulty_level")
+        or _level_for_legacy_band(normalized.get("difficulty_band"))
+    )
+    normalized["question_style"] = normalized.get("question_style") or _infer_question_style(normalized)
+    normalized["difficulty_band"] = _difficulty_band_for_level(normalized["difficulty_level"])
 
     if normalized.get("item_type") == "mcq":
         normalized["correct_answer_key"] = (
@@ -576,11 +1159,6 @@ def _normalize_study_item(item):
             normalized.get("decision_point")
             or normalized.get("subtopic")
             or normalized.get("topic")
-        )
-        normalized["difficulty_band"] = (
-            normalized.get("difficulty_band")
-            or normalized.get("difficulty")
-            or "standard"
         )
         normalized["tempting_wrong_option"] = normalized.get("tempting_wrong_option")
         normalized["tempting_wrong_reason"] = normalized.get("tempting_wrong_reason")
@@ -634,9 +1212,17 @@ def _default_state(session_id):
         "topics_incorrect_count": {},
         "recent_mistake_topics": [],
         "recent_topic_history": [],
+        "recent_answer_topics": [],
+        "recent_answer_results": [],
+        "recent_answer_levels": [],
+        "recent_answer_styles": [],
         "cards_shown_history": [],
         "cards_clicked_history": [],
         "recent_study_item_history": [],
+        "current_difficulty_level": None,
+        "pending_reinforcement_topic": None,
+        "pending_reinforcement_decision_point": None,
+        "pending_reinforcement_remaining": 0,
         "created_at": now,
         "updated_at": now,
     }
@@ -702,12 +1288,7 @@ def _pick_item(session_id, candidates, salt):
 
 
 def _difficulty_rank(item):
-    band = (item.get("difficulty_band") or "").strip().lower()
-    if band == "standard":
-        return 3
-    if band == "warmup":
-        return 1
-    return 2
+    return int(item.get("difficulty_level") or _level_for_legacy_band(item.get("difficulty_band")))
 
 
 def _topic_seen_count(state, topic):
@@ -815,7 +1396,15 @@ def _family_first_candidates(candidates, state, used_topics=None, used_families=
     return candidates
 
 
-def _selection_score(item, state, preferred_topic=None, preferred_item_type=None, preferred_difficulty_band=None):
+def _selection_score(
+    item,
+    state,
+    preferred_topic=None,
+    preferred_item_type=None,
+    preferred_difficulty_level=None,
+    preferred_question_style=None,
+    reinforcement=None,
+):
     score = 0
     topic = item.get("topic")
 
@@ -823,15 +1412,17 @@ def _selection_score(item, state, preferred_topic=None, preferred_item_type=None
         score += 30
     if preferred_topic and item.get("topic") == preferred_topic:
         score += 28
-    if preferred_difficulty_band:
-        item_band = (item.get("difficulty_band") or "").strip().lower()
-        target_band = preferred_difficulty_band.strip().lower()
-        if item_band == target_band:
+    if preferred_difficulty_level is not None:
+        item_level = int(item.get("difficulty_level") or 0)
+        distance = abs(item_level - int(preferred_difficulty_level))
+        score += max(0, 34 - (distance * 10))
+    if preferred_question_style and item.get("question_style") == preferred_question_style:
+        score += 20
+    if reinforcement:
+        if topic == reinforcement.get("topic"):
             score += 26
-        elif target_band == "standard" and item_band == "warmup":
-            score -= 10
-        elif target_band == "warmup" and item_band == "standard":
-            score -= 4
+        elif reinforcement.get("decision_point") and item.get("decision_point") == reinforcement.get("decision_point"):
+            score += 14
 
     if item.get("item_type") == "mcq":
         score += 18
@@ -839,7 +1430,7 @@ def _selection_score(item, state, preferred_topic=None, preferred_item_type=None
             score += 10
         if item.get("exam_clue"):
             score += 8
-        score += _difficulty_rank(item) * 6
+        score += _difficulty_rank(item) * 5
     else:
         score += 8
 
@@ -856,6 +1447,9 @@ def _selection_score(item, state, preferred_topic=None, preferred_item_type=None
         score -= 8
     if topic in recent_topics[-4:]:
         score -= 4
+
+    if _recent_topic_streak(state, topic) >= MAX_CONSECUTIVE_TOPIC_REPEATS:
+        score -= 25
 
     topic_seen_count = _topic_seen_count(state, topic)
     if topic_seen_count == 0:
@@ -880,7 +1474,17 @@ def _selection_score(item, state, preferred_topic=None, preferred_item_type=None
     return score
 
 
-def _pick_best_item(session_id, candidates, salt, state, preferred_topic=None, preferred_item_type=None, preferred_difficulty_band=None):
+def _pick_best_item(
+    session_id,
+    candidates,
+    salt,
+    state,
+    preferred_topic=None,
+    preferred_item_type=None,
+    preferred_difficulty_level=None,
+    preferred_question_style=None,
+    reinforcement=None,
+):
     if not candidates:
         return None
     scored = []
@@ -890,7 +1494,9 @@ def _pick_best_item(session_id, candidates, salt, state, preferred_topic=None, p
             state,
             preferred_topic=preferred_topic,
             preferred_item_type=preferred_item_type,
-            preferred_difficulty_band=preferred_difficulty_band,
+            preferred_difficulty_level=preferred_difficulty_level,
+            preferred_question_style=preferred_question_style,
+            reinforcement=reinforcement,
         )
         scored.append((score, item))
 
@@ -1054,248 +1660,142 @@ def _get_active_item(session_id):
     return item, state
 
 
+def _build_card(card_id, card_type, item, title, subtitle, cta):
+    return {
+        "id": card_id,
+        "type": card_type,
+        "title": title,
+        "subtitle": subtitle,
+        "cta": cta,
+        "content_item_id": item["id"],
+        "topic": item["topic"],
+    }
+
+
+def _pick_targeted_item(
+    session_id,
+    state,
+    candidates,
+    salt,
+    preferred_item_type=None,
+    preferred_topic=None,
+    preferred_difficulty_level=None,
+    preferred_question_style=None,
+    reinforcement=None,
+):
+    if not candidates:
+        return None
+    return _pick_best_item(
+        session_id,
+        candidates,
+        salt,
+        state,
+        preferred_topic=preferred_topic,
+        preferred_item_type=preferred_item_type,
+        preferred_difficulty_level=preferred_difficulty_level,
+        preferred_question_style=preferred_question_style,
+        reinforcement=reinforcement,
+    )
+
+
 def get_idle_study_cards(session_id):
     ensure_study_content_seed()
     state = _load_state(session_id)
-    recent_mistakes = state.get("recent_mistake_topics") or []
+    user_profile = get_user_profile(session_id)
+    policy = _difficulty_policy_for_profile(user_profile)
     recent_topics = state.get("recent_topic_history") or []
     recent_exclude_ids = _recent_study_exclude_ids(state)
-
-    weak_topic = recent_mistakes[-1] if recent_mistakes else None
-    recent_topic = recent_topics[-1] if recent_topics else None
+    reinforcement = _pending_reinforcement(state)
+    preferred_topic = (reinforcement or {}).get("topic") or (recent_topics[-1] if recent_topics else None)
 
     used_ids = set()
-    used_topics = set()
-    used_families = set()
+    cards = []
 
-    practice_pool = _get_items(item_type="mcq", topic=weak_topic, exclude_ids=recent_exclude_ids) or _get_items(item_type="mcq", exclude_ids=recent_exclude_ids)
-    if not practice_pool:
-        practice_pool = _get_items(item_type="mcq", topic=weak_topic) or _get_items(item_type="mcq")
-    practice_item = _pick_best_item(
+    mcq_pool = _get_items(item_type="mcq", exclude_ids=recent_exclude_ids) or _get_items(item_type="mcq")
+    available_levels = sorted({item.get("difficulty_level") for item in mcq_pool if item.get("difficulty_level")})
+    target_level = _target_difficulty_level(state, policy, available_levels)
+    available_styles = {item.get("question_style") for item in mcq_pool if item.get("question_style")}
+    style_distribution = _prune_distribution(_distribution_for_level(target_level), available_styles)
+    target_style = _target_question_style(state, target_level, style_distribution.keys())
+
+    practice_candidates = [
+        item for item in mcq_pool
+        if item["id"] not in used_ids and item.get("difficulty_level", 0) <= target_level
+    ]
+    practice_item = _pick_targeted_item(
         session_id,
-        practice_pool,
-        "practice",
         state,
-        preferred_topic=weak_topic,
+        practice_candidates,
+        "practice",
         preferred_item_type="mcq",
-        preferred_difficulty_band="warmup",
+        preferred_topic=preferred_topic,
+        preferred_difficulty_level=target_level,
+        preferred_question_style=target_style,
+        reinforcement=reinforcement,
     )
     if practice_item:
         used_ids.add(practice_item["id"])
-        used_topics.add(practice_item["topic"])
-        used_families.add(_topic_family(practice_item["topic"]))
+        cards.append(_build_card("practice_card", "practice", practice_item, "Quick MCQ", "1-min practice", "Start"))
 
-    pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids | recent_exclude_ids)
-    if not pearl_pool:
-        pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids)
-    pearl_pool = _family_first_candidates(
-        pearl_pool,
-        state,
-        used_topics=used_topics,
-        used_families=used_families,
-    )
-    pearl_item = _pick_best_item(
+    challenge_level = min(policy["max_level"], target_level + 1)
+    challenge_style = _target_question_style(state, challenge_level, available_styles)
+    challenge_candidates = [
+        item for item in mcq_pool
+        if item["id"] not in used_ids and item.get("difficulty_level", 0) >= max(target_level, challenge_level - 1)
+    ]
+    challenge_item = _pick_targeted_item(
         session_id,
+        state,
+        challenge_candidates,
+        "challenge",
+        preferred_item_type="mcq",
+        preferred_topic=preferred_topic,
+        preferred_difficulty_level=challenge_level,
+        preferred_question_style=challenge_style,
+    )
+    if challenge_item:
+        used_ids.add(challenge_item["id"])
+        cards.append(_build_card("dynamic_card", "dynamic", challenge_item, _title_for_dynamic(challenge_item, bool(preferred_topic)), "Push a bit harder", "Continue"))
+
+    pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids | recent_exclude_ids) or _get_items(item_type="pearl", exclude_ids=used_ids)
+    pearl_pool = _family_first_candidates(pearl_pool, state)
+    pearl_item = _pick_targeted_item(
+        session_id,
+        state,
         pearl_pool,
         "pearl",
-        state,
-        preferred_topic=recent_topic,
         preferred_item_type="pearl",
+        preferred_topic=preferred_topic,
+        preferred_difficulty_level=min(target_level, policy["max_level"]),
+        preferred_question_style="pearl",
     )
     if pearl_item:
         used_ids.add(pearl_item["id"])
-        used_topics.add(pearl_item["topic"])
-        used_families.add(_topic_family(pearl_item["topic"]))
-
-    dynamic_topic = weak_topic or recent_topic
-    dynamic_pool = (
-        _get_items(topic=dynamic_topic, exclude_ids=used_ids | recent_exclude_ids)
-        if dynamic_topic
-        else _get_items(exclude_ids=used_ids | recent_exclude_ids)
-    )
-    if not dynamic_pool:
-        dynamic_pool = (
-            _get_items(topic=dynamic_topic, exclude_ids=used_ids)
-            if dynamic_topic
-            else _get_items(exclude_ids=used_ids)
-        )
-    dynamic_pool = _family_first_candidates(
-        dynamic_pool,
-        state,
-        used_topics=used_topics,
-        used_families=used_families,
-    )
-    dynamic_item = _pick_best_item(
-        session_id,
-        dynamic_pool,
-        "dynamic",
-        state,
-        preferred_topic=dynamic_topic,
-        preferred_difficulty_band="standard",
-    )
-
-    cards = []
-    if practice_item:
-        cards.append(
-            {
-                "id": "practice_card",
-                "type": "practice",
-                "title": "Quick MCQ",
-                "subtitle": "1-min practice",
-                "cta": "Start",
-                "content_item_id": practice_item["id"],
-                "topic": practice_item["topic"],
-            }
-        )
-    if pearl_item:
-        cards.append(
-            {
-                "id": "pearl_card",
-                "type": "pearl",
-                "title": "Quick Pearl",
-                "subtitle": "Quick takeaway",
-                "cta": "Open",
-                "content_item_id": pearl_item["id"],
-                "topic": pearl_item["topic"],
-            }
-        )
-    if dynamic_item:
-        cards.append(
-            {
-                "id": "dynamic_card",
-                "type": "dynamic",
-                "title": _title_for_dynamic(dynamic_item, bool(dynamic_topic)),
-                "subtitle": _subtitle_for_dynamic(bool(dynamic_topic)),
-                "cta": "Continue",
-                "content_item_id": dynamic_item["id"],
-                "topic": dynamic_item["topic"],
-            }
-        )
+        cards.append(_build_card("pearl_card", "pearl", pearl_item, "Quick Pearl", "Quick takeaway", "Open"))
 
     if len(cards) < 3:
-        fallback_pool = _get_items(exclude_ids=used_ids) or _get_items()
-        fallback_pool = _family_first_candidates(
-            fallback_pool,
-            state,
-            used_topics=used_topics,
-            used_families=used_families,
-        )
+        fallback_pool = _get_items(exclude_ids=used_ids | recent_exclude_ids) or _get_items(exclude_ids=used_ids)
         scored_fallback = sorted(
             fallback_pool,
-            key=lambda item: _selection_score(item, state, preferred_difficulty_band="standard"),
+            key=lambda item: _selection_score(item, state, preferred_difficulty_level=target_level),
             reverse=True,
         )
         for item in scored_fallback:
-            if item["id"] in {card["content_item_id"] for card in cards}:
+            if item["id"] in used_ids:
                 continue
+            used_ids.add(item["id"])
             cards.append(
-                {
-                    "id": f"fallback_{item['id']}",
-                    "type": "practice" if item["item_type"] == "mcq" else "pearl",
-                    "title": "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
-                    "subtitle": "1-min practice" if item["item_type"] == "mcq" else "Quick takeaway",
-                    "cta": "Start" if item["item_type"] == "mcq" else "Open",
-                    "content_item_id": item["id"],
-                    "topic": item["topic"],
-                }
-            )
-            used_topics.add(item["topic"])
-            used_families.add(_topic_family(item["topic"]))
-            if len(cards) == 3:
-                break
-
-    # Entry-state contract: try hard to always return 3 actions.
-    # It's valid for this set to include two MCQs or two Pearls,
-    # as long as the content items are different.
-    if len(cards) < 3:
-        existing_ids = {card["content_item_id"] for card in cards}
-        final_fill_pool = _get_items(exclude_ids=existing_ids) or []
-        final_fill_pool = sorted(
-            final_fill_pool,
-            key=lambda item: _selection_score(item, state, preferred_difficulty_band="standard"),
-            reverse=True,
-        )
-        for item in final_fill_pool:
-            if item["id"] in existing_ids:
-                continue
-            cards.append(
-                {
-                    "id": f"entry_fill_{item['id']}",
-                    "type": "practice" if item["item_type"] == "mcq" else "pearl",
-                    "title": "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
-                    "subtitle": "1-min practice" if item["item_type"] == "mcq" else "Quick takeaway",
-                    "cta": "Start" if item["item_type"] == "mcq" else "Open",
-                    "content_item_id": item["id"],
-                    "topic": item["topic"],
-                }
-            )
-            existing_ids.add(item["id"])
-            if len(cards) == 3:
-                break
-
-    # Entry-state contract: keep at least one gynecology MCQ visible when possible,
-    # not just OB-heavy cards, so the home surface reflects the broader curriculum.
-    if cards:
-        card_items = {
-            card["content_item_id"]: _normalize_study_item(
-                study_content_collection.find_one(
-                    {"id": card["content_item_id"], "enabled": True},
-                    {"_id": 0},
+                _build_card(
+                    f"fallback_{item['id']}",
+                    "practice" if item["item_type"] == "mcq" else "pearl",
+                    item,
+                    "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
+                    "1-min practice" if item["item_type"] == "mcq" else "Quick takeaway",
+                    "Start" if item["item_type"] == "mcq" else "Open",
                 )
             )
-            for card in cards
-        }
-        has_gyne_mcq = any(
-            item
-            and item.get("item_type") == "mcq"
-            and _is_gyne_topic(item.get("topic"))
-            for item in card_items.values()
-        )
-        if not has_gyne_mcq:
-            existing_ids = {card["content_item_id"] for card in cards}
-            gyne_mcq_pool = _get_items(
-                item_type="mcq",
-                exclude_ids=existing_ids | recent_exclude_ids,
-            ) or _get_items(item_type="mcq", exclude_ids=existing_ids)
-            gyne_mcq_pool = [item for item in gyne_mcq_pool if _is_gyne_topic(item.get("topic"))]
-            gyne_mcq_pool = _coverage_first_candidates(gyne_mcq_pool, state, used_topics=used_topics)
-            gyne_mcq_item = _pick_best_item(
-                session_id,
-                gyne_mcq_pool,
-                "gyne_entry",
-                state,
-                preferred_item_type="mcq",
-                preferred_difficulty_band="standard",
-            )
-            if gyne_mcq_item:
-                replacement_index = None
-                for preferred_card_id in ("dynamic_card", "pearl_card"):
-                    for index, card in enumerate(cards):
-                        if card.get("id") == preferred_card_id:
-                            replacement_index = index
-                            break
-                    if replacement_index is not None:
-                        break
-                if replacement_index is None:
-                    for index, card in enumerate(cards):
-                        card_item = card_items.get(card["content_item_id"])
-                        if not (
-                            card_item
-                            and card_item.get("item_type") == "mcq"
-                            and _is_gyne_topic(card_item.get("topic"))
-                        ):
-                            replacement_index = index
-                            break
-                if replacement_index is not None:
-                    cards[replacement_index] = {
-                        "id": "gyne_entry_card",
-                        "type": "practice",
-                        "title": "Quick MCQ",
-                        "subtitle": "1-min practice",
-                        "cta": "Start",
-                        "content_item_id": gyne_mcq_item["id"],
-                        "topic": gyne_mcq_item["topic"],
-                    }
+            if len(cards) == 3:
+                break
 
     shown_history = _trim_history((state.get("cards_shown_history") or []) + [card["content_item_id"] for card in cards], 18)
     _save_state(
@@ -1322,6 +1822,8 @@ def _build_study_item_payload(item):
                 "options": item["options"],
                 "estimated_time_seconds": item.get("estimated_time_seconds", 60),
                 "difficulty_band": item.get("difficulty_band"),
+                "difficulty_level": item.get("difficulty_level"),
+                "question_style": item.get("question_style"),
                 "decision_point": item.get("decision_point"),
             }
         )
@@ -1335,6 +1837,7 @@ def _build_study_item_payload(item):
                 "board_focus": item.get("board_focus"),
                 "bullets": item["bullets"],
                 "estimated_time_seconds": item.get("estimated_time_seconds", 30),
+                "difficulty_level": item.get("difficulty_level"),
                 "actions": [
                     {"action": "quiz_me", "label": "Quiz me on this"},
                     {"action": "another_pearl", "label": "Another pearl"},
@@ -1387,17 +1890,42 @@ def answer_mcq(session_id, content_item_id, selected_option):
         return {"reply": "I couldn’t load that question anymore."}
 
     state = _load_state(session_id)
+    user_profile = get_user_profile(session_id)
+    policy = _difficulty_policy_for_profile(user_profile)
     topic = item["topic"]
     correct = (selected_option or "").upper() == item["correct_answer_key"]
     correct_counts = dict(state.get("topics_correct_count") or {})
     incorrect_counts = dict(state.get("topics_incorrect_count") or {})
     recent_mistakes = list(state.get("recent_mistake_topics") or [])
+    answer_results = list(state.get("recent_answer_results") or [])
+    answer_levels = list(state.get("recent_answer_levels") or [])
+    answer_styles = list(state.get("recent_answer_styles") or [])
+    answer_topics = list(state.get("recent_answer_topics") or [])
 
     if correct:
         correct_counts[topic] = correct_counts.get(topic, 0) + 1
     else:
         incorrect_counts[topic] = incorrect_counts.get(topic, 0) + 1
         recent_mistakes.append(topic)
+
+    answer_results = _trim_history(answer_results + [correct], DEMOTION_WINDOW)
+    answer_levels = _trim_history(answer_levels + [item.get("difficulty_level")], LEVEL_HISTORY_WINDOW)
+    answer_styles = _trim_history(answer_styles + [item.get("question_style")], STYLE_HISTORY_WINDOW)
+    answer_topics = _trim_history(answer_topics + [topic], DEMOTION_WINDOW)
+    next_level = _next_difficulty_level_after_answer(state, policy, answer_levels, answer_results)
+
+    pending_reinforcement_topic = None
+    pending_reinforcement_decision_point = None
+    pending_reinforcement_remaining = 0
+    if not correct:
+        pending_reinforcement_topic = topic
+        pending_reinforcement_decision_point = item.get("decision_point")
+        pending_reinforcement_remaining = 2
+    elif state.get("pending_reinforcement_remaining", 0):
+        pending_reinforcement_remaining = max(0, int(state.get("pending_reinforcement_remaining") or 0) - 1)
+        if pending_reinforcement_remaining > 0:
+            pending_reinforcement_topic = state.get("pending_reinforcement_topic")
+            pending_reinforcement_decision_point = state.get("pending_reinforcement_decision_point")
 
     _save_state(
         session_id,
@@ -1411,15 +1939,31 @@ def answer_mcq(session_id, content_item_id, selected_option):
             "topics_correct_count": correct_counts,
             "topics_incorrect_count": incorrect_counts,
             "recent_mistake_topics": _trim_history(recent_mistakes, 8),
+            "recent_answer_results": answer_results,
+            "recent_answer_levels": answer_levels,
+            "recent_answer_styles": answer_styles,
+            "recent_answer_topics": answer_topics,
             "last_studied_topic": topic,
             "last_answered_option": (selected_option or "").upper(),
             "last_answer_correct": correct,
+            "current_difficulty_level": next_level,
+            "pending_reinforcement_topic": pending_reinforcement_topic,
+            "pending_reinforcement_decision_point": pending_reinforcement_decision_point,
+            "pending_reinforcement_remaining": pending_reinforcement_remaining,
         },
     )
     log_event(
         "mcq_answered",
         session_id,
-        {"content_item_id": item["id"], "topic": topic, "selected_option": selected_option, "correct": correct},
+        {
+            "content_item_id": item["id"],
+            "topic": topic,
+            "selected_option": selected_option,
+            "correct": correct,
+            "difficulty_level": item.get("difficulty_level"),
+            "next_difficulty_level": next_level,
+            "question_style": item.get("question_style"),
+        },
     )
     log_event("mcq_correct" if correct else "mcq_incorrect", session_id, {"content_item_id": item["id"], "topic": topic})
 
@@ -1438,6 +1982,8 @@ def answer_mcq(session_id, content_item_id, selected_option):
 
 def _pick_related_item(session_id, item, item_type, exclude_self=False):
     state = _load_state(session_id)
+    user_profile = get_user_profile(session_id)
+    policy = _difficulty_policy_for_profile(user_profile)
     exclude_ids = _recent_study_exclude_ids(state)
     if exclude_self:
         exclude_ids.add(item["id"])
@@ -1445,6 +1991,7 @@ def _pick_related_item(session_id, item, item_type, exclude_self=False):
     if not candidates:
         fallback_exclude_ids = {item["id"]} if exclude_self else None
         candidates = _get_items(item_type=item_type, topic=item["topic"], exclude_ids=fallback_exclude_ids) or _get_items(item_type=item_type, exclude_ids=fallback_exclude_ids)
+    target_level = _current_difficulty_level(state, policy)
     return _pick_best_item(
         session_id,
         candidates,
@@ -1452,7 +1999,9 @@ def _pick_related_item(session_id, item, item_type, exclude_self=False):
         state,
         preferred_topic=item.get("topic"),
         preferred_item_type=item_type,
-        preferred_difficulty_band="standard" if item_type == "mcq" else None,
+        preferred_difficulty_level=target_level if item_type == "mcq" else item.get("difficulty_level"),
+        preferred_question_style=item.get("question_style") if item_type == "mcq" else "pearl",
+        reinforcement=_pending_reinforcement(state) if item_type == "mcq" else None,
     )
 
 
