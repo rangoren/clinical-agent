@@ -42,6 +42,11 @@ APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Asia/Jerusalem")
 ALLOW_NON_PROD_PROD_DB = _read_bool("ALLOW_NON_PROD_PROD_DB", False)
 ENABLE_EXTERNAL_SIDE_EFFECTS = _read_bool("ENABLE_EXTERNAL_SIDE_EFFECTS", APP_ENV == "production")
 ENABLE_GOOGLE_CALENDAR_INTEGRATION = _read_bool("ENABLE_GOOGLE_CALENDAR_INTEGRATION", APP_ENV == "production")
+R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "").strip()
+R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "").strip()
+R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
+R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "").strip()
+R2_ENDPOINT = os.getenv("R2_ENDPOINT", "").strip().rstrip("/")
 
 if not ANTHROPIC_API_KEY:
     raise ValueError("Missing ANTHROPIC_API_KEY in environment configuration.")
