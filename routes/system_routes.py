@@ -3,7 +3,11 @@ from fastapi.responses import JSONResponse
 
 from routes.home_routes import APP_VERSION
 from services.logging_service import log_event
-from services.textbook_cache_service import get_textbook_cache, merge_textbook_cache_topics
+from services.textbook_cache_service import (
+    get_textbook_cache,
+    get_textbook_page_cache_progress,
+    merge_textbook_cache_topics,
+)
 from services.textbook_catalog_service import (
     build_gabbe_topic_mapping_batch,
     cache_gabbe_page_text_batch,
@@ -130,6 +134,24 @@ def health_textbooks_gabbe_page_cache_rebuild(
         {
             "status": "ok",
             **{**payload, "cache_updated_at": to_isoformat(payload.get("cache_updated_at"))},
+        }
+    )
+
+
+@router.get("/health/textbooks/gabbe/page-cache")
+def health_textbooks_gabbe_page_cache():
+    if APP_ENV == "production":
+        return JSONResponse({"status": "forbidden"}, status_code=403)
+
+    progress = get_textbook_page_cache_progress("gabbe_page_text")
+    return JSONResponse(
+        {
+            "status": "ok",
+            "book_id": "gabbe_9",
+            "page_count": progress.get("page_count", 0),
+            "cached_through_page": progress.get("cached_through_page", 0),
+            "total_pages": progress.get("total_pages"),
+            "cache_updated_at": to_isoformat(progress.get("updated_at")),
         }
     )
 

@@ -66,3 +66,24 @@ def append_textbook_page_cache(cache_key, pages, metadata=None):
     if metadata:
         payload.update(metadata)
     return save_textbook_cache(cache_key, payload)
+
+
+def get_textbook_page_cache_progress(cache_key):
+    cached = get_textbook_cache(cache_key) or {}
+    payload = cached.get("payload") or {}
+    pages = payload.get("pages") or []
+    if not pages:
+        return {
+            "page_count": 0,
+            "cached_through_page": 0,
+            "total_pages": payload.get("total_pages"),
+            "updated_at": cached.get("updated_at"),
+        }
+
+    last_page = max((entry.get("page") or 0) for entry in pages)
+    return {
+        "page_count": len(pages),
+        "cached_through_page": last_page,
+        "total_pages": payload.get("total_pages"),
+        "updated_at": cached.get("updated_at"),
+    }
