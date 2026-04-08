@@ -6,6 +6,7 @@ from services.logging_service import log_event
 from services.textbook_cache_service import get_textbook_cache, merge_textbook_cache_topics
 from services.textbook_catalog_service import (
     build_gabbe_topic_mapping_batch,
+    cache_gabbe_page_text_batch,
     build_gabbe_topic_mapping,
     build_gabbe_topic_mapping_summary,
     build_textbook_catalog,
@@ -112,6 +113,23 @@ def health_textbooks_gabbe_mapping():
             "status": "ok",
             "cache_updated_at": cached.get("updated_at"),
             **build_gabbe_topic_mapping_summary(payload),
+        }
+    )
+
+
+@router.post("/health/textbooks/gabbe/page-cache/rebuild")
+def health_textbooks_gabbe_page_cache_rebuild(
+    start_page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=50),
+):
+    if APP_ENV == "production":
+        return JSONResponse({"status": "forbidden"}, status_code=403)
+
+    payload = cache_gabbe_page_text_batch(start_page=start_page, limit=limit)
+    return JSONResponse(
+        {
+            "status": "ok",
+            **payload,
         }
     )
 

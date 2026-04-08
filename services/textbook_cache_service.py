@@ -45,3 +45,24 @@ def merge_textbook_cache_topics(cache_key, topic_entries, metadata=None):
     if metadata:
         payload.update(metadata)
     return save_textbook_cache(cache_key, payload)
+
+
+def append_textbook_page_cache(cache_key, pages, metadata=None):
+    existing = get_textbook_cache(cache_key) or {}
+    existing_payload = existing.get("payload") or {}
+    existing_pages = existing_payload.get("pages") or []
+    by_page = {entry.get("page"): entry for entry in existing_pages if entry.get("page")}
+
+    for entry in pages:
+        if entry.get("page"):
+            by_page[entry["page"]] = entry
+
+    merged_pages = [by_page[page] for page in sorted(by_page)]
+    payload = {
+        "book_id": existing_payload.get("book_id") or (metadata or {}).get("book_id") or "gabbe_9",
+        "pages": merged_pages,
+        "page_count": len(merged_pages),
+    }
+    if metadata:
+        payload.update(metadata)
+    return save_textbook_cache(cache_key, payload)

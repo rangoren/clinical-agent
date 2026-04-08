@@ -3,6 +3,7 @@ import re
 from functools import lru_cache
 
 from services.book_storage_service import get_book_object, get_r2_client
+from services.textbook_cache_service import append_textbook_page_cache, get_textbook_cache
 from settings import R2_BUCKET_NAME
 
 
@@ -116,6 +117,20 @@ def _page_text(page):
     return "\n".join(_page_text_lines(page))
 
 
+def _load_gabbe_reader():
+    book = get_book_object("gabbe_9")
+    client = get_r2_client()
+    response = client.get_object(Bucket=R2_BUCKET_NAME, Key=book["key"])
+    try:
+        pdf_bytes = response["Body"].read()
+    finally:
+        response["Body"].close()
+
+    from pypdf import PdfReader
+
+    return PdfReader(io.BytesIO(pdf_bytes))
+
+
 def _candidate_heading(line):
     if not line:
         return None
@@ -206,23 +221,15 @@ def _topic_queries(topic):
 
 @lru_cache(maxsize=16)
 def search_gabbe_topic(topic):
-    book = get_book_object("gabbe_9")
-    client = get_r2_client()
-    response = client.get_object(Bucket=R2_BUCKET_NAME, Key=book["key"])
-    try:
-        pdf_bytes = response["Body"].read()
-    finally:
-        response["Body"].close()
-
-    from pypdf import PdfReader
-
-    reader = PdfReader(io.BytesIO(pdf_bytes))
-    page_limit = min(TOPIC_SEARCH_SCAN_END_PAGE, len(reader.pages))
+    page_cache = get_textbook_cache("gabbe_page_text") or {}
+    page_payload = page_cache.get("payload") or {}
+    cached_pages = page_payload.get("pages") or []
     normalized_queries = [query.lower() for query in _topic_queries(topic)]
     results = []
 
-    for page_number in range(1, page_limit + 1):
-        text = _page_text(reader.pages[page_number - 1])
+    for page_entry in cached_pages:
+        page_number = page_entry.get("page")
+        text = page_entry.get("text") or ""
         if not text:
             continue
         lower_text = text.lower()
@@ -242,9 +249,50 @@ def search_gabbe_topic(topic):
     return {
         "topic": topic,
         "queries": normalized_queries,
-        "scan_window": {"start_page": 1, "end_page": page_limit},
+        "scan_window": {
+            "start_page": page_payload.get("start_page", 1),
+            "end_page": page_payload.get("end_page", 0),
+        },
         "match_count": len(results),
         "matches": results[:12],
+    }
+
+
+def build_gabbe_page_text_batch(start_page=1, limit=25):
+    reader = _load_gabbe_reader()
+    total_pages = len(reader.pages)
+    end_page = min(total_pages, start_page + limit - 1)
+    extracted_pages = []
+
+    for page_number in range(start_page, end_page + 1):
+        text = _page_text(reader.pages[page_number - 1])
+        extracted_pages.append(
+            {
+                "page": page_number,
+                "text": text,
+            }
+        )
+
+    return {
+        "book_id": "gabbe_9",
+        "start_page": start_page,
+        "end_page": end_page,
+        "batch_count": len(extracted_pages),
+        "total_pages": total_pages,
+        "pages": extracted_pages,
+    }
+
+
+def cache_gabbe_page_text_batch(start_page=1, limit=25):
+    payload = build_gabbe_page_text_batch(start_page=start_page, limit=limit)
+    cached = append_textbook_page_cache(
+        "gabbe_page_text",
+        payload["pages"],
+        metadata={"book_id": "gabbe_9", "start_page": 1, "end_page": payload["end_page"], "total_pages": payload["total_pages"]},
+    )
+    return {
+        "cache_updated_at": cached.get("updated_at"),
+        **payload,
     }
 
 
