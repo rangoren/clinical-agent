@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from routes.home_routes import APP_VERSION
+from services.textbook_audit_service import audit_textbook_objects
 from settings import (
     APP_BASE_URL,
     APP_ENV,
@@ -33,3 +34,10 @@ def health_config():
         )
 
     return JSONResponse(payload)
+
+
+@router.get("/health/textbooks")
+def health_textbooks():
+    if APP_ENV == "production":
+        return JSONResponse({"status": "forbidden"}, status_code=403)
+    return JSONResponse(audit_textbook_objects())
