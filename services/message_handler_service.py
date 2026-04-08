@@ -45,6 +45,10 @@ PROFILE_STATUS_PATTERNS = (
     "what residency year do you have saved",
     "what residency year is saved",
     "what do you have saved for me",
+    "what you have saved on me",
+    "what do you have saved on me",
+    "what have you saved on me",
+    "what have you saved for me",
     "what do you know about my training",
     "what do you know about me",
     "what is saved in my profile",
@@ -611,7 +615,13 @@ def _looks_like_profile_status_question(user_message):
     normalized = _normalize_plain_text(user_message)
     if not normalized or "?" not in normalized:
         return False
-    return any(pattern in normalized for pattern in PROFILE_STATUS_PATTERNS)
+    if any(pattern in normalized for pattern in PROFILE_STATUS_PATTERNS):
+        return True
+    if "saved" in normalized and any(token in normalized for token in (" me", "profile", "training", "residency")):
+        return True
+    if "what do you know" in normalized and any(token in normalized for token in ("me", "training", "profile")):
+        return True
+    return False
 
 
 def _build_profile_status_reply(user_profile):
