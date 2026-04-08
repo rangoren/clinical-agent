@@ -27,6 +27,9 @@ GABBE_TOPIC_MAP = [
 
 def _clean_title(value):
     text = re.sub(r"\s+", " ", str(value or "")).strip()
+    text = re.sub(r"[^\x20-\x7E]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.replace(" ?", "")
     return text or "Untitled"
 
 
@@ -39,7 +42,6 @@ def _destination_page_number(reader, destination):
 
 def _flatten_outline(reader, outline, depth=0, entries=None):
     entries = entries or []
-    last_entry = None
     for item in outline or []:
         if isinstance(item, list):
             _flatten_outline(reader, item, depth=depth + 1, entries=entries)
@@ -53,16 +55,35 @@ def _flatten_outline(reader, outline, depth=0, entries=None):
             "depth": depth,
         }
         entries.append(entry)
-        last_entry = entry
     return entries
 
 
-def _to_catalog(flat_entries, page_count):
+def _dedupe_and_sort_entries(flat_entries):
+    deduped = []
+    seen = set()
+    for entry in flat_entries:
+        title = _clean_title(entry.get("title"))
+        page = entry.get("page")
+        depth = int(entry.get("depth") or 0)
+        if not page:
+            continue
+        key = (title.lower(), page, depth)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append({"title": title, "page": page, "depth": depth})
+
+    deduped.sort(key=lambda entry: (entry["page"], entry["depth"], entry["title"].lower()))
+    return deduped
+
+
+def _to_catalog(flat_entries, page_count, max_depth=2):
+    filtered_entries = [entry for entry in _dedupe_and_sort_entries(flat_entries) if entry["depth"] <= max_depth]
     catalog = []
-    for index, entry in enumerate(flat_entries):
+    for index, entry in enumerate(filtered_entries):
         current_page = entry.get("page")
         next_page = None
-        for later in flat_entries[index + 1:]:
+        for later in filtered_entries[index + 1:]:
             later_page = later.get("page")
             if later_page and current_page and later_page >= current_page:
                 next_page = later_page
@@ -108,7 +129,8 @@ def build_textbook_catalog(book_id):
         outline = []
 
     flat_entries = _flatten_outline(reader, outline, depth=0, entries=[])
-    catalog = _to_catalog(flat_entries, len(reader.pages))
+    catalog = _to_catalog(flat_entries, len(reader.pages), max_depth=2)
+    chapter_catalog = [entry for entry in catalog if entry["depth"] <= 1]
 
     return {
         "book_id": book["book_id"],
@@ -117,7 +139,10 @@ def build_textbook_catalog(book_id):
         "domain": book["domain"],
         "page_count": len(reader.pages),
         "outline_entry_count": len(flat_entries),
+        "catalog_entry_count": len(catalog),
+        "chapter_entry_count": len(chapter_catalog),
         "catalog": catalog,
+        "chapter_catalog": chapter_catalog,
     }
 
 

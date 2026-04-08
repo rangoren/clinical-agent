@@ -60,6 +60,9 @@ def health_textbooks_gabbe():
             "domain": catalog_payload["domain"],
             "page_count": catalog_payload["page_count"],
             "outline_entry_count": catalog_payload["outline_entry_count"],
+            "catalog_entry_count": catalog_payload["catalog_entry_count"],
+            "chapter_entry_count": catalog_payload["chapter_entry_count"],
+            "chapter_catalog_preview": catalog_payload["chapter_catalog"][:30],
             "catalog_preview": preview,
             "gabbe_mvp_topic_map": get_gabbe_mvp_topic_map(),
         }
