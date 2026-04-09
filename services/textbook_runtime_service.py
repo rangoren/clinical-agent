@@ -384,7 +384,16 @@ def detect_textbook_request(user_message):
         by_book_pattern = rf"\b(by|from|in|per)\s+{re.escape(matched_alias)}\b"
         if not re.search(by_book_pattern, normalized):
             if not re.search(rf"\b{re.escape(matched_alias)}\s+(on|about)\b", normalized):
-                return None
+                compact_tokens = _tokenize_text(normalized)
+                alias_tokens = _tokenize_text(matched_alias)
+                remaining_tokens = [token for token in compact_tokens if token not in alias_tokens]
+                telegraphic_request = (
+                    len(compact_tokens) <= 6
+                    and len(remaining_tokens) >= 1
+                    and any(len(token) >= 3 for token in remaining_tokens)
+                )
+                if not telegraphic_request:
+                    return None
 
     book = get_book_object(matched_book_id)
     if not book:
