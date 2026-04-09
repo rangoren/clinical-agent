@@ -2230,8 +2230,9 @@
 
             const shell = getStudyCardsShell();
             if (!shell) return;
+            const hasExistingCards = shell.children.length > 0;
 
-            if (!force && shell.children.length > 0) {
+            if (!force && hasExistingCards) {
                 shell.classList.add("visible");
                 refreshEntryGuidanceVisibility();
                 return;
@@ -2239,7 +2240,12 @@
 
             if (studyCardsRequested) return;
             studyCardsRequested = true;
-            renderStudyCardPlaceholders();
+            if (!hasExistingCards) {
+                renderStudyCardPlaceholders();
+            } else {
+                shell.classList.add("visible");
+                refreshEntryGuidanceVisibility();
+            }
 
             try {
                 const response = await fetch("/study/cards", {
@@ -2254,7 +2260,9 @@
                 const data = await response.json();
                 renderStudyCards(data.cards || []);
             } catch (_error) {
-                clearStudyCards();
+                if (!hasExistingCards) {
+                    clearStudyCards();
+                }
             }
         }
 
