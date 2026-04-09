@@ -1793,6 +1793,7 @@
         let pullTouchStartY = 0;
         let pullDistance = 0;
         let pullTracking = false;
+        let pendingStudyCardsTimer = null;
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
         const studyCardsCacheKey = "entry_study_cards_v1";
@@ -2122,6 +2123,21 @@
             hideStudyCards();
             dismissEntryGuidance();
             updateComposerState();
+        }
+
+        function cancelDeferredStudyCardsLoad() {
+            if (pendingStudyCardsTimer) {
+                clearTimeout(pendingStudyCardsTimer);
+                pendingStudyCardsTimer = null;
+            }
+        }
+
+        function scheduleDeferredStudyCardsLoad(force = false) {
+            cancelDeferredStudyCardsLoad();
+            pendingStudyCardsTimer = setTimeout(() => {
+                pendingStudyCardsTimer = null;
+                maybeShowStudyCards(force);
+            }, 120);
         }
 
         function shouldShowStudyCards() {
@@ -3033,6 +3049,7 @@
 
         async function bootstrapSession() {
             studyCardsDismissed = false;
+            cancelDeferredStudyCardsLoad();
             setComposerEnabled(false);
             setStatus("Checking");
             refreshEntryGuidanceVisibility();
@@ -3074,13 +3091,11 @@
                 hideSessionBanner();
                 if (data.reply) {
                     appendAssistantMessage(data.reply);
-                } else if (data.cards && data.cards.length > 0) {
-                    renderStudyCards(data.cards);
                 }
                 await refreshCalendarStatus();
                 setComposerEnabled(true);
-                if (!data.cards || data.cards.length === 0) {
-                    maybeShowStudyCards(true);
+                if (!data.reply) {
+                    scheduleDeferredStudyCardsLoad(true);
                 }
                 refreshEntryGuidanceVisibility();
                 attemptInitialComposerFocus();

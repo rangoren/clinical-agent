@@ -4,7 +4,6 @@ from fastapi.responses import JSONResponse
 from services.logging_service import log_event
 from services.message_handler_service import continue_onboarding, get_session_state, process_message, reset_session, start_clean_chat_mode
 from services.scheduling_service import build_scheduling_welcome, confirm_scheduling_draft, dismiss_scheduling_draft, handle_scheduling_message
-from services.study_service import get_idle_study_cards
 from settings import APP_ENV
 
 
@@ -51,8 +50,6 @@ async def handle_session_state(request: Request):
         if app_mode == "scheduling":
             return JSONResponse({"state": "ready", "needs_onboarding": False, "reply": build_scheduling_welcome(session_id)})
         session_state = get_session_state(session_id)
-        if session_state.get("state") == "ready" and not session_state.get("reply"):
-            session_state.update(get_idle_study_cards(session_id))
         return JSONResponse(session_state)
     except Exception as exc:
         log_event("route_error", payload={"route": "/session-state", "error": str(exc)}, level="error")
