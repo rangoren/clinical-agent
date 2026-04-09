@@ -274,6 +274,15 @@ TOPIC_PRIORITY_MARKERS = {
     "obesity and reproduction": ("obesity", "body mass index", "ovulation", "weight loss", "ivf"),
 }
 
+TOPIC_REQUEST_ALIASES = {
+    "preeclampsia": ("רעלת", "רעלת הריון", "פרה אקלמפסיה", "פרה-אקלמפסיה"),
+    "pprom": ("ירידת מים מוקדמת", "ירידת מים מוקדמת מוקדמת", "פקיעת קרומים מוקדמת", "פקיעת קרומים מוקדמת לפני לידה"),
+    "cervical insufficiency": ("אי ספיקת צוואר הרחם", "אי ספיקה צווארית", "צוואר רחם קצר", "צוואר קצר"),
+    "gestational diabetes": ("סוכרת הריון", "סכרת הריון", "gdm"),
+    "postpartum hemorrhage": ("דימום לאחר לידה", "דמם לאחר לידה", "pph"),
+    "labor dystocia": ("דיסטוציה", "עיכוב בלידה", "חוסר התקדמות בלידה", "ארסט בלידה"),
+}
+
 
 def detect_textbook_request(user_message):
     normalized = _normalize_text(user_message)
@@ -321,6 +330,11 @@ def _score_topic_match(normalized_message, topic_entry):
         query_normalized = _normalize_text(query)
         if query_normalized and query_normalized in normalized_message:
             score += max(3, min(6, len(query_normalized.split()) + 2))
+
+    for alias in TOPIC_REQUEST_ALIASES.get(topic_entry.get("topic"), ()):
+        alias_normalized = _normalize_text(alias)
+        if alias_normalized and alias_normalized in normalized_message:
+            score += max(4, min(7, len(alias_normalized.split()) + 3))
 
     return score
 
