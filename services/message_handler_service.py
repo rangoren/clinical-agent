@@ -82,6 +82,16 @@ TRAINING_STAGE_STATUS_PATTERNS = (
 )
 
 
+def _build_textbook_llm_user_message(user_message):
+    question_text = (user_message or "").strip()
+    return (
+        "Answer in English only.\n"
+        "Do not answer in Hebrew, even if the user's question is in Hebrew.\n"
+        "Use the textbook excerpts and answer the user's question directly.\n\n"
+        f"Original user question:\n{question_text}"
+    )
+
+
 def _reply_has_visible_text(reply):
     if not reply:
         return False
@@ -1022,11 +1032,17 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             ),
         },
     )
+    llm_chat_history = chat_history
+    llm_user_message = user_message
+    if textbook_request:
+        llm_chat_history = []
+        llm_user_message = _build_textbook_llm_user_message(user_message)
+
     stage_started_at = time.perf_counter()
     raw_reply = generate_reply(
         system_prompt=system_prompt,
-        chat_history=chat_history,
-        user_message=user_message,
+        chat_history=llm_chat_history,
+        user_message=llm_user_message,
         fallback_reply=_build_textbook_overload_fallback(textbook_context) if textbook_context else None,
     )
     mark("llm_reply_ms", stage_started_at)
