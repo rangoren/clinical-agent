@@ -304,10 +304,14 @@ def _score_topic_match(normalized_message, topic_entry):
 
 
 def _mapping_cache_key(book_id):
+    if book_id == "gabbe_9":
+        return "gabbe_topic_mapping"
     return f"{book_id}_topic_mapping"
 
 
 def _page_cache_key(book_id):
+    if book_id == "gabbe_9":
+        return "gabbe_page_text"
     return f"{book_id}_page_text"
 
 
