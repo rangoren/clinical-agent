@@ -11,43 +11,174 @@ from services.textbook_catalog_service import (
 
 TEXTBOOK_REQUEST_HINTS = (
     "what does",
+    "what do",
+    "what dose",
+    "what dos",
+    "waht does",
+    "waht dose",
+    "waht do",
+    "wht does",
+    "what is says",
+    "what it says",
     "according to",
+    "acording to",
+    "accoring to",
+    "accordng to",
+    "according too",
     "based on",
+    "base on",
+    "based of",
     "from the book",
+    "frm the book",
+    "from book",
+    "from textbook",
     "what is written",
+    "what is writen",
+    "what is writeen",
     "what does the book say",
+    "what does book say",
+    "what dose the book say",
+    "what dos the book say",
+    "waht does the book say",
     "say about",
+    "says about",
+    "say abut",
+    "says abot",
     "what is written in the book",
+    "what is writen in the book",
     "what does the textbook say",
+    "what dose the textbook say",
     "what does this book say",
     "what does the book say about",
+    "what dose the book say about",
+    "what do the book say about",
+    "what the book says about",
+    "what textbook says about",
     "what is written in",
+    "what is writen in",
+    "what written in",
+    "what gabbe says about",
+    "what speroff says about",
+    "what berek says about",
+    "what gabbe say about",
+    "what speroff say about",
+    "what berek say about",
+    "gabbe says about",
+    "speroff says about",
+    "berek says about",
+    "what gabbe says",
+    "what speroff says",
+    "what berek says",
+    "what gabbe say",
+    "what speroff say",
+    "what berek say",
+    "gabbe say",
+    "speroff say",
+    "berek say",
+    "according gabbe",
+    "according speroff",
+    "according berek",
     "לפי",
+    "עפ",
+    "ע\"פ",
+    "על פי",
     "מה כתוב",
+    "מה כותב",
+    "מה רשום",
+    "מה רשום בספר",
+    "מה רשום בספר על",
     "מה כתוב בספר",
+    "מה כתוב בסיפר",
+    "מה כתוב בספרר",
     "מה הספר אומר",
+    "מה הספ ר אומר",
+    "מה הסיפר אומר",
+    "מה הספר רושם",
     "מה הספר כותב",
+    "מה הסיפר כותב",
     "מה כתוב בספר על",
+    "מה כתוב בסיפר על",
     "מה הספר אומר על",
+    "מה הסיפר אומר על",
+    "מה הספר כותב על",
+    "מה רשום על",
     "מה כתוב בגאבי",
     "מה גאבי אומר",
+    "מה גאבי כותב",
+    "מה גבה אומר",
+    "מה גבי אומר",
     "מה כתוב בברק",
     "מה ברק אומר",
+    "מה ברק כותב",
+    "מה כתוב בבירק",
+    "מה בירק אומר",
     "מה כתוב בספרוף",
     "מה ספרוף אומר",
+    "מה ספרוף כותב",
+    "מה ספרופ אומר",
+    "מה ספרוב אומר",
     "מה אומר",
     "כתוב ב",
 )
 
 BOOK_ALIASES = {
-    "gabbe_9": ("gabbe", "gabbe's", "gabbe obstetrics"),
-    "berek_17": ("berek", "berek & novak", "berek and novak"),
-    "speroff_10": ("speroff", "speroff's", "clinical gynecologic endocrinology"),
+    "gabbe_9": ("gabbe", "gabbe's", "gabe", "gabb", "gabbe obstetrics", "גאבי", "גבי", "גבה"),
+    "berek_17": ("berek", "berek & novak", "berek and novak", "berk", "bereck", "novak gynecology", "ברק", "בירק"),
+    "speroff_10": ("speroff", "speroff's", "sperof", "sperrof", "clinical gynecologic endocrinology", "ספרוף", "ספרופ", "ספרוב"),
 }
+
+TEXTBOOK_ACTION_HINTS = (
+    "say",
+    "says",
+    "said",
+    "dose",
+    "does",
+    "do",
+    "according",
+    "acording",
+    "accoring",
+    "written",
+    "writen",
+    "write",
+    "book",
+    "textbook",
+    "לפי",
+    "כתוב",
+    "כותב",
+    "אומר",
+    "רשום",
+)
 
 
 def _normalize_text(value):
     return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+
+def _contains_textbook_hint(normalized):
+    if any(marker in normalized for marker in TEXTBOOK_REQUEST_HINTS):
+        return True
+
+    compact = re.sub(r"[^a-z0-9\u0590-\u05ff\s]", " ", normalized)
+    compact = re.sub(r"\s+", " ", compact).strip()
+    if not compact:
+        return False
+
+    has_book_alias = any(
+        alias in compact
+        for aliases in BOOK_ALIASES.values()
+        for alias in aliases
+    )
+    has_action = any(marker in compact for marker in TEXTBOOK_ACTION_HINTS)
+    if has_book_alias and has_action:
+        return True
+
+    typo_patterns = (
+        r"\b(wha?t|waht|wht)\s+(does|dose|do|dos)?\s*(the\s+)?(book|textbook|gabbe|gabe|speroff|sperof|berek|berk)\s+(say|says|sey|sez)\b",
+        r"\b(according|acording|accoring|accordng)\s+(to\s+)?(gabbe|gabe|speroff|sperof|berek|berk|book|textbook)\b",
+        r"\b(what|waht)\s+(gabbe|gabe|speroff|sperof|berek|berk)\s+(say|says|sey|sez)\b",
+        r"(מה|מה ש|לפי)\s+(הספר|הסיפר|גאבי|גבי|גבה|ברק|בירק|ספרוף|ספרופ|ספרוב).{0,16}(אומר|כותב|כתוב|רשום)",
+    )
+    return any(re.search(pattern, compact) for pattern in typo_patterns)
 
 
 def _trim_excerpt(text, limit=1800):
@@ -127,7 +258,7 @@ def detect_textbook_request(user_message):
     if not normalized:
         return None
 
-    explicit_request = any(marker in normalized for marker in TEXTBOOK_REQUEST_HINTS)
+    explicit_request = _contains_textbook_hint(normalized)
     matched_book_id = None
     matched_alias = None
 

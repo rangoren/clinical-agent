@@ -84,6 +84,13 @@ SPEROFF_TOPIC_MAP = [
     {"topic": "menopause hormone therapy", "domain": "fertility", "tier": "A", "priority": "high", "why": "high-yield endocrine management topic"},
     {"topic": "abnormal uterine bleeding ovulatory dysfunction", "domain": "fertility", "tier": "B", "priority": "medium", "why": "endocrine bleeding overlap topic"},
     {"topic": "thyroid dysfunction and reproduction", "domain": "fertility", "tier": "B", "priority": "medium", "why": "fertility-endocrine overlap topic"},
+    {"topic": "functional hypothalamic amenorrhea", "domain": "fertility", "tier": "A", "priority": "medium", "why": "common amenorrhea branch with management implications"},
+    {"topic": "recurrent pregnancy loss", "domain": "fertility", "tier": "A", "priority": "high", "why": "common fertility workup and counseling topic"},
+    {"topic": "unexplained infertility", "domain": "fertility", "tier": "A", "priority": "medium", "why": "common counseling and treatment sequencing topic"},
+    {"topic": "intrauterine insemination", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common intermediate fertility treatment pathway"},
+    {"topic": "fertility preservation", "domain": "fertility", "tier": "B", "priority": "medium", "why": "important counseling topic before gonadotoxic treatment"},
+    {"topic": "hirsutism", "domain": "fertility", "tier": "B", "priority": "medium", "why": "high-yield hyperandrogenism symptom pathway"},
+    {"topic": "hydrosalpinx", "domain": "fertility", "tier": "B", "priority": "medium", "why": "important IVF and tubal-factor management question"},
 ]
 
 CHAPTER_TITLE_RE = re.compile(r"^\s*(\d{1,3})\s*[.\-]?\s+([A-Z][A-Za-z0-9,\-:;/()' ]{6,120})\s*$")
@@ -170,6 +177,13 @@ SPEROFF_TOPIC_QUERIES = {
     "menopause hormone therapy": ["menopausal hormone therapy", "hormone therapy", "estrogen therapy"],
     "abnormal uterine bleeding ovulatory dysfunction": ["abnormal uterine bleeding ovulatory dysfunction", "aub-o", "ovulatory dysfunction bleeding"],
     "thyroid dysfunction and reproduction": ["thyroid dysfunction infertility", "thyroid and reproduction", "thyroid dysfunction and reproduction"],
+    "functional hypothalamic amenorrhea": ["functional hypothalamic amenorrhea", "hypothalamic amenorrhea", "exercise amenorrhea"],
+    "recurrent pregnancy loss": ["recurrent pregnancy loss", "recurrent miscarriage", "recurrent spontaneous abortion"],
+    "unexplained infertility": ["unexplained infertility", "idiopathic infertility"],
+    "intrauterine insemination": ["intrauterine insemination", "iui", "therapeutic insemination"],
+    "fertility preservation": ["fertility preservation", "oocyte cryopreservation", "egg freezing"],
+    "hirsutism": ["hirsutism", "androgen excess", "excess hair growth"],
+    "hydrosalpinx": ["hydrosalpinx", "salpingectomy before ivf", "proximal tubal occlusion"],
 }
 
 LOW_SIGNAL_SNIPPET_MARKERS = (
@@ -239,9 +253,70 @@ TOPIC_SIGNAL_MARKERS = {
     "menopause hormone therapy": ("vasomotor symptoms", "estrogen", "progestin", "contraindication"),
     "abnormal uterine bleeding ovulatory dysfunction": ("anovulation", "progestin", "endometrial protection", "bleeding"),
     "thyroid dysfunction and reproduction": ("tsh", "hypothyroidism", "hyperthyroidism", "pregnancy"),
+    "functional hypothalamic amenorrhea": ("weight loss", "exercise", "stress", "hypoestrogenism", "bone"),
+    "recurrent pregnancy loss": ("parental karyotype", "antiphospholipid", "uterine cavity", "loss", "miscarriage"),
+    "unexplained infertility": ("expectant management", "iui", "ivf", "ovulation induction", "couple"),
+    "intrauterine insemination": ("washed sperm", "timing", "ovulation", "stimulation", "insemination"),
+    "fertility preservation": ("cryopreservation", "oocyte", "embryo", "gonadotoxic", "oncology"),
+    "hirsutism": ("androgen", "testosterone", "spironolactone", "cosmetic", "pcos"),
+    "hydrosalpinx": ("salpingectomy", "proximal tubal occlusion", "ivf", "implantation", "tubal"),
 }
 
-SPEROFF_MANUAL_TOPIC_RANGES = {}
+SPEROFF_MANUAL_TOPIC_RANGES = {
+    "amenorrhea": [
+        {"page_start": 816, "page_end": 849},
+        {"page_start": 849, "page_end": 879},
+        {"page_start": 901, "page_end": 933},
+    ],
+    "pcos": [
+        {"page_start": 947, "page_end": 1052},
+        {"page_start": 2810, "page_end": 2827},
+        {"page_start": 2862, "page_end": 2882},
+    ],
+    "ovulation induction": [
+        {"page_start": 2818, "page_end": 2840},
+        {"page_start": 2840, "page_end": 2850},
+        {"page_start": 2863, "page_end": 2884},
+    ],
+    "letrozole": [
+        {"page_start": 2812, "page_end": 2827},
+        {"page_start": 2863, "page_end": 2884},
+    ],
+    "infertility evaluation": [
+        {"page_start": 2556, "page_end": 2561},
+        {"page_start": 2590, "page_end": 2595},
+        {"page_start": 2698, "page_end": 2703},
+    ],
+    "diminished ovarian reserve": [
+        {"page_start": 2541, "page_end": 2552},
+        {"page_start": 2641, "page_end": 2651},
+        {"page_start": 2904, "page_end": 2915},
+    ],
+    "premature ovarian insufficiency": [
+        {"page_start": 870, "page_end": 879},
+        {"page_start": 879, "page_end": 893},
+        {"page_start": 1440, "page_end": 1452},
+    ],
+    "hyperprolactinemia": [
+        {"page_start": 780, "page_end": 790},
+        {"page_start": 838, "page_end": 849},
+        {"page_start": 2856, "page_end": 2866},
+    ],
+    "endometriosis infertility": [
+        {"page_start": 2617, "page_end": 2627},
+        {"page_start": 3209, "page_end": 3299},
+    ],
+    "tubal factor infertility": [
+        {"page_start": 2602, "page_end": 2610},
+        {"page_start": 2611, "page_end": 2622},
+        {"page_start": 2907, "page_end": 2915},
+    ],
+    "male factor infertility": [
+        {"page_start": 2688, "page_end": 2713},
+        {"page_start": 2728, "page_end": 2738},
+        {"page_start": 2763, "page_end": 2782},
+    ],
+}
 
 GABBE_MANUAL_TOPIC_RANGES = {
     "pprom": [
