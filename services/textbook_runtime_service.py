@@ -2,7 +2,11 @@ import re
 
 from services.book_storage_service import get_book_object
 from services.textbook_cache_service import get_textbook_cache
-from services.textbook_catalog_service import GABBE_TOPIC_QUERIES, TOPIC_SIGNAL_MARKERS, _search_gabbe_topic_matches
+from services.textbook_catalog_service import (
+    BOOK_TOPIC_QUERIES,
+    TOPIC_SIGNAL_MARKERS,
+    _search_book_topic_matches,
+)
 
 
 TEXTBOOK_REQUEST_HINTS = (
@@ -150,7 +154,7 @@ def detect_textbook_request(user_message):
         "book_id": matched_book_id,
         "book_title": book["title"],
         "edition": book["edition"],
-        "supported": matched_book_id == "gabbe_9",
+        "supported": matched_book_id in {"gabbe_9", "speroff_10"},
     }
 
 
@@ -168,8 +172,16 @@ def _score_topic_match(normalized_message, topic_entry):
     return score
 
 
-def _find_best_gabbe_topic(user_message):
-    mapping_doc = get_textbook_cache("gabbe_topic_mapping") or {}
+def _mapping_cache_key(book_id):
+    return f"{book_id}_topic_mapping"
+
+
+def _page_cache_key(book_id):
+    return f"{book_id}_page_text"
+
+
+def _find_best_topic(book_id, user_message):
+    mapping_doc = get_textbook_cache(_mapping_cache_key(book_id)) or {}
     mapping_payload = mapping_doc.get("payload") or {}
     topics = mapping_payload.get("topics") or []
     if not topics:
@@ -322,25 +334,26 @@ def _build_curated_range_excerpt(topic, topic_queries, topic_matches, page_map, 
     return _trim_excerpt(" ".join(selected), limit=1400)
 
 
-def build_gabbe_textbook_context(user_message, max_ranges=3):
-    topic_entry = _find_best_gabbe_topic(user_message)
+def build_textbook_context(book_id, user_message, max_ranges=3):
+    topic_entry = _find_best_topic(book_id, user_message)
     if not topic_entry:
         return {
             "status": "topic_not_found",
-            "message": "I couldn't confidently map this request to one of the indexed Gabbe topics yet.",
+            "message": "I couldn't confidently map this textbook request to one of the indexed topics yet.",
         }
 
-    page_cache_doc = get_textbook_cache("gabbe_page_text") or {}
+    page_cache_doc = get_textbook_cache(_page_cache_key(book_id)) or {}
     page_payload = page_cache_doc.get("payload") or {}
     cached_pages = page_payload.get("pages") or []
     if not cached_pages:
+        book = get_book_object(book_id) or {}
         return {
             "status": "page_cache_missing",
-            "message": "Gabbe page cache is not available yet.",
+            "message": f"{book.get('title') or 'This textbook'} page cache is not available yet.",
         }
 
     page_map = {entry.get("page"): entry.get("text") for entry in cached_pages if entry.get("page")}
-    _, topic_queries, topic_matches = _search_gabbe_topic_matches(topic_entry["topic"])
+    _, topic_queries, topic_matches = _search_book_topic_matches(book_id, topic_entry["topic"])
     candidate_ranges = topic_entry.get("candidate_ranges") or []
     sources = []
     excerpts = []
@@ -353,7 +366,7 @@ def build_gabbe_textbook_context(user_message, max_ranges=3):
         range_matches = _matches_within_range(topic_matches, page_start, page_end)
         excerpt_text = _build_curated_range_excerpt(
             topic_entry["topic"],
-            topic_queries or GABBE_TOPIC_QUERIES.get(topic_entry["topic"], []),
+            topic_queries or (BOOK_TOPIC_QUERIES.get(book_id) or {}).get(topic_entry["topic"], []),
             topic_matches,
             page_map,
             page_start,
@@ -371,13 +384,13 @@ def build_gabbe_textbook_context(user_message, max_ranges=3):
         sources.append(
             {
                 "source_id": source_id,
-                "title": "Gabbe's Obstetrics: Normal and Problem Pregnancies, 9th edition",
+                "title": get_book_object(book_id)["title"] + f", {get_book_object(book_id)['edition']}th edition",
                 "url": None,
                 "source_type": "Textbook excerpt",
                 "source_detail": f"Topic: {topic_entry['topic']} | pp. {page_start}-{page_end}",
                 "page_start": page_start,
                 "page_end": page_end,
-                "book_id": "gabbe_9",
+                "book_id": book_id,
                 "topic": topic_entry["topic"],
                 "is_textbook": True,
             }
@@ -402,14 +415,22 @@ def build_gabbe_textbook_context(user_message, max_ranges=3):
 
     return {
         "status": "ok",
-        "book_id": "gabbe_9",
-        "book_title": "Gabbe's Obstetrics: Normal and Problem Pregnancies",
-        "edition": "9",
+        "book_id": book_id,
+        "book_title": get_book_object(book_id)["title"],
+        "edition": get_book_object(book_id)["edition"],
         "matched_topic": topic_entry["topic"],
         "topic_entry": topic_entry,
         "sources": sources,
         "excerpts": excerpts,
     }
+
+
+def build_gabbe_textbook_context(user_message, max_ranges=3):
+    return build_textbook_context("gabbe_9", user_message, max_ranges=max_ranges)
+
+
+def build_speroff_textbook_context(user_message, max_ranges=3):
+    return build_textbook_context("speroff_10", user_message, max_ranges=max_ranges)
 
 
 def build_textbook_overload_fallback_reply(textbook_context):

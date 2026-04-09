@@ -63,6 +63,29 @@ GABBE_TOPIC_MAP = [
     {"topic": "breastfeeding and lactation", "domain": "obstetrics", "tier": "B", "priority": "low", "why": "postpartum counseling and overlap topic"},
 ]
 
+SPEROFF_TOPIC_MAP = [
+    {"topic": "amenorrhea", "domain": "fertility", "tier": "A", "priority": "high", "why": "core endocrine workup and differential topic"},
+    {"topic": "pcos", "domain": "fertility", "tier": "A", "priority": "high", "why": "common endocrine and infertility management topic"},
+    {"topic": "ovulation induction", "domain": "fertility", "tier": "A", "priority": "high", "why": "central infertility treatment pathway"},
+    {"topic": "letrozole", "domain": "fertility", "tier": "A", "priority": "high", "why": "high-yield ovulation induction medication topic"},
+    {"topic": "clomiphene citrate", "domain": "fertility", "tier": "A", "priority": "medium", "why": "classic ovulation induction therapy topic"},
+    {"topic": "infertility evaluation", "domain": "fertility", "tier": "A", "priority": "high", "why": "broad entry point for many user questions"},
+    {"topic": "diminished ovarian reserve", "domain": "fertility", "tier": "A", "priority": "medium", "why": "common testing and counseling question"},
+    {"topic": "premature ovarian insufficiency", "domain": "fertility", "tier": "A", "priority": "medium", "why": "important ovarian failure topic"},
+    {"topic": "hyperprolactinemia", "domain": "fertility", "tier": "A", "priority": "medium", "why": "classic amenorrhea and infertility overlap"},
+    {"topic": "hypogonadotropic hypogonadism", "domain": "fertility", "tier": "B", "priority": "medium", "why": "important amenorrhea differential"},
+    {"topic": "endometriosis infertility", "domain": "fertility", "tier": "A", "priority": "high", "why": "common infertility and pain overlap"},
+    {"topic": "tubal factor infertility", "domain": "fertility", "tier": "A", "priority": "medium", "why": "core infertility evaluation domain"},
+    {"topic": "male factor infertility", "domain": "fertility", "tier": "A", "priority": "medium", "why": "high-yield infertility evaluation domain"},
+    {"topic": "ivf", "domain": "fertility", "tier": "A", "priority": "high", "why": "central assisted reproduction topic"},
+    {"topic": "controlled ovarian stimulation", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common IVF protocol topic"},
+    {"topic": "ohss", "domain": "fertility", "tier": "A", "priority": "high", "why": "important fertility treatment complication"},
+    {"topic": "luteal phase support", "domain": "fertility", "tier": "B", "priority": "low", "why": "common assisted reproduction support topic"},
+    {"topic": "menopause hormone therapy", "domain": "fertility", "tier": "A", "priority": "high", "why": "high-yield endocrine management topic"},
+    {"topic": "abnormal uterine bleeding ovulatory dysfunction", "domain": "fertility", "tier": "B", "priority": "medium", "why": "endocrine bleeding overlap topic"},
+    {"topic": "thyroid dysfunction and reproduction", "domain": "fertility", "tier": "B", "priority": "medium", "why": "fertility-endocrine overlap topic"},
+]
+
 CHAPTER_TITLE_RE = re.compile(r"^\s*(\d{1,3})\s*[.\-]?\s+([A-Z][A-Za-z0-9,\-:;/()' ]{6,120})\s*$")
 SHORT_ALL_CAPS_RE = re.compile(r"^[A-Z][A-Z0-9,\-:;/()' ]{6,90}$")
 
@@ -126,6 +149,29 @@ GABBE_TOPIC_QUERIES = {
     "breastfeeding and lactation": ["breastfeeding", "lactation", "mastitis"],
 }
 
+SPEROFF_TOPIC_QUERIES = {
+    "amenorrhea": ["amenorrhea", "secondary amenorrhea", "primary amenorrhea"],
+    "pcos": ["pcos", "polycystic ovary syndrome", "polycystic ovarian syndrome"],
+    "ovulation induction": ["ovulation induction", "anovulation treatment", "induce ovulation"],
+    "letrozole": ["letrozole", "femara"],
+    "clomiphene citrate": ["clomiphene", "clomiphene citrate", "clomid"],
+    "infertility evaluation": ["infertility evaluation", "workup of infertility", "infertility workup"],
+    "diminished ovarian reserve": ["diminished ovarian reserve", "low amh", "ovarian reserve"],
+    "premature ovarian insufficiency": ["premature ovarian insufficiency", "poi", "premature ovarian failure"],
+    "hyperprolactinemia": ["hyperprolactinemia", "prolactin elevation", "elevated prolactin"],
+    "hypogonadotropic hypogonadism": ["hypogonadotropic hypogonadism", "functional hypothalamic amenorrhea"],
+    "endometriosis infertility": ["endometriosis infertility", "endometriosis", "infertility with endometriosis"],
+    "tubal factor infertility": ["tubal factor infertility", "hydrosalpinx", "tubal disease"],
+    "male factor infertility": ["male factor infertility", "semen analysis", "male infertility"],
+    "ivf": ["ivf", "in vitro fertilization", "assisted reproduction"],
+    "controlled ovarian stimulation": ["controlled ovarian stimulation", "gonadotropin stimulation", "ovarian stimulation"],
+    "ohss": ["ohss", "ovarian hyperstimulation syndrome"],
+    "luteal phase support": ["luteal phase support", "progesterone support"],
+    "menopause hormone therapy": ["menopausal hormone therapy", "hormone therapy", "estrogen therapy"],
+    "abnormal uterine bleeding ovulatory dysfunction": ["abnormal uterine bleeding ovulatory dysfunction", "aub-o", "ovulatory dysfunction bleeding"],
+    "thyroid dysfunction and reproduction": ["thyroid dysfunction infertility", "thyroid and reproduction", "thyroid dysfunction and reproduction"],
+}
+
 LOW_SIGNAL_SNIPPET_MARKERS = (
     "doi.org",
     "downloaded for",
@@ -173,7 +219,29 @@ TOPIC_SIGNAL_MARKERS = {
     "fetal macrosomia": ("shoulder dystocia", "estimated fetal weight", "cesarean delivery", "diabetes"),
     "rh alloimmunization": ("anti-d", "middle cerebral artery", "doppler", "intrauterine transfusion"),
     "postpartum endometritis": ("fever", "clindamycin", "gentamicin", "postpartum infection"),
+    "amenorrhea": ("pregnancy test", "prolactin", "tsh", "fsh", "estradiol"),
+    "pcos": ("hyperandrogenism", "oligo-ovulation", "metabolic", "letrozole", "weight loss"),
+    "ovulation induction": ("letrozole", "clomiphene", "gonadotropin", "monitoring"),
+    "letrozole": ("ovulation", "live birth", "pcos", "dose"),
+    "clomiphene citrate": ("ovulation", "dose", "multiple gestation", "resistance"),
+    "infertility evaluation": ("ovulation", "tubal", "semen analysis", "uterine cavity"),
+    "diminished ovarian reserve": ("amh", "antral follicle count", "fsH", "counseling"),
+    "premature ovarian insufficiency": ("fsH", "estradiol", "hormone therapy", "bone health"),
+    "hyperprolactinemia": ("pituitary", "cabergoline", "bromocriptine", "mri"),
+    "hypogonadotropic hypogonadism": ("hypothalamic", "gonadotropin", "pulsatile gnrh", "low gonadotropin"),
+    "endometriosis infertility": ("laparoscopy", "ivf", "pain", "surgery"),
+    "tubal factor infertility": ("hsg", "hydrosalpinx", "salpingectomy", "ivf"),
+    "male factor infertility": ("semen analysis", "varicocele", "icsi", "azoospermia"),
+    "ivf": ("embryo transfer", "oocyte retrieval", "fertilization", "success"),
+    "controlled ovarian stimulation": ("gonadotropin", "follicle", "trigger", "monitoring"),
+    "ohss": ("ascites", "cabergoline", "coasting", "thrombosis"),
+    "luteal phase support": ("progesterone", "embryo transfer", "supplementation"),
+    "menopause hormone therapy": ("vasomotor symptoms", "estrogen", "progestin", "contraindication"),
+    "abnormal uterine bleeding ovulatory dysfunction": ("anovulation", "progestin", "endometrial protection", "bleeding"),
+    "thyroid dysfunction and reproduction": ("tsh", "hypothyroidism", "hyperthyroidism", "pregnancy"),
 }
+
+SPEROFF_MANUAL_TOPIC_RANGES = {}
 
 GABBE_MANUAL_TOPIC_RANGES = {
     "pprom": [
@@ -270,8 +338,35 @@ def _page_text(page):
     return "\n".join(_page_text_lines(page))
 
 
-def _load_gabbe_reader():
-    book = get_book_object("gabbe_9")
+BOOK_TOPIC_MAPS = {
+    "gabbe_9": GABBE_TOPIC_MAP,
+    "speroff_10": SPEROFF_TOPIC_MAP,
+}
+
+BOOK_TOPIC_QUERIES = {
+    "gabbe_9": GABBE_TOPIC_QUERIES,
+    "speroff_10": SPEROFF_TOPIC_QUERIES,
+}
+
+BOOK_MANUAL_TOPIC_RANGES = {
+    "gabbe_9": GABBE_MANUAL_TOPIC_RANGES,
+    "speroff_10": SPEROFF_MANUAL_TOPIC_RANGES,
+}
+
+
+def _cache_key(book_id, suffix):
+    return f"{book_id}_{suffix}"
+
+
+def _topic_queries_for_book(book_id, topic):
+    queries = (BOOK_TOPIC_QUERIES.get(book_id) or {}).get(topic, [])
+    if queries:
+        return queries
+    return [topic]
+
+
+def _load_book_reader(book_id):
+    book = get_book_object(book_id)
     client = get_r2_client()
     response = client.get_object(Bucket=R2_BUCKET_NAME, Key=book["key"])
     try:
@@ -365,18 +460,11 @@ def _snippet_around_match(text, match_start, radius=180):
     return snippet
 
 
-def _topic_queries(topic):
-    queries = GABBE_TOPIC_QUERIES.get(topic, [])
-    if queries:
-        return queries
-    return [topic]
-
-
-def _search_gabbe_topic_matches(topic):
-    page_cache = get_textbook_cache("gabbe_page_text") or {}
+def _search_book_topic_matches(book_id, topic):
+    page_cache = get_textbook_cache(_cache_key(book_id, "page_text")) or {}
     page_payload = page_cache.get("payload") or {}
     cached_pages = page_payload.get("pages") or []
-    normalized_queries = [query.lower() for query in _topic_queries(topic)]
+    normalized_queries = [query.lower() for query in _topic_queries_for_book(book_id, topic)]
     results = []
 
     for page_entry in cached_pages:
@@ -401,6 +489,10 @@ def _search_gabbe_topic_matches(topic):
     return page_payload, normalized_queries, results
 
 
+def _search_gabbe_topic_matches(topic):
+    return _search_book_topic_matches("gabbe_9", topic)
+
+
 @lru_cache(maxsize=16)
 def search_gabbe_topic(topic):
     page_payload, normalized_queries, results = _search_gabbe_topic_matches(topic)
@@ -417,8 +509,24 @@ def search_gabbe_topic(topic):
     }
 
 
-def build_gabbe_page_text_batch(start_page=1, limit=25):
-    reader = _load_gabbe_reader()
+@lru_cache(maxsize=16)
+def search_speroff_topic(topic):
+    page_payload, normalized_queries, results = _search_book_topic_matches("speroff_10", topic)
+
+    return {
+        "topic": topic,
+        "queries": normalized_queries,
+        "scan_window": {
+            "start_page": page_payload.get("start_page", 1),
+            "end_page": page_payload.get("end_page", 0),
+        },
+        "match_count": len(results),
+        "matches": results[:12],
+    }
+
+
+def build_book_page_text_batch(book_id, start_page=1, limit=25):
+    reader = _load_book_reader(book_id)
     total_pages = len(reader.pages)
     end_page = min(total_pages, start_page + limit - 1)
     extracted_pages = []
@@ -433,7 +541,7 @@ def build_gabbe_page_text_batch(start_page=1, limit=25):
         )
 
     return {
-        "book_id": "gabbe_9",
+        "book_id": book_id,
         "start_page": start_page,
         "end_page": end_page,
         "batch_count": len(extracted_pages),
@@ -442,12 +550,20 @@ def build_gabbe_page_text_batch(start_page=1, limit=25):
     }
 
 
-def cache_gabbe_page_text_batch(start_page=1, limit=25):
-    payload = build_gabbe_page_text_batch(start_page=start_page, limit=limit)
+def build_gabbe_page_text_batch(start_page=1, limit=25):
+    return build_book_page_text_batch("gabbe_9", start_page=start_page, limit=limit)
+
+
+def build_speroff_page_text_batch(start_page=1, limit=25):
+    return build_book_page_text_batch("speroff_10", start_page=start_page, limit=limit)
+
+
+def cache_book_page_text_batch(book_id, start_page=1, limit=25):
+    payload = build_book_page_text_batch(book_id, start_page=start_page, limit=limit)
     cached = append_textbook_page_cache(
-        "gabbe_page_text",
+        _cache_key(book_id, "page_text"),
         payload["pages"],
-        metadata={"book_id": "gabbe_9", "start_page": 1, "end_page": payload["end_page"], "total_pages": payload["total_pages"]},
+        metadata={"book_id": book_id, "start_page": 1, "end_page": payload["end_page"], "total_pages": payload["total_pages"]},
     )
     return {
         "cache_updated_at": cached.get("updated_at"),
@@ -458,6 +574,14 @@ def cache_gabbe_page_text_batch(start_page=1, limit=25):
         "total_pages": payload["total_pages"],
         "sample_pages": [page["page"] for page in payload["pages"][:5]],
     }
+
+
+def cache_gabbe_page_text_batch(start_page=1, limit=25):
+    return cache_book_page_text_batch("gabbe_9", start_page=start_page, limit=limit)
+
+
+def cache_speroff_page_text_batch(start_page=1, limit=25):
+    return cache_book_page_text_batch("speroff_10", start_page=start_page, limit=limit)
 
 
 def _cluster_match_pages(matches, gap=3):
@@ -552,11 +676,11 @@ def _range_for_cluster(cluster, padding=2):
     }
 
 
-def _map_single_gabbe_topic(topic_entry):
+def _map_single_book_topic(book_id, topic_entry):
     topic = topic_entry["topic"]
-    _, queries, all_matches = _search_gabbe_topic_matches(topic)
+    _, queries, all_matches = _search_book_topic_matches(book_id, topic)
     preview_matches = all_matches[:12]
-    manual_ranges = GABBE_MANUAL_TOPIC_RANGES.get(topic)
+    manual_ranges = (BOOK_MANUAL_TOPIC_RANGES.get(book_id) or {}).get(topic)
     if manual_ranges:
         return {
             **topic_entry,
@@ -587,19 +711,22 @@ def _map_single_gabbe_topic(topic_entry):
     }
 
 
-@lru_cache(maxsize=8)
-def build_gabbe_topic_mapping_batch(offset=0, limit=5, tier=None):
-    topic_entries = list(GABBE_TOPIC_MAP)
+def _map_single_gabbe_topic(topic_entry):
+    return _map_single_book_topic("gabbe_9", topic_entry)
+
+
+def build_book_topic_mapping_batch(book_id, offset=0, limit=5, tier=None):
+    topic_entries = list(BOOK_TOPIC_MAPS.get(book_id) or [])
     if tier:
         topic_entries = [entry for entry in topic_entries if entry.get("tier") == tier]
 
     selected_topics = topic_entries[offset : offset + limit]
     mappings = []
     for topic_entry in selected_topics:
-        mappings.append(_map_single_gabbe_topic(topic_entry))
+        mappings.append(_map_single_book_topic(book_id, topic_entry))
 
     return {
-        "book_id": "gabbe_9",
+        "book_id": book_id,
         "offset": offset,
         "limit": limit,
         "tier": tier,
@@ -607,6 +734,16 @@ def build_gabbe_topic_mapping_batch(offset=0, limit=5, tier=None):
         "total_available_topics": len(topic_entries),
         "topics": mappings,
     }
+
+
+@lru_cache(maxsize=8)
+def build_gabbe_topic_mapping_batch(offset=0, limit=5, tier=None):
+    return build_book_topic_mapping_batch("gabbe_9", offset=offset, limit=limit, tier=tier)
+
+
+@lru_cache(maxsize=8)
+def build_speroff_topic_mapping_batch(offset=0, limit=5, tier=None):
+    return build_book_topic_mapping_batch("speroff_10", offset=offset, limit=limit, tier=tier)
 
 
 @lru_cache(maxsize=1)
@@ -617,6 +754,21 @@ def build_gabbe_topic_mapping():
 
     return {
         "book_id": "gabbe_9",
+        "topic_count": len(mappings),
+        "mapped_count": sum(1 for item in mappings if item["status"] == "mapped"),
+        "unmapped_count": sum(1 for item in mappings if item["status"] != "mapped"),
+        "topics": mappings,
+    }
+
+
+@lru_cache(maxsize=1)
+def build_speroff_topic_mapping():
+    mappings = []
+    for topic_entry in SPEROFF_TOPIC_MAP:
+        mappings.append(_map_single_book_topic("speroff_10", topic_entry))
+
+    return {
+        "book_id": "speroff_10",
         "topic_count": len(mappings),
         "mapped_count": sum(1 for item in mappings if item["status"] == "mapped"),
         "unmapped_count": sum(1 for item in mappings if item["status"] != "mapped"),
@@ -682,3 +834,7 @@ def build_textbook_catalog(book_id):
 
 def get_gabbe_mvp_topic_map():
     return list(GABBE_TOPIC_MAP)
+
+
+def get_speroff_mvp_topic_map():
+    return list(SPEROFF_TOPIC_MAP)

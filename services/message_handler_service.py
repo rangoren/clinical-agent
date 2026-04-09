@@ -42,6 +42,7 @@ from services.study_service import resolve_study_chat_message
 from services.text_formatting import format_basic_clinical_response, format_response
 from services.textbook_runtime_service import (
     build_gabbe_textbook_context,
+    build_speroff_textbook_context,
     build_textbook_overload_fallback_reply,
     detect_textbook_request,
 )
@@ -370,7 +371,7 @@ def _looks_like_basic_clinical_question(user_message):
 def _build_unsupported_textbook_reply(textbook_request):
     book_title = textbook_request.get("book_title") or "that textbook"
     return (
-        f"I only have on-demand textbook access wired into runtime for Gabbe right now. "
+        f"I only have on-demand textbook access wired into runtime for Gabbe and Speroff right now. "
         f"{book_title} is not connected yet."
     )
 
@@ -905,9 +906,12 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         )
 
     if intent == "clinical_consult":
-        if textbook_request and textbook_request.get("book_id") == "gabbe_9":
+        if textbook_request and textbook_request.get("book_id") in {"gabbe_9", "speroff_10"}:
             stage_started_at = time.perf_counter()
-            textbook_context = build_gabbe_textbook_context(user_message)
+            if textbook_request.get("book_id") == "gabbe_9":
+                textbook_context = build_gabbe_textbook_context(user_message)
+            else:
+                textbook_context = build_speroff_textbook_context(user_message)
             mark("textbook_context_ms", stage_started_at)
 
             if textbook_context.get("status") != "ok":
