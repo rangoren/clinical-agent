@@ -554,6 +554,15 @@ def _normalize_text(text):
     return re.sub(r"\s+", " ", text.strip().lower())
 
 
+def _contains_term(normalized_text, term):
+    normalized_term = _normalize_text(term)
+    if not normalized_text or not normalized_term:
+        return False
+    if len(normalized_term) <= 3 and re.fullmatch(r"[a-z0-9]+", normalized_term):
+        return bool(re.search(rf"\b{re.escape(normalized_term)}\b", normalized_text))
+    return normalized_term in normalized_text
+
+
 def _dedupe_sources(sources):
     deduped = []
     seen_urls = set()
@@ -574,7 +583,7 @@ def _clean_source_updated_at(value):
 def _detect_source_routing_focus(user_message):
     normalized = _normalize_text(user_message)
     for focus, rule in SOURCE_ROUTING_RULES.items():
-        if any(keyword in normalized for keyword in rule["query_keywords"]):
+        if any(_contains_term(normalized, keyword) for keyword in rule["query_keywords"]):
             return focus
     return None
 
@@ -584,7 +593,7 @@ def _matched_focus_query_terms(user_message, focus):
         return []
     normalized = _normalize_text(user_message)
     rule = SOURCE_ROUTING_RULES.get(focus) or {}
-    return [keyword for keyword in rule.get("query_keywords", []) if keyword in normalized]
+    return [keyword for keyword in rule.get("query_keywords", []) if _contains_term(normalized, keyword)]
 
 
 def _matched_focus_subsignature_terms(user_message, focus):
@@ -593,7 +602,7 @@ def _matched_focus_subsignature_terms(user_message, focus):
     normalized = _normalize_text(user_message)
     groups = FOCUS_SUBSIGNATURES.get(focus) or {}
     for _, terms in groups.items():
-        matched = [term for term in terms if term in normalized]
+        matched = [term for term in terms if _contains_term(normalized, term)]
         if matched:
             return matched
     return []
@@ -611,11 +620,11 @@ def _source_matches_focus(source, focus, query_terms=None):
 
     narrowed_terms = [term for term in (query_terms or []) if len(term) >= 4]
     if narrowed_terms:
-        return any(term in combined_text for term in narrowed_terms)
+        return any(_contains_term(combined_text, term) for term in narrowed_terms)
 
-    if any(keyword in combined_text for keyword in rule.get("source_keywords", [])):
+    if any(_contains_term(combined_text, keyword) for keyword in rule.get("source_keywords", [])):
         return True
-    if any(keyword in title for keyword in rule.get("title_keywords", [])):
+    if any(_contains_term(title, keyword) for keyword in rule.get("title_keywords", [])):
         return True
     return False
 
@@ -749,31 +758,31 @@ def get_forced_authoritative_source(user_message):
     ]
 
     forced_title = None
-    if any(term in normalized for term in early_pregnancy_terms):
+    if any(_contains_term(normalized, term) for term in early_pregnancy_terms):
         forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
-    elif any(term in normalized for term in postmenopausal_bleeding_terms):
+    elif any(_contains_term(normalized, term) for term in postmenopausal_bleeding_terms):
         forced_title = "ACOG: Perimenopausal Bleeding and Bleeding After Menopause"
-    elif any(term in normalized for term in adnexal_mass_terms):
+    elif any(_contains_term(normalized, term) for term in adnexal_mass_terms):
         forced_title = "ACOG Practice Bulletin: Evaluation and Management of Adnexal Masses"
-    elif any(term in normalized for term in lactation_medication_terms):
+    elif any(_contains_term(normalized, term) for term in lactation_medication_terms):
         forced_title = "LactMed Database"
-    elif any(term in normalized for term in vte_contraception_terms):
+    elif any(_contains_term(normalized, term) for term in vte_contraception_terms):
         forced_title = "CDC U.S. Medical Eligibility Criteria for Contraceptive Use"
-    elif any(term in normalized for term in neuraxial_platelet_terms):
+    elif any(_contains_term(normalized, term) for term in neuraxial_platelet_terms):
         forced_title = "SOAP Consensus Statement on Thrombocytopenia and Neuraxial Procedures"
-    elif any(term in normalized for term in preterm_labor_terms):
+    elif any(_contains_term(normalized, term) for term in preterm_labor_terms):
         forced_title = "NICE Guideline: Preterm Labour and Birth"
-    elif any(term in normalized for term in magnesium_neuroprotection_terms):
+    elif any(_contains_term(normalized, term) for term in magnesium_neuroprotection_terms):
         forced_title = "ACOG Committee Opinion: Magnesium Sulfate Before Anticipated Preterm Birth for Neuroprotection"
-    elif any(term in normalized for term in high_risk_pregnancy_terms):
+    elif any(_contains_term(normalized, term) for term in high_risk_pregnancy_terms):
         forced_title = "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia"
-    elif any(term in normalized for term in lower_uti_overlap_terms) and not any(
-        term in normalized for term in ["pregnancy uti", "pregnant", "pyelonephritis in pregnancy"]
+    elif any(_contains_term(normalized, term) for term in lower_uti_overlap_terms) and not any(
+        _contains_term(normalized, term) for term in ["pregnancy uti", "pregnant", "pyelonephritis in pregnancy"]
     ):
         forced_title = "NICE Guideline: Lower UTI (Women)"
-    elif any(term in normalized for term in fertility_terms):
+    elif any(_contains_term(normalized, term) for term in fertility_terms):
         if any(
-            term in normalized
+            _contains_term(normalized, term)
             for term in [
                 "next step in evaluation",
                 "evaluation",
@@ -825,7 +834,7 @@ def get_external_sources(user_message, user_profile=None, limit=4, include_live=
     question_route = infer_question_route(user_message)
 
     for source in EXTERNAL_SOURCE_CATALOG:
-        overlap = sum(1 for keyword in source["keywords"] if keyword in normalized_message)
+        overlap = sum(1 for keyword in source["keywords"] if _contains_term(normalized_message, keyword))
         if not overlap:
             continue
 

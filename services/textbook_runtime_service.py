@@ -76,6 +76,24 @@ TEXTBOOK_REQUEST_HINTS = (
     "gabbe say",
     "speroff say",
     "berek say",
+    "by gabbe",
+    "by speroff",
+    "by berek",
+    "in gabbe",
+    "in speroff",
+    "in berek",
+    "from gabbe",
+    "from speroff",
+    "from berek",
+    "per gabbe",
+    "per speroff",
+    "per berek",
+    "gabbe on",
+    "speroff on",
+    "berek on",
+    "gabbe about",
+    "speroff about",
+    "berek about",
     "according gabbe",
     "according speroff",
     "according berek",
@@ -143,6 +161,10 @@ TEXTBOOK_ACTION_HINTS = (
     "write",
     "book",
     "textbook",
+    "from",
+    "per",
+    "on",
+    "about",
     "לפי",
     "כתוב",
     "כותב",
@@ -328,7 +350,7 @@ TOPIC_PRIORITY_MARKERS = {
 }
 
 TOPIC_REQUEST_ALIASES = {
-    "preeclampsia": ("רעלת", "רעלת הריון", "פרה אקלמפסיה", "פרה-אקלמפסיה"),
+    "preeclampsia": ("רעלת", "רעלת הריון", "פרה אקלמפסיה", "פרה-אקלמפסיה", "pet", "severe pet", "pec", "severe pec"),
     "pprom": ("ירידת מים מוקדמת", "ירידת מים מוקדמת מוקדמת", "פקיעת קרומים מוקדמת", "פקיעת קרומים מוקדמת לפני לידה"),
     "cervical insufficiency": ("אי ספיקת צוואר הרחם", "אי ספיקה צווארית", "צוואר רחם קצר", "צוואר קצר"),
     "gestational diabetes": ("סוכרת הריון", "סכרת הריון", "gdm"),
@@ -359,7 +381,19 @@ def detect_textbook_request(user_message):
         return None
 
     if not explicit_request and not normalized.startswith(matched_alias):
-        return None
+        by_book_pattern = rf"\b(by|from|in|per)\s+{re.escape(matched_alias)}\b"
+        if not re.search(by_book_pattern, normalized):
+            if not re.search(rf"\b{re.escape(matched_alias)}\s+(on|about)\b", normalized):
+                compact_tokens = _tokenize_text(normalized)
+                alias_tokens = _tokenize_text(matched_alias)
+                remaining_tokens = [token for token in compact_tokens if token not in alias_tokens]
+                telegraphic_request = (
+                    len(compact_tokens) <= 6
+                    and len(remaining_tokens) >= 1
+                    and any(len(token) >= 3 for token in remaining_tokens)
+                )
+                if not telegraphic_request:
+                    return None
 
     book = get_book_object(matched_book_id)
     if not book:
