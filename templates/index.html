@@ -2119,6 +2119,7 @@
         }
 
         function dismissStudyCards() {
+            cancelDeferredStudyCardsLoad();
             studyCardsDismissed = true;
             hideStudyCards();
             dismissEntryGuidance();
@@ -2140,14 +2141,15 @@
             }, 120);
         }
 
-        function shouldShowStudyCards() {
+        function shouldShowStudyCards(manual = false) {
             const input = document.getElementById("input");
-            return (
-                appMode === "clinical" &&
-                !studyCardsDismissed &&
-                input &&
-                !input.value.trim()
-            );
+            if (appMode !== "clinical" || !input || input.value.trim()) return false;
+            if (document.getElementById("thinking-row")) return false;
+            if (manual) return true;
+            if (studyCardsDismissed) return false;
+            const chat = document.getElementById("chat");
+            if (chat && chat.children.length > 0) return false;
+            return true;
         }
 
         function renderStudyCards(cards) {
@@ -2223,7 +2225,7 @@
         }
 
         async function maybeShowStudyCards(force = false) {
-            if (!shouldShowStudyCards()) {
+            if (!shouldShowStudyCards(force)) {
                 hideStudyCards();
                 return;
             }
@@ -3043,6 +3045,7 @@
                 return;
             }
 
+            hideStudyCards();
             if (existing) return;
             const row = createMessageRow(
                 "assistant",
