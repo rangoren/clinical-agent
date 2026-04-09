@@ -40,7 +40,11 @@ from services.prompt_service import (
 from services.response_service import generate_reply
 from services.study_service import resolve_study_chat_message
 from services.text_formatting import format_basic_clinical_response, format_response
-from services.textbook_runtime_service import build_gabbe_textbook_context, detect_textbook_request
+from services.textbook_runtime_service import (
+    build_gabbe_textbook_context,
+    build_textbook_overload_fallback_reply,
+    detect_textbook_request,
+)
 from services.trusted_source_registry import get_domain_tier, get_source_domain, infer_question_route
 from services.undo_service import clear_last_saved, record_last_saved
 import re
@@ -379,18 +383,7 @@ def _build_missing_textbook_context_reply(textbook_context):
 
 
 def _build_textbook_overload_fallback(textbook_context):
-    lines = [
-        f"According to {textbook_context['book_title']}, I couldn't generate a full synthesized textbook answer right now because the model is temporarily overloaded.",
-        "Here are the most relevant textbook excerpts I found:",
-    ]
-
-    for excerpt in (textbook_context.get("excerpts") or [])[:3]:
-        lines.append(
-            f"- [{excerpt['source_id']}] Pages {excerpt['page_start']}-{excerpt['page_end']}: {excerpt['text']}"
-        )
-
-    lines.append("This is raw textbook support rather than a polished synthesis.")
-    return "\n".join(lines)
+    return build_textbook_overload_fallback_reply(textbook_context)
 
 
 def _handle_new_user_onboarding(session_id):

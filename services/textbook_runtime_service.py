@@ -2,7 +2,7 @@ import re
 
 from services.book_storage_service import get_book_object
 from services.textbook_cache_service import get_textbook_cache
-from services.textbook_catalog_service import _search_gabbe_topic_matches
+from services.textbook_catalog_service import GABBE_TOPIC_QUERIES, TOPIC_SIGNAL_MARKERS, _search_gabbe_topic_matches
 
 
 TEXTBOOK_REQUEST_HINTS = (
@@ -51,6 +51,22 @@ def _trim_excerpt(text, limit=1800):
     if len(normalized) <= limit:
         return normalized
     return normalized[: limit - 3].rstrip() + "..."
+
+
+MANAGEMENT_MARKERS = (
+    "management",
+    "treatment",
+    "deliver",
+    "delivery",
+    "expectant",
+    "antibiotic",
+    "corticosteroid",
+    "magnesium",
+    "tocolysis",
+    "monitor",
+    "surveillance",
+    "induction",
+)
 
 
 def detect_textbook_request(user_message):
@@ -134,6 +150,14 @@ def _build_range_excerpt(page_map, page_start, page_end):
     return _trim_excerpt(" ".join(pages))
 
 
+def _split_into_sentences(text):
+    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not normalized:
+        return []
+    parts = re.split(r"(?<=[\.\?\!;:])\s+", normalized)
+    return [part.strip() for part in parts if len(part.strip()) >= 40]
+
+
 def _matches_within_range(matches, page_start, page_end):
     return [match for match in matches if page_start <= (match.get("page") or 0) <= page_end]
 
@@ -172,6 +196,59 @@ def _format_match_snippets(topic, matches, limit=2):
     return _trim_excerpt(" ".join(snippets), limit=1400)
 
 
+def _score_sentence(topic, sentence, topic_queries):
+    normalized_sentence = _normalize_text(sentence)
+    score = 0
+
+    for query in topic_queries:
+        normalized_query = _normalize_text(query)
+        if normalized_query and normalized_query in normalized_sentence:
+            score += 4
+
+    for marker in TOPIC_SIGNAL_MARKERS.get(topic, ()):
+        if marker in normalized_sentence:
+            score += 3
+
+    for marker in MANAGEMENT_MARKERS:
+        if marker in normalized_sentence:
+            score += 2
+
+    if any(token in normalized_sentence for token in ("trial", "review", "consortium", "doi.org", "downloaded for")):
+        score -= 3
+
+    return score
+
+
+def _build_curated_range_excerpt(topic, topic_queries, page_map, page_start, page_end, sentence_limit=3):
+    ranked_sentences = []
+
+    for page_number in range(page_start, page_end + 1):
+        text = page_map.get(page_number)
+        if not text:
+            continue
+        for sentence in _split_into_sentences(text):
+            score = _score_sentence(topic, sentence, topic_queries)
+            if score <= 0:
+                continue
+            ranked_sentences.append((score, page_number, sentence))
+
+    if not ranked_sentences:
+        return ""
+
+    seen_sentences = set()
+    selected = []
+    for _, page_number, sentence in sorted(ranked_sentences, key=lambda item: (item[0], -item[1]), reverse=True):
+        normalized_sentence = _normalize_text(sentence)
+        if normalized_sentence in seen_sentences:
+            continue
+        seen_sentences.add(normalized_sentence)
+        selected.append(f"Page {page_number}: {sentence}")
+        if len(selected) >= sentence_limit:
+            break
+
+    return _trim_excerpt(" ".join(selected), limit=1400)
+
+
 def build_gabbe_textbook_context(user_message, max_ranges=3):
     topic_entry = _find_best_gabbe_topic(user_message)
     if not topic_entry:
@@ -201,7 +278,16 @@ def build_gabbe_textbook_context(user_message, max_ranges=3):
         if not page_start or not page_end:
             continue
         range_matches = _matches_within_range(topic_matches, page_start, page_end)
-        excerpt_text = _format_match_snippets(topic_entry["topic"], range_matches, limit=2)
+        excerpt_text = _build_curated_range_excerpt(
+            topic_entry["topic"],
+            topic_queries or GABBE_TOPIC_QUERIES.get(topic_entry["topic"], []),
+            page_map,
+            page_start,
+            page_end,
+            sentence_limit=3,
+        )
+        if not excerpt_text:
+            excerpt_text = _format_match_snippets(topic_entry["topic"], range_matches, limit=2)
         if not excerpt_text:
             excerpt_text = _build_range_excerpt(page_map, page_start, min(page_end, page_start + 2))
         if not excerpt_text:
@@ -250,3 +336,20 @@ def build_gabbe_textbook_context(user_message, max_ranges=3):
         "sources": sources,
         "excerpts": excerpts,
     }
+
+
+def build_textbook_overload_fallback_reply(textbook_context):
+    excerpts = textbook_context.get("excerpts") or []
+    lines = [
+        f"According to {textbook_context['book_title']}, I couldn't generate a full synthesized textbook answer right now because the model is temporarily overloaded.",
+    ]
+
+    if excerpts:
+        lines.append("What the indexed textbook excerpts most clearly support:")
+        for excerpt in excerpts[:3]:
+            lines.append(
+                f"- [{excerpt['source_id']}] Pages {excerpt['page_start']}-{excerpt['page_end']}: {excerpt['text']}"
+            )
+
+    lines.append("This is a direct excerpt-based fallback rather than a polished textbook synthesis.")
+    return "\n".join(lines)
