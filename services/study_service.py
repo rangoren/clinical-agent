@@ -128,6 +128,7 @@ MAX_CONSECUTIVE_TOPIC_REPEATS = 2
 STYLE_HISTORY_WINDOW = 12
 LEVEL_HISTORY_WINDOW = 12
 IDLE_CARDS_CACHE_TTL_SECONDS = 300
+SOURCE_DATE_PLACEHOLDERS = {"2025-01-01"}
 
 
 STUDY_SEED_ITEMS = [
@@ -1540,13 +1541,16 @@ def _subtitle_for_dynamic(has_history):
 
 
 def _source_payload(item):
+    updated_at = item.get("last_reviewed_at")
+    if updated_at in SOURCE_DATE_PLACEHOLDERS:
+        updated_at = None
     return [
         {
             "source_id": "E1",
             "title": item["source_name"],
             "url": item["source_url"],
             "source_type": item["source_type"],
-            "updated_at": item.get("last_reviewed_at"),
+            "updated_at": updated_at,
         }
     ]
 
