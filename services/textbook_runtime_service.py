@@ -225,7 +225,7 @@ LOW_SIGNAL_SENTENCE_MARKERS = (
 
 TOPIC_PRIORITY_MARKERS = {
     "preterm labor": ("tocolysis", "antenatal corticosteroids", "magnesium sulfate", "delivery", "transfer"),
-    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "antihypertensive", "expectant management"),
+    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "antihypertensive", "expectant management", "aspirin", "timing of delivery", "late preterm"),
     "postpartum hemorrhage": ("uterotonic", "tranexamic", "balloon tamponade", "massive transfusion", "hysterectomy"),
     "labor induction": ("bishop", "cervical ripening", "oxytocin", "prostaglandin", "balloon catheter"),
     "cesarean delivery": ("prophylaxis", "skin incision", "uterine incision", "hemorrhage"),
@@ -241,7 +241,7 @@ TOPIC_PRIORITY_MARKERS = {
     "cerclage": ("history-indicated", "ultrasound-indicated", "rescue cerclage", "short cervix"),
     "preterm birth prevention": ("progesterone", "short cervix", "prior spontaneous preterm birth", "cerclage"),
     "periviable birth": ("corticosteroids", "magnesium sulfate", "counseling", "resuscitation"),
-    "labor dystocia": ("active phase", "arrest", "adequate contractions", "cesarean"),
+    "labor dystocia": ("active phase", "arrest", "adequate contractions", "cesarean", "first-stage arrest", "failed induction", "6 cm", "second stage"),
     "abnormal fetal heart rate tracing": ("late decelerations", "variable decelerations", "resuscitative measures", "category iii"),
     "breech presentation": ("frank breech", "external cephalic version", "planned cesarean"),
     "external cephalic version": ("tocolysis", "success", "contraindication", "breech"),
@@ -250,6 +250,7 @@ TOPIC_PRIORITY_MARKERS = {
     "fetal macrosomia": ("estimated fetal weight", "shoulder dystocia", "cesarean delivery"),
     "rh alloimmunization": ("anti-d", "middle cerebral artery", "doppler", "intrauterine transfusion"),
     "postpartum endometritis": ("clindamycin", "gentamicin", "fever", "postpartum infection"),
+    "amenorrhea": ("pregnancy test", "prolactin", "tsh", "fsh", "estradiol", "primary amenorrhea", "secondary amenorrhea", "breast development", "evaluation"),
 }
 
 

@@ -202,7 +202,7 @@ LOW_SIGNAL_SNIPPET_MARKERS = (
 TOPIC_SIGNAL_MARKERS = {
     "pprom": ("latency", "antibiotic", "delivery", "expectant", "rupture of membranes", "infection", "corticosteroids", "gbs prophylaxis"),
     "preterm labor": ("tocolysis", "corticosteroids", "magnesium sulfate", "delivery", "cervical change", "contractions", "cerclage", "latency"),
-    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "blood pressure", "hypertensive", "proteinuria", "antihypertensive", "seizure prophylaxis"),
+    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "blood pressure", "hypertensive", "proteinuria", "antihypertensive", "seizure prophylaxis", "aspirin", "expectant management", "timing of delivery", "late preterm"),
     "eclampsia": ("seizure", "magnesium sulfate", "delivery", "severe features"),
     "postpartum hemorrhage": ("uterine atony", "tranexamic", "uterotonic", "massive transfusion", "hemorrhage", "bleeding", "bakri", "balloon tamponade"),
     "fetal surveillance": ("biophysical profile", "nonstress test", "doppler", "monitoring"),
@@ -224,7 +224,7 @@ TOPIC_SIGNAL_MARKERS = {
     "cerclage": ("history-indicated", "ultrasound-indicated", "rescue cerclage", "short cervix"),
     "preterm birth prevention": ("progesterone", "short cervix", "prior spontaneous preterm birth", "cerclage"),
     "periviable birth": ("corticosteroids", "magnesium sulfate", "resuscitation", "counseling"),
-    "labor dystocia": ("active phase", "arrest", "adequate contractions", "cesarean delivery"),
+    "labor dystocia": ("active phase", "arrest", "adequate contractions", "cesarean delivery", "first-stage arrest", "second stage", "failed induction", "6 cm"),
     "abnormal fetal heart rate tracing": ("late decelerations", "variable decelerations", "resuscitative measures", "category iii"),
     "breech presentation": ("external cephalic version", "frank breech", "planned cesarean"),
     "external cephalic version": ("tocolysis", "success rate", "contraindication", "breech"),
@@ -233,7 +233,7 @@ TOPIC_SIGNAL_MARKERS = {
     "fetal macrosomia": ("shoulder dystocia", "estimated fetal weight", "cesarean delivery", "diabetes"),
     "rh alloimmunization": ("anti-d", "middle cerebral artery", "doppler", "intrauterine transfusion"),
     "postpartum endometritis": ("fever", "clindamycin", "gentamicin", "postpartum infection"),
-    "amenorrhea": ("pregnancy test", "prolactin", "tsh", "fsh", "estradiol"),
+    "amenorrhea": ("pregnancy test", "prolactin", "tsh", "fsh", "estradiol", "workup", "evaluation", "breast development", "outflow tract", "primary amenorrhea", "secondary amenorrhea"),
     "pcos": ("hyperandrogenism", "oligo-ovulation", "metabolic", "letrozole", "weight loss"),
     "ovulation induction": ("letrozole", "clomiphene", "gonadotropin", "monitoring"),
     "letrozole": ("ovulation", "live birth", "pcos", "dose"),
@@ -265,8 +265,8 @@ TOPIC_SIGNAL_MARKERS = {
 SPEROFF_MANUAL_TOPIC_RANGES = {
     "amenorrhea": [
         {"page_start": 816, "page_end": 849},
-        {"page_start": 849, "page_end": 879},
         {"page_start": 901, "page_end": 933},
+        {"page_start": 849, "page_end": 879},
     ],
     "pcos": [
         {"page_start": 947, "page_end": 1052},
@@ -329,6 +329,7 @@ GABBE_MANUAL_TOPIC_RANGES = {
     ],
     "preeclampsia": [
         {"page_start": 854, "page_end": 876},
+        {"page_start": 1175, "page_end": 1199},
         {"page_start": 1024, "page_end": 1039},
     ],
     "postpartum hemorrhage": [
@@ -390,6 +391,11 @@ GABBE_MANUAL_TOPIC_RANGES = {
         {"page_start": 601, "page_end": 619},
         {"page_start": 620, "page_end": 632},
     ],
+    "labor dystocia": [
+        {"page_start": 512, "page_end": 517},
+        {"page_start": 330, "page_end": 334},
+        {"page_start": 454, "page_end": 459},
+    ],
 }
 
 
@@ -430,6 +436,13 @@ BOOK_MANUAL_TOPIC_RANGES = {
 
 
 def _cache_key(book_id, suffix):
+    if book_id == "gabbe_9":
+        legacy_keys = {
+            "page_text": "gabbe_page_text",
+            "topic_mapping": "gabbe_topic_mapping",
+        }
+        if suffix in legacy_keys:
+            return legacy_keys[suffix]
     return f"{book_id}_{suffix}"
 
 
