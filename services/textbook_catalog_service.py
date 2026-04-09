@@ -1,8 +1,8 @@
-import io
 import re
 from functools import lru_cache
 
 from services.book_storage_service import get_book_object, get_r2_client
+from services.pdf_extraction_service import open_pdf_document_from_bytes
 from services.textbook_cache_service import append_textbook_page_cache, get_textbook_cache
 from settings import R2_BUCKET_NAME
 
@@ -554,18 +554,17 @@ def _clean_text(value):
     return text
 
 
-def _page_text_lines(page):
-    raw_text = page.extract_text() or ""
+def _page_text_lines(raw_text):
     cleaned_lines = []
-    for line in raw_text.splitlines():
+    for line in str(raw_text or "").splitlines():
         cleaned = _clean_text(line)
         if cleaned:
             cleaned_lines.append(cleaned)
     return cleaned_lines
 
 
-def _page_text(page):
-    return "\n".join(_page_text_lines(page))
+def _page_text(raw_text):
+    return "\n".join(_page_text_lines(raw_text))
 
 
 BOOK_TOPIC_MAPS = {
@@ -611,9 +610,7 @@ def _load_book_reader(book_id):
     finally:
         response["Body"].close()
 
-    from pypdf import PdfReader
-
-    return PdfReader(io.BytesIO(pdf_bytes))
+    return open_pdf_document_from_bytes(pdf_bytes)
 
 
 def _candidate_heading(line):
@@ -651,12 +648,12 @@ def _dedupe_preserve_order(entries):
 
 
 def _scan_gabbe_text_catalog(reader):
-    page_limit = min(TEXT_SCAN_END_PAGE, len(reader.pages))
+    page_limit = min(TEXT_SCAN_END_PAGE, reader.page_count)
     candidates = []
 
     for page_number in range(TEXT_SCAN_START_PAGE, page_limit + 1):
-        page = reader.pages[page_number - 1]
-        for line in _page_text_lines(page)[:18]:
+        page_text = reader.extract_page_text(page_number)
+        for line in _page_text_lines(page_text)[:18]:
             heading = _candidate_heading(line)
             if not heading:
                 continue
@@ -764,12 +761,12 @@ def search_speroff_topic(topic):
 
 def build_book_page_text_batch(book_id, start_page=1, limit=25):
     reader = _load_book_reader(book_id)
-    total_pages = len(reader.pages)
+    total_pages = reader.page_count
     end_page = min(total_pages, start_page + limit - 1)
     extracted_pages = []
 
     for page_number in range(start_page, end_page + 1):
-        text = _page_text(reader.pages[page_number - 1])
+        text = _page_text(reader.extract_page_text(page_number))
         extracted_pages.append(
             {
                 "page": page_number,
@@ -1038,10 +1035,7 @@ def build_textbook_catalog(book_id):
         pdf_bytes = response["Body"].read()
     finally:
         response["Body"].close()
-
-    from pypdf import PdfReader
-
-    reader = PdfReader(io.BytesIO(pdf_bytes))
+    reader = open_pdf_document_from_bytes(pdf_bytes)
 
     if book_id != "gabbe_9":
         return {
@@ -1049,10 +1043,11 @@ def build_textbook_catalog(book_id):
             "title": book["title"],
             "edition": book["edition"],
             "domain": book["domain"],
-            "page_count": len(reader.pages),
+            "page_count": reader.page_count,
             "catalog": [],
             "catalog_entry_count": 0,
-            "scan_window": {"start_page": TEXT_SCAN_START_PAGE, "end_page": min(TEXT_SCAN_END_PAGE, len(reader.pages))},
+            "scan_window": {"start_page": TEXT_SCAN_START_PAGE, "end_page": min(TEXT_SCAN_END_PAGE, reader.page_count)},
+            "extractor_backend": reader.backend,
         }
 
     catalog = _scan_gabbe_text_catalog(reader)
@@ -1062,10 +1057,11 @@ def build_textbook_catalog(book_id):
         "title": book["title"],
         "edition": book["edition"],
         "domain": book["domain"],
-        "page_count": len(reader.pages),
+        "page_count": reader.page_count,
         "catalog_entry_count": len(catalog),
         "catalog": catalog,
-        "scan_window": {"start_page": TEXT_SCAN_START_PAGE, "end_page": min(TEXT_SCAN_END_PAGE, len(reader.pages))},
+        "scan_window": {"start_page": TEXT_SCAN_START_PAGE, "end_page": min(TEXT_SCAN_END_PAGE, reader.page_count)},
+        "extractor_backend": reader.backend,
     }
 
 

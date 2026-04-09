@@ -1,9 +1,13 @@
-import io
 import os
 import tempfile
 from datetime import datetime, timezone
 
 from services.book_storage_service import build_r2_object_url, get_book_object, get_book_objects, get_r2_client, is_r2_configured
+from services.pdf_extraction_service import (
+    list_available_pdf_backends,
+    open_pdf_document_from_bytes,
+    open_pdf_document_from_path,
+)
 from services.textbook_cache_service import get_textbook_cache, save_textbook_cache
 from services.logging_service import log_event
 from settings import R2_BUCKET_NAME
@@ -50,38 +54,23 @@ def _basic_pdf_probe(client, key):
 
 
 def _extract_full_pdf_audit(client, key):
-    from pypdf import PdfReader
-
     response = client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
     try:
         pdf_bytes = response["Body"].read()
     finally:
         response["Body"].close()
 
-    reader = PdfReader(io.BytesIO(pdf_bytes))
-    metadata = reader.metadata or {}
-    first_page_text = ""
-    text_extractable = False
-    if reader.pages:
-        first_page_text = (reader.pages[0].extract_text() or "").strip()
-        text_extractable = bool(first_page_text)
-
-    outline_count = 0
-    try:
-        outlines = reader.outline or []
-        outline_count = len(outlines)
-    except Exception:
-        outline_count = 0
+    document = open_pdf_document_from_bytes(pdf_bytes)
+    first_page_text = document.extract_page_text(1) if document.page_count else ""
+    text_extractable = bool(first_page_text)
 
     return {
-        "page_count": len(reader.pages),
-        "metadata": {
-            "title": getattr(metadata, "title", None) if hasattr(metadata, "title") else metadata.get("/Title"),
-            "author": getattr(metadata, "author", None) if hasattr(metadata, "author") else metadata.get("/Author"),
-            "producer": getattr(metadata, "producer", None) if hasattr(metadata, "producer") else metadata.get("/Producer"),
-        },
-        "has_outlines": outline_count > 0,
-        "outline_count": outline_count,
+        "extractor_backend": document.backend,
+        "available_backends": list_available_pdf_backends(),
+        "page_count": document.page_count,
+        "metadata": document.metadata,
+        "has_outlines": document.outline_count > 0,
+        "outline_count": document.outline_count,
         "first_page_text_preview": first_page_text[:500] or None,
         "text_extractable": text_extractable,
     }
@@ -135,49 +124,36 @@ def _sample_page_numbers(page_count, sample_pages=5):
 
 
 def _extract_streamed_pdf_audit(temp_path, sample_pages=5):
-    from pypdf import PdfReader
+    document = open_pdf_document_from_path(temp_path)
+    page_count = document.page_count
+    probe_pages = _sample_page_numbers(page_count, sample_pages=sample_pages)
+    sampled_pages = []
+    extractable_pages = 0
 
-    with open(temp_path, "rb") as pdf_file:
-        reader = PdfReader(pdf_file)
-        metadata = reader.metadata or {}
-        page_count = len(reader.pages)
-        probe_pages = _sample_page_numbers(page_count, sample_pages=sample_pages)
-        sampled_pages = []
-        extractable_pages = 0
-
-        for page_number in probe_pages:
-            text = (reader.pages[page_number - 1].extract_text() or "").strip()
-            if text:
-                extractable_pages += 1
-            sampled_pages.append(
-                {
-                    "page": page_number,
-                    "text_preview": text[:500] or None,
-                    "text_extractable": bool(text),
-                }
-            )
-
-        outline_count = 0
-        try:
-            outlines = reader.outline or []
-            outline_count = len(outlines)
-        except Exception:
-            outline_count = 0
+    for page_number in probe_pages:
+        text = document.extract_page_text(page_number)
+        if text:
+            extractable_pages += 1
+        sampled_pages.append(
+            {
+                "page": page_number,
+                "text_preview": text[:500] or None,
+                "text_extractable": bool(text),
+            }
+        )
 
     return {
+        "extractor_backend": document.backend,
+        "available_backends": list_available_pdf_backends(),
         "page_count": page_count,
         "sampled_page_count": len(sampled_pages),
         "probe_pages": probe_pages,
         "extractable_sample_pages": extractable_pages,
         "sample_extractable_ratio": round(extractable_pages / max(1, len(sampled_pages)), 2),
         "sample_pages": sampled_pages,
-        "metadata": {
-            "title": getattr(metadata, "title", None) if hasattr(metadata, "title") else metadata.get("/Title"),
-            "author": getattr(metadata, "author", None) if hasattr(metadata, "author") else metadata.get("/Author"),
-            "producer": getattr(metadata, "producer", None) if hasattr(metadata, "producer") else metadata.get("/Producer"),
-        },
-        "has_outlines": outline_count > 0,
-        "outline_count": outline_count,
+        "metadata": document.metadata,
+        "has_outlines": document.outline_count > 0,
+        "outline_count": document.outline_count,
     }
 
 
