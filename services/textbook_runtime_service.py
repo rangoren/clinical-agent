@@ -1,3 +1,4 @@
+import difflib
 import re
 
 from services.book_storage_service import get_book_object
@@ -152,6 +153,58 @@ TEXTBOOK_ACTION_HINTS = (
 
 def _normalize_text(value):
     return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+
+def _tokenize_text(value):
+    normalized = _normalize_text(value)
+    if not normalized:
+        return []
+    return re.findall(r"[a-z0-9\u0590-\u05ff]+", normalized)
+
+
+def _best_fuzzy_phrase_ratio(normalized_message, candidate_text):
+    candidate_normalized = _normalize_text(candidate_text)
+    if not candidate_normalized:
+        return 0.0
+
+    message_tokens = _tokenize_text(normalized_message)
+    candidate_tokens = _tokenize_text(candidate_normalized)
+    if not message_tokens or not candidate_tokens:
+        return 0.0
+
+    if len(candidate_tokens) == 1:
+        candidate_token = candidate_tokens[0]
+        return max(
+            difflib.SequenceMatcher(None, candidate_token, token).ratio()
+            for token in message_tokens
+        )
+
+    candidate_len = len(candidate_tokens)
+    window_sizes = {candidate_len}
+    if candidate_len > 1:
+        window_sizes.add(candidate_len - 1)
+        window_sizes.add(candidate_len + 1)
+
+    best_ratio = 0.0
+    for window_size in sorted(size for size in window_sizes if size > 0):
+        if window_size > len(message_tokens):
+            continue
+        for start in range(0, len(message_tokens) - window_size + 1):
+            window_text = " ".join(message_tokens[start : start + window_size])
+            ratio = difflib.SequenceMatcher(None, candidate_normalized, window_text).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+
+    return best_ratio
+
+
+def _score_fuzzy_candidate(normalized_message, candidate_text, strong_score, weak_score):
+    ratio = _best_fuzzy_phrase_ratio(normalized_message, candidate_text)
+    if ratio >= 0.9:
+        return strong_score
+    if ratio >= 0.82:
+        return weak_score
+    return 0
 
 
 def _contains_textbook_hint(normalized):
@@ -325,16 +378,22 @@ def _score_topic_match(normalized_message, topic_entry):
     topic = _normalize_text(topic_entry.get("topic"))
     if topic and topic in normalized_message:
         score += 8
+    else:
+        score += _score_fuzzy_candidate(normalized_message, topic_entry.get("topic"), strong_score=6, weak_score=3)
 
     for query in topic_entry.get("queries") or []:
         query_normalized = _normalize_text(query)
         if query_normalized and query_normalized in normalized_message:
             score += max(3, min(6, len(query_normalized.split()) + 2))
+        else:
+            score += _score_fuzzy_candidate(normalized_message, query, strong_score=5, weak_score=2)
 
     for alias in TOPIC_REQUEST_ALIASES.get(topic_entry.get("topic"), ()):
         alias_normalized = _normalize_text(alias)
         if alias_normalized and alias_normalized in normalized_message:
             score += max(4, min(7, len(alias_normalized.split()) + 3))
+        else:
+            score += _score_fuzzy_candidate(normalized_message, alias, strong_score=5, weak_score=2)
 
     return score
 
@@ -361,14 +420,22 @@ def _find_best_topic(book_id, user_message):
     normalized_message = _normalize_text(user_message)
     best_entry = None
     best_score = 0
+    second_best_score = 0
 
     for topic_entry in topics:
         score = _score_topic_match(normalized_message, topic_entry)
         if score > best_score:
+            second_best_score = best_score
             best_score = score
             best_entry = topic_entry
+        elif score > second_best_score:
+            second_best_score = score
 
     if best_score <= 0:
+        return None
+    if best_score < 3:
+        return None
+    if best_score < 6 and (best_score - second_best_score) < 2:
         return None
     return best_entry
 
