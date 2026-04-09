@@ -1787,6 +1787,7 @@
         let googleCalendarConnected = false;
         let studyCardsRequested = false;
         let studyCardsDismissed = false;
+        let studyCardsRequestToken = 0;
         let entryGuidanceDismissed = false;
         let composerModeStripOpen = false;
         let pullRefreshState = "idle";
@@ -2118,8 +2119,14 @@
             refreshEntryGuidanceVisibility();
         }
 
+        function invalidateStudyCardsRequests() {
+            studyCardsRequestToken += 1;
+            studyCardsRequested = false;
+        }
+
         function dismissStudyCards() {
             cancelDeferredStudyCardsLoad();
+            invalidateStudyCardsRequests();
             studyCardsDismissed = true;
             hideStudyCards();
             dismissEntryGuidance();
@@ -2242,6 +2249,7 @@
 
             if (studyCardsRequested) return;
             studyCardsRequested = true;
+            const requestToken = ++studyCardsRequestToken;
             if (!hasExistingCards) {
                 renderStudyCardPlaceholders();
             } else {
@@ -2260,8 +2268,20 @@
                     })
                 });
                 const data = await response.json();
+                if (requestToken !== studyCardsRequestToken) {
+                    return;
+                }
+                studyCardsRequested = false;
+                if (!shouldShowStudyCards(force)) {
+                    hideStudyCards();
+                    return;
+                }
                 renderStudyCards(data.cards || []);
             } catch (_error) {
+                if (requestToken !== studyCardsRequestToken) {
+                    return;
+                }
+                studyCardsRequested = false;
                 if (!hasExistingCards) {
                     clearStudyCards();
                 }
