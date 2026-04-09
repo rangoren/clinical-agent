@@ -76,6 +76,9 @@ TEXTBOOK_REQUEST_HINTS = (
     "gabbe say",
     "speroff say",
     "berek say",
+    "by gabbe",
+    "by speroff",
+    "by berek",
     "according gabbe",
     "according speroff",
     "according berek",
@@ -328,7 +331,7 @@ TOPIC_PRIORITY_MARKERS = {
 }
 
 TOPIC_REQUEST_ALIASES = {
-    "preeclampsia": ("רעלת", "רעלת הריון", "פרה אקלמפסיה", "פרה-אקלמפסיה"),
+    "preeclampsia": ("רעלת", "רעלת הריון", "פרה אקלמפסיה", "פרה-אקלמפסיה", "pet", "severe pet"),
     "pprom": ("ירידת מים מוקדמת", "ירידת מים מוקדמת מוקדמת", "פקיעת קרומים מוקדמת", "פקיעת קרומים מוקדמת לפני לידה"),
     "cervical insufficiency": ("אי ספיקת צוואר הרחם", "אי ספיקה צווארית", "צוואר רחם קצר", "צוואר קצר"),
     "gestational diabetes": ("סוכרת הריון", "סכרת הריון", "gdm"),
@@ -359,7 +362,9 @@ def detect_textbook_request(user_message):
         return None
 
     if not explicit_request and not normalized.startswith(matched_alias):
-        return None
+        by_book_pattern = rf"\b(by|from|in)\s+{re.escape(matched_alias)}\b"
+        if not re.search(by_book_pattern, normalized):
+            return None
 
     book = get_book_object(matched_book_id)
     if not book:
