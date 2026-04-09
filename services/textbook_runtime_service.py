@@ -225,7 +225,7 @@ LOW_SIGNAL_SENTENCE_MARKERS = (
 
 TOPIC_PRIORITY_MARKERS = {
     "preterm labor": ("tocolysis", "antenatal corticosteroids", "magnesium sulfate", "delivery", "transfer"),
-    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "antihypertensive", "expectant management", "aspirin", "timing of delivery", "late preterm"),
+    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "antihypertensive", "expectant management", "aspirin", "timing of delivery", "late preterm", "planned delivery", "definitive treatment", "severe hypertension"),
     "postpartum hemorrhage": ("uterotonic", "tranexamic", "balloon tamponade", "massive transfusion", "hysterectomy"),
     "labor induction": ("bishop", "cervical ripening", "oxytocin", "prostaglandin", "balloon catheter"),
     "cesarean delivery": ("prophylaxis", "skin incision", "uterine incision", "hemorrhage"),

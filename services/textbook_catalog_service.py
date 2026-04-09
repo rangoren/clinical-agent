@@ -202,7 +202,7 @@ LOW_SIGNAL_SNIPPET_MARKERS = (
 TOPIC_SIGNAL_MARKERS = {
     "pprom": ("latency", "antibiotic", "delivery", "expectant", "rupture of membranes", "infection", "corticosteroids", "gbs prophylaxis"),
     "preterm labor": ("tocolysis", "corticosteroids", "magnesium sulfate", "delivery", "cervical change", "contractions", "cerclage", "latency"),
-    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "blood pressure", "hypertensive", "proteinuria", "antihypertensive", "seizure prophylaxis", "aspirin", "expectant management", "timing of delivery", "late preterm"),
+    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "blood pressure", "hypertensive", "proteinuria", "antihypertensive", "seizure prophylaxis", "aspirin", "expectant management", "timing of delivery", "late preterm", "planned delivery", "definitive treatment", "severe hypertension"),
     "eclampsia": ("seizure", "magnesium sulfate", "delivery", "severe features"),
     "postpartum hemorrhage": ("uterine atony", "tranexamic", "uterotonic", "massive transfusion", "hemorrhage", "bleeding", "bakri", "balloon tamponade"),
     "fetal surveillance": ("biophysical profile", "nonstress test", "doppler", "monitoring"),
