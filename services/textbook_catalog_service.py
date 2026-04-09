@@ -117,6 +117,11 @@ TOPIC_SIGNAL_MARKERS = {
     "postpartum hemorrhage": ("uterine atony", "tranexamic", "uterotonic", "massive transfusion", "hemorrhage", "bleeding"),
     "fetal surveillance": ("biophysical profile", "nonstress test", "doppler", "monitoring"),
     "gestational diabetes": ("insulin", "screening", "glucose", "diet", "management"),
+    "antenatal corticosteroids": ("betamethasone", "dexamethasone", "rescue course", "lung maturity", "preterm birth"),
+    "magnesium neuroprotection": ("magnesium sulfate", "neuroprotection", "cerebral palsy", "imminent preterm birth"),
+    "chorioamnionitis": ("intraamniotic infection", "ampicillin", "gentamicin", "delivery", "fever"),
+    "group b strep": ("prophylaxis", "penicillin", "ampicillin", "colonization", "intrapartum"),
+    "labor induction": ("bishop", "ripening", "oxytocin", "cervix", "induction"),
 }
 
 GABBE_MANUAL_TOPIC_RANGES = {
@@ -135,6 +140,33 @@ GABBE_MANUAL_TOPIC_RANGES = {
     "postpartum hemorrhage": [
         {"page_start": 476, "page_end": 514},
         {"page_start": 567, "page_end": 579},
+    ],
+    "antenatal corticosteroids": [
+        {"page_start": 36, "page_end": 48},
+        {"page_start": 148, "page_end": 152},
+    ],
+    "magnesium neuroprotection": [
+        {"page_start": 147, "page_end": 158},
+        {"page_start": 280, "page_end": 284},
+    ],
+    "chorioamnionitis": [
+        {"page_start": 72, "page_end": 76},
+        {"page_start": 79, "page_end": 85},
+        {"page_start": 90, "page_end": 98},
+    ],
+    "group b strep": [
+        {"page_start": 90, "page_end": 100},
+        {"page_start": 107, "page_end": 114},
+    ],
+    "fetal surveillance": [
+        {"page_start": 174, "page_end": 180},
+        {"page_start": 329, "page_end": 333},
+        {"page_start": 416, "page_end": 421},
+    ],
+    "labor induction": [
+        {"page_start": 71, "page_end": 75},
+        {"page_start": 316, "page_end": 321},
+        {"page_start": 334, "page_end": 339},
     ],
 }
 

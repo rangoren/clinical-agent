@@ -66,6 +66,26 @@ MANAGEMENT_MARKERS = (
     "monitor",
     "surveillance",
     "induction",
+    "recommended",
+    "indicated",
+    "should",
+    "administer",
+    "admission",
+    "inpatient",
+    "outpatient",
+    "prophylaxis",
+)
+
+LOW_SIGNAL_SENTENCE_MARKERS = (
+    "doi.org",
+    "downloaded for",
+    "et al",
+    "fig.",
+    "figure ",
+    "table ",
+    "committee opinion",
+    "systematic review",
+    "trial group",
 )
 
 
@@ -213,14 +233,25 @@ def _score_sentence(topic, sentence, topic_queries):
         if marker in normalized_sentence:
             score += 2
 
-    if any(token in normalized_sentence for token in ("trial", "review", "consortium", "doi.org", "downloaded for")):
-        score -= 3
+    if any(token in normalized_sentence for token in LOW_SIGNAL_SENTENCE_MARKERS):
+        score -= 5
+
+    if re.search(r"\b\d{1,3}\.\s", normalized_sentence):
+        score -= 2
+
+    if normalized_sentence.count("(") >= 2 or normalized_sentence.count(";") >= 3:
+        score -= 2
 
     return score
 
 
-def _build_curated_range_excerpt(topic, topic_queries, page_map, page_start, page_end, sentence_limit=3):
+def _build_curated_range_excerpt(topic, topic_queries, topic_matches, page_map, page_start, page_end, sentence_limit=3):
     ranked_sentences = []
+    matched_pages = {
+        match.get("page")
+        for match in _matches_within_range(topic_matches, page_start, page_end)
+        if match.get("page")
+    }
 
     for page_number in range(page_start, page_end + 1):
         text = page_map.get(page_number)
@@ -228,6 +259,8 @@ def _build_curated_range_excerpt(topic, topic_queries, page_map, page_start, pag
             continue
         for sentence in _split_into_sentences(text):
             score = _score_sentence(topic, sentence, topic_queries)
+            if page_number in matched_pages:
+                score += 3
             if score <= 0:
                 continue
             ranked_sentences.append((score, page_number, sentence))
@@ -236,12 +269,16 @@ def _build_curated_range_excerpt(topic, topic_queries, page_map, page_start, pag
         return ""
 
     seen_sentences = set()
+    page_usage = {}
     selected = []
     for _, page_number, sentence in sorted(ranked_sentences, key=lambda item: (item[0], -item[1]), reverse=True):
         normalized_sentence = _normalize_text(sentence)
         if normalized_sentence in seen_sentences:
             continue
+        if page_usage.get(page_number, 0) >= 2:
+            continue
         seen_sentences.add(normalized_sentence)
+        page_usage[page_number] = page_usage.get(page_number, 0) + 1
         selected.append(f"Page {page_number}: {sentence}")
         if len(selected) >= sentence_limit:
             break
@@ -281,6 +318,7 @@ def build_gabbe_textbook_context(user_message, max_ranges=3):
         excerpt_text = _build_curated_range_excerpt(
             topic_entry["topic"],
             topic_queries or GABBE_TOPIC_QUERIES.get(topic_entry["topic"], []),
+            topic_matches,
             page_map,
             page_start,
             page_end,
