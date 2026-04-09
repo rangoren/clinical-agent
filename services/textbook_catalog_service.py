@@ -96,6 +96,29 @@ GABBE_TOPIC_QUERIES = {
     "breastfeeding and lactation": ["breastfeeding", "lactation", "mastitis"],
 }
 
+LOW_SIGNAL_SNIPPET_MARKERS = (
+    "doi.org",
+    "downloaded for",
+    "references",
+    "summary",
+    "outline",
+    "abbreviations",
+    "consortium",
+    "systematic review",
+    "trial",
+    "microbiome",
+)
+
+TOPIC_SIGNAL_MARKERS = {
+    "pprom": ("latency", "antibiotic", "delivery", "expectant", "rupture of membranes", "infection", "corticosteroids"),
+    "preterm labor": ("tocolysis", "corticosteroids", "magnesium sulfate", "delivery", "cervical change", "contractions"),
+    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "blood pressure", "hypertensive", "proteinuria"),
+    "eclampsia": ("seizure", "magnesium sulfate", "delivery", "severe features"),
+    "postpartum hemorrhage": ("uterine atony", "tranexamic", "uterotonic", "massive transfusion", "hemorrhage", "bleeding"),
+    "fetal surveillance": ("biophysical profile", "nonstress test", "doppler", "monitoring"),
+    "gestational diabetes": ("insulin", "screening", "glucose", "diet", "management"),
+}
+
 
 def _clean_text(value):
     text = re.sub(r"[^\x20-\x7E]+", " ", str(value or ""))
@@ -219,8 +242,7 @@ def _topic_queries(topic):
     return [topic]
 
 
-@lru_cache(maxsize=16)
-def search_gabbe_topic(topic):
+def _search_gabbe_topic_matches(topic):
     page_cache = get_textbook_cache("gabbe_page_text") or {}
     page_payload = page_cache.get("payload") or {}
     cached_pages = page_payload.get("pages") or []
@@ -245,6 +267,13 @@ def search_gabbe_topic(topic):
                 }
             )
             break
+
+    return page_payload, normalized_queries, results
+
+
+@lru_cache(maxsize=16)
+def search_gabbe_topic(topic):
+    page_payload, normalized_queries, results = _search_gabbe_topic_matches(topic)
 
     return {
         "topic": topic,
@@ -322,6 +351,70 @@ def _cluster_match_pages(matches, gap=3):
     return clusters
 
 
+def _match_quality_score(topic, match):
+    snippet = (match.get("snippet") or "").lower()
+    score = 1
+
+    if any(marker in snippet for marker in LOW_SIGNAL_SNIPPET_MARKERS):
+        score -= 2
+
+    query = (match.get("query") or "").lower()
+    topic_markers = TOPIC_SIGNAL_MARKERS.get(topic, ())
+
+    if query == topic.lower():
+        score += 3
+    elif topic.lower() in query:
+        score += 2
+
+    for marker in topic_markers:
+        if marker in snippet:
+            score += 2
+
+    if "management" in snippet or "treatment" in snippet:
+        score += 2
+
+    return score
+
+
+def _cluster_topic_matches(topic, matches, gap=3):
+    if not matches:
+        return []
+
+    sorted_matches = sorted(matches, key=lambda item: item["page"])
+    clusters = []
+    current_matches = [sorted_matches[0]]
+    current_start = sorted_matches[0]["page"]
+    current_end = sorted_matches[0]["page"]
+
+    for match in sorted_matches[1:]:
+        page = match["page"]
+        if page - current_end <= gap:
+            current_matches.append(match)
+            current_end = page
+            continue
+        clusters.append(
+            {
+                "page_start": current_start,
+                "page_end": current_end,
+                "score": sum(_match_quality_score(topic, item) for item in current_matches),
+                "match_count": len(current_matches),
+            }
+        )
+        current_matches = [match]
+        current_start = page
+        current_end = page
+
+    clusters.append(
+        {
+            "page_start": current_start,
+            "page_end": current_end,
+            "score": sum(_match_quality_score(topic, item) for item in current_matches),
+            "match_count": len(current_matches),
+        }
+    )
+    return clusters
+
+
 def _range_for_cluster(cluster, padding=2):
     return {
         "page_start": max(1, cluster["page_start"] - padding),
@@ -331,17 +424,22 @@ def _range_for_cluster(cluster, padding=2):
 
 def _map_single_gabbe_topic(topic_entry):
     topic = topic_entry["topic"]
-    search_payload = search_gabbe_topic(topic)
-    matches = search_payload["matches"]
-    clusters = _cluster_match_pages(matches, gap=3)
-    candidate_ranges = [_range_for_cluster(cluster, padding=2) for cluster in clusters[:3]]
+    _, queries, all_matches = _search_gabbe_topic_matches(topic)
+    preview_matches = all_matches[:12]
+    clusters = _cluster_topic_matches(topic, all_matches, gap=3)
+    ranked_clusters = sorted(
+        clusters,
+        key=lambda cluster: (cluster["score"], cluster["match_count"], -cluster["page_start"]),
+        reverse=True,
+    )
+    candidate_ranges = [_range_for_cluster(cluster, padding=2) for cluster in ranked_clusters[:3] if cluster["score"] > 0]
 
     return {
         **topic_entry,
-        "queries": search_payload["queries"],
-        "match_count": search_payload["match_count"],
+        "queries": queries,
+        "match_count": len(all_matches),
         "candidate_ranges": candidate_ranges,
-        "sample_matches": matches[:3],
+        "sample_matches": preview_matches[:3],
         "status": "mapped" if candidate_ranges else "unmapped",
     }
 
