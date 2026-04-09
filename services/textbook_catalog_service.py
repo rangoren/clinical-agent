@@ -103,6 +103,14 @@ SPEROFF_TOPIC_MAP = [
     {"topic": "genitourinary syndrome of menopause", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common menopause and vaginal estrogen counseling topic"},
     {"topic": "menopause osteoporosis prevention", "domain": "fertility", "tier": "B", "priority": "low", "why": "common long-term counseling topic"},
     {"topic": "obesity and reproduction", "domain": "fertility", "tier": "B", "priority": "medium", "why": "frequent fertility counseling and treatment-response issue"},
+    {"topic": "frozen embryo transfer", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common IVF sequencing and endometrial preparation topic"},
+    {"topic": "preimplantation genetic testing", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common IVF genetics and embryo selection topic"},
+    {"topic": "donor sperm insemination", "domain": "fertility", "tier": "B", "priority": "low", "why": "important third-party reproduction counseling topic"},
+    {"topic": "azoospermia", "domain": "fertility", "tier": "B", "priority": "medium", "why": "high-yield male infertility diagnosis and treatment topic"},
+    {"topic": "varicocele infertility", "domain": "fertility", "tier": "B", "priority": "low", "why": "common male infertility counseling question"},
+    {"topic": "uterine septum infertility", "domain": "fertility", "tier": "B", "priority": "low", "why": "important structural infertility and miscarriage overlap topic"},
+    {"topic": "asherman syndrome", "domain": "fertility", "tier": "B", "priority": "low", "why": "classic acquired uterine factor infertility topic"},
+    {"topic": "menopausal transition", "domain": "fertility", "tier": "B", "priority": "low", "why": "common counseling topic on perimenopausal physiology and symptoms"},
 ]
 
 CHAPTER_TITLE_RE = re.compile(r"^\s*(\d{1,3})\s*[.\-]?\s+([A-Z][A-Za-z0-9,\-:;/()' ]{6,120})\s*$")
@@ -208,6 +216,14 @@ SPEROFF_TOPIC_QUERIES = {
     "genitourinary syndrome of menopause": ["genitourinary syndrome of menopause", "gsm", "vaginal atrophy menopause"],
     "menopause osteoporosis prevention": ["menopause osteoporosis prevention", "bone loss menopause", "osteoporosis prevention hormone therapy"],
     "obesity and reproduction": ["obesity and fertility", "obesity reproduction", "weight loss fertility"],
+    "frozen embryo transfer": ["frozen embryo transfer", "fet", "frozen blastocyst transfer"],
+    "preimplantation genetic testing": ["preimplantation genetic testing", "pgt", "pgt-a", "preimplantation genetic screening"],
+    "donor sperm insemination": ["donor sperm insemination", "donor insemination", "therapeutic donor insemination"],
+    "azoospermia": ["azoospermia", "obstructive azoospermia", "nonobstructive azoospermia"],
+    "varicocele infertility": ["varicocele infertility", "varicocele", "varicocelectomy"],
+    "uterine septum infertility": ["uterine septum infertility", "septate uterus infertility", "septum miscarriage"],
+    "asherman syndrome": ["asherman syndrome", "intrauterine adhesions", "uterine synechiae"],
+    "menopausal transition": ["menopausal transition", "perimenopause", "menopause transition"],
 }
 
 LOW_SIGNAL_SNIPPET_MARKERS = (
@@ -296,6 +312,14 @@ TOPIC_SIGNAL_MARKERS = {
     "genitourinary syndrome of menopause": ("vaginal estrogen", "dyspareunia", "atrophy", "moisturizer", "gsm"),
     "menopause osteoporosis prevention": ("bone density", "fracture", "calcium", "vitamin d", "estrogen"),
     "obesity and reproduction": ("bmi", "weight loss", "metabolic", "ovulation", "ivf outcome"),
+    "frozen embryo transfer": ("frozen embryo transfer", "endometrial preparation", "progesterone", "blastocyst", "implantation"),
+    "preimplantation genetic testing": ("euploid", "aneuploidy", "trophectoderm", "embryo biopsy", "screening"),
+    "donor sperm insemination": ("donor sperm", "insemination", "iui", "screening", "counseling"),
+    "azoospermia": ("obstructive", "nonobstructive", "testicular sperm extraction", "icsi", "semen"),
+    "varicocele infertility": ("varicocele", "varicocelectomy", "semen parameters", "male infertility", "repair"),
+    "uterine septum infertility": ("septate uterus", "hysteroscopic resection", "miscarriage", "uterine cavity", "implantation"),
+    "asherman syndrome": ("intrauterine adhesions", "hysteroscopy", "amenorrhea", "synechiae", "uterine cavity"),
+    "menopausal transition": ("perimenopause", "cycle variability", "hot flashes", "follicle", "bleeding"),
 }
 
 SPEROFF_MANUAL_TOPIC_RANGES = {
@@ -381,8 +405,41 @@ SPEROFF_MANUAL_TOPIC_RANGES = {
         {"page_start": 1565, "page_end": 1572},
     ],
     "genitourinary syndrome of menopause": [
-        {"page_start": 1778, "page_end": 1792},
-        {"page_start": 1812, "page_end": 1824},
+        {"page_start": 1772, "page_end": 1786},
+        {"page_start": 1793, "page_end": 1808},
+        {"page_start": 1809, "page_end": 1820},
+    ],
+    "frozen embryo transfer": [
+        {"page_start": 3004, "page_end": 3026},
+        {"page_start": 2955, "page_end": 2970},
+    ],
+    "preimplantation genetic testing": [
+        {"page_start": 3027, "page_end": 3047},
+        {"page_start": 2955, "page_end": 2974},
+    ],
+    "donor sperm insemination": [
+        {"page_start": 2708, "page_end": 2718},
+        {"page_start": 2739, "page_end": 2748},
+    ],
+    "azoospermia": [
+        {"page_start": 2739, "page_end": 2762},
+        {"page_start": 2688, "page_end": 2713},
+    ],
+    "varicocele infertility": [
+        {"page_start": 2749, "page_end": 2762},
+        {"page_start": 2688, "page_end": 2713},
+    ],
+    "uterine septum infertility": [
+        {"page_start": 228, "page_end": 239},
+        {"page_start": 2594, "page_end": 2601},
+    ],
+    "asherman syndrome": [
+        {"page_start": 901, "page_end": 914},
+        {"page_start": 2594, "page_end": 2601},
+    ],
+    "menopausal transition": [
+        {"page_start": 1413, "page_end": 1435},
+        {"page_start": 1462, "page_end": 1470},
     ],
 }
 

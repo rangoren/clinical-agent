@@ -251,6 +251,21 @@ TOPIC_PRIORITY_MARKERS = {
     "rh alloimmunization": ("anti-d", "middle cerebral artery", "doppler", "intrauterine transfusion"),
     "postpartum endometritis": ("clindamycin", "gentamicin", "fever", "postpartum infection"),
     "amenorrhea": ("pregnancy test", "prolactin", "tsh", "fsh", "estradiol", "primary amenorrhea", "secondary amenorrhea", "breast development", "evaluation"),
+    "recurrent pregnancy loss": ("antiphospholipid", "heparin", "aspirin", "expectant management", "parental karyotype", "uterine cavity"),
+    "unexplained infertility": ("expectant management", "iui", "ivf", "gonadotropins", "live birth"),
+    "hydrosalpinx": ("salpingectomy", "proximal tubal occlusion", "implantation", "live birth", "ivf"),
+    "embryo transfer": ("single embryo transfer", "blastocyst", "euploid", "implantation", "pregnancy rate"),
+    "donor oocyte ivf": ("recipient", "egg donation", "luteal phase support", "progesterone", "corpus luteum"),
+    "vasomotor symptoms": ("estrogen therapy", "hot flushes", "night sweats", "quality of life", "nonhormonal"),
+    "genitourinary syndrome of menopause": ("vaginal estrogen", "vaginal dryness", "dyspareunia", "lubricants", "moisturizers", "ospemifene", "atrophy"),
+    "frozen embryo transfer": ("endometrial preparation", "progesterone", "frozen transfer", "blastocyst", "implantation"),
+    "preimplantation genetic testing": ("euploid", "aneuploidy", "embryo biopsy", "trophectoderm", "screening"),
+    "donor sperm insemination": ("donor insemination", "screening", "iui", "counseling"),
+    "azoospermia": ("obstructive azoospermia", "nonobstructive azoospermia", "testicular sperm", "icsi", "sperm retrieval"),
+    "varicocele infertility": ("varicocelectomy", "semen parameters", "male infertility", "repair"),
+    "uterine septum infertility": ("septate uterus", "hysteroscopic resection", "miscarriage", "implantation"),
+    "asherman syndrome": ("intrauterine adhesions", "synechiae", "hysteroscopy", "amenorrhea"),
+    "menopausal transition": ("perimenopause", "cycle variability", "hot flashes", "bleeding", "follicular"),
 }
 
 
