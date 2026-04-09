@@ -352,6 +352,38 @@ SPEROFF_MANUAL_TOPIC_RANGES = {
         {"page_start": 2728, "page_end": 2738},
         {"page_start": 2763, "page_end": 2782},
     ],
+    "recurrent pregnancy loss": [
+        {"page_start": 3071, "page_end": 3154},
+        {"page_start": 2956, "page_end": 2961},
+        {"page_start": 2594, "page_end": 2601},
+    ],
+    "unexplained infertility": [
+        {"page_start": 2617, "page_end": 2633},
+        {"page_start": 2708, "page_end": 2716},
+        {"page_start": 2582, "page_end": 2587},
+    ],
+    "hydrosalpinx": [
+        {"page_start": 2887, "page_end": 2925},
+        {"page_start": 2602, "page_end": 2622},
+    ],
+    "embryo transfer": [
+        {"page_start": 2955, "page_end": 2983},
+        {"page_start": 3004, "page_end": 3026},
+        {"page_start": 3027, "page_end": 3047},
+    ],
+    "donor oocyte ivf": [
+        {"page_start": 2985, "page_end": 2999},
+        {"page_start": 2898, "page_end": 2905},
+        {"page_start": 2680, "page_end": 2687},
+    ],
+    "vasomotor symptoms": [
+        {"page_start": 1462, "page_end": 1479},
+        {"page_start": 1565, "page_end": 1572},
+    ],
+    "genitourinary syndrome of menopause": [
+        {"page_start": 1778, "page_end": 1792},
+        {"page_start": 1812, "page_end": 1824},
+    ],
 }
 
 GABBE_MANUAL_TOPIC_RANGES = {
