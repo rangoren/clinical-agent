@@ -88,6 +88,35 @@ LOW_SIGNAL_SENTENCE_MARKERS = (
     "trial group",
 )
 
+TOPIC_PRIORITY_MARKERS = {
+    "preterm labor": ("tocolysis", "antenatal corticosteroids", "magnesium sulfate", "delivery", "transfer"),
+    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "antihypertensive", "expectant management"),
+    "postpartum hemorrhage": ("uterotonic", "tranexamic", "balloon tamponade", "massive transfusion", "hysterectomy"),
+    "labor induction": ("bishop", "cervical ripening", "oxytocin", "prostaglandin", "balloon catheter"),
+    "cesarean delivery": ("prophylaxis", "skin incision", "uterine incision", "hemorrhage"),
+    "trial of labor after cesarean": ("candidate", "contraindication", "uterine rupture", "counseling"),
+    "shoulder dystocia": ("mcroberts", "suprapubic pressure", "posterior arm", "woods"),
+    "operative vaginal delivery": ("forceps", "vacuum", "prerequisite", "contraindication"),
+    "placenta previa": ("digital examination", "bleeding", "cesarean delivery", "placental edge"),
+    "placenta accreta spectrum": ("multidisciplinary", "cesarean hysterectomy", "left in situ"),
+    "gestational diabetes": ("diet", "insulin", "metformin", "postpartum screening"),
+    "chronic hypertension in pregnancy": ("labetalol", "nifedipine", "surveillance", "delivery timing"),
+    "superimposed preeclampsia": ("severe features", "magnesium sulfate", "delivery", "chronic hypertension"),
+    "cervical insufficiency": ("painless dilation", "second trimester", "cerclage", "short cervix"),
+    "cerclage": ("history-indicated", "ultrasound-indicated", "rescue cerclage", "short cervix"),
+    "preterm birth prevention": ("progesterone", "short cervix", "prior spontaneous preterm birth", "cerclage"),
+    "periviable birth": ("corticosteroids", "magnesium sulfate", "counseling", "resuscitation"),
+    "labor dystocia": ("active phase", "arrest", "adequate contractions", "cesarean"),
+    "abnormal fetal heart rate tracing": ("late decelerations", "variable decelerations", "resuscitative measures", "category iii"),
+    "breech presentation": ("frank breech", "external cephalic version", "planned cesarean"),
+    "external cephalic version": ("tocolysis", "success", "contraindication", "breech"),
+    "oligohydramnios": ("single deepest pocket", "delivery timing", "surveillance"),
+    "polyhydramnios": ("amnioreduction", "fetal anomaly", "preterm labor"),
+    "fetal macrosomia": ("estimated fetal weight", "shoulder dystocia", "cesarean delivery"),
+    "rh alloimmunization": ("anti-d", "middle cerebral artery", "doppler", "intrauterine transfusion"),
+    "postpartum endometritis": ("clindamycin", "gentamicin", "fever", "postpartum infection"),
+}
+
 
 def detect_textbook_request(user_message):
     normalized = _normalize_text(user_message)
@@ -233,6 +262,10 @@ def _score_sentence(topic, sentence, topic_queries):
         if marker in normalized_sentence:
             score += 2
 
+    for marker in TOPIC_PRIORITY_MARKERS.get(topic, ()):
+        if marker in normalized_sentence:
+            score += 4
+
     if any(token in normalized_sentence for token in LOW_SIGNAL_SENTENCE_MARKERS):
         score -= 5
 
@@ -241,6 +274,9 @@ def _score_sentence(topic, sentence, topic_queries):
 
     if normalized_sentence.count("(") >= 2 or normalized_sentence.count(";") >= 3:
         score -= 2
+
+    if len(normalized_sentence) < 80:
+        score -= 1
 
     return score
 
