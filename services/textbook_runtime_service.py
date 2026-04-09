@@ -256,6 +256,10 @@ TOPIC_PRIORITY_MARKERS = {
     "hydrosalpinx": ("salpingectomy", "proximal tubal occlusion", "implantation", "live birth", "ivf"),
     "embryo transfer": ("single embryo transfer", "blastocyst", "euploid", "implantation", "pregnancy rate"),
     "donor oocyte ivf": ("recipient", "egg donation", "luteal phase support", "progesterone", "corpus luteum"),
+    "thyroid dysfunction and reproduction": ("thyroid", "tsh", "hypothyroidism", "hyperthyroidism", "fertility"),
+    "fibroids and infertility": ("fibroid", "leiomyoma", "myomectomy", "submucosal", "uterine cavity"),
+    "adenomyosis and fertility": ("adenomyosis", "infertility", "implantation", "ivf", "uterine"),
+    "antiphospholipid syndrome pregnancy loss": ("antiphospholipid", "heparin", "aspirin", "recurrent miscarriage", "pregnancy loss"),
     "vasomotor symptoms": ("estrogen therapy", "hot flushes", "night sweats", "quality of life", "nonhormonal"),
     "genitourinary syndrome of menopause": ("vaginal estrogen", "vaginal dryness", "dyspareunia", "lubricants", "moisturizers", "ospemifene", "atrophy"),
     "frozen embryo transfer": ("endometrial preparation", "progesterone", "frozen transfer", "blastocyst", "implantation"),
@@ -266,6 +270,8 @@ TOPIC_PRIORITY_MARKERS = {
     "uterine septum infertility": ("septate uterus", "hysteroscopic resection", "miscarriage", "implantation"),
     "asherman syndrome": ("intrauterine adhesions", "synechiae", "hysteroscopy", "amenorrhea"),
     "menopausal transition": ("perimenopause", "cycle variability", "hot flashes", "bleeding", "follicular"),
+    "menopause osteoporosis prevention": ("osteoporosis", "bone density", "fracture", "calcium", "estrogen"),
+    "obesity and reproduction": ("obesity", "body mass index", "ovulation", "weight loss", "ivf"),
 }
 
 
