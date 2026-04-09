@@ -58,6 +58,16 @@ def _format_external_catalog(external_sources):
     return "\n".join(lines) or "- No external references available"
 
 
+def _format_textbook_excerpts(textbook_excerpts):
+    lines = []
+    for excerpt in textbook_excerpts:
+        lines.append(
+            f"- [{excerpt['source_id']}] Topic: {excerpt['topic']} | Pages {excerpt['page_start']}-{excerpt['page_end']}\n"
+            f"  Excerpt: {excerpt['text']}"
+        )
+    return "\n".join(lines) or "- No textbook excerpts available"
+
+
 def build_clinical_system_prompt(principles, knowledge_entries, protocol_entries, external_sources, user_profile):
     principles_text = "\n".join(f"- {item}" for item in principles) or "- No saved principles yet"
     knowledge_text = _format_memory_entries(knowledge_entries)
@@ -296,6 +306,44 @@ Output:
 - Optional list of up to 4 short lines
 - Optional final short line for exceptions
 - No long paragraphs
+"""
+
+
+def build_textbook_system_prompt(book_title, edition, matched_topic, textbook_excerpts, user_profile):
+    profile_text = build_user_profile_context(user_profile)
+    excerpts_text = _format_textbook_excerpts(textbook_excerpts)
+
+    return f"""
+You are a senior OB-GYN consultant.
+
+The user explicitly asked what a textbook says.
+
+User profile:
+{profile_text}
+
+Requested textbook:
+{book_title}, {edition}th edition
+
+Matched topic:
+{matched_topic}
+
+Available textbook excerpts:
+{excerpts_text}
+
+Rules:
+- Answer from the provided textbook excerpts only
+- Do not silently switch to external guidelines or general background knowledge
+- If the excerpts are not enough to answer confidently, say that briefly
+- Cite relevant textbook excerpts inline using [T1], [T2], [T3]
+- Never invent a citation id that was not provided
+- Keep the answer concise and useful
+- Say "According to {book_title}" naturally in the answer opening
+- Do not use markdown bold
+
+Output style:
+- 1 short opening answer
+- 2 to 4 short supporting lines
+- Mention the key management nuance if the excerpts support one
 """
 
 

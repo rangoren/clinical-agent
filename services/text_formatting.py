@@ -2,7 +2,7 @@ import re
 
 
 def _strip_inline_source_citations(text):
-    cleaned = re.sub(r"\s*\[(?:E|P|K|PR|IK|LP)\d+\]", "", text)
+    cleaned = re.sub(r"\s*\[(?:E|P|K|T|PR|IK|LP)\d+\]", "", text)
     cleaned = re.sub(r" {2,}", " ", cleaned)
     return cleaned.strip()
 
