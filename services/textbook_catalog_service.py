@@ -121,7 +121,7 @@ TEXT_SCAN_END_PAGE = 250
 TOPIC_SEARCH_SCAN_END_PAGE = 900
 
 GABBE_TOPIC_QUERIES = {
-    "preeclampsia": ["preeclampsia", "pre-eclampsia", "severe features"],
+    "preeclampsia": ["preeclampsia", "pre-eclampsia", "severe features", "magnesium sulfate", "severe hypertension"],
     "gestational hypertension": ["gestational hypertension", "hypertension in pregnancy"],
     "eclampsia": ["eclampsia", "seizure in pregnancy"],
     "preterm labor": ["preterm labor", "preterm labour", "tocolysis"],
@@ -143,7 +143,7 @@ GABBE_TOPIC_QUERIES = {
     "postpartum hypertension": ["postpartum hypertension", "postpartum preeclampsia", "postpartum gestational hypertension"],
     "multiple gestation": ["multiple gestation", "twin pregnancy", "triplet pregnancy"],
     "twin pregnancy": ["twin pregnancy", "twin gestation", "monochorionic twins"],
-    "gestational diabetes": ["gestational diabetes", "gdm"],
+    "gestational diabetes": ["gestational diabetes", "gdm", "insulin", "metformin", "glyburide"],
     "postterm pregnancy": ["postterm pregnancy", "post-term pregnancy", "late-term pregnancy"],
     "amniotic fluid abnormalities": ["oligohydramnios", "polyhydramnios", "amniotic fluid"],
     "placental abruption": ["placental abruption", "abruption placentae"],
@@ -242,7 +242,7 @@ LOW_SIGNAL_SNIPPET_MARKERS = (
 TOPIC_SIGNAL_MARKERS = {
     "pprom": ("latency", "antibiotic", "delivery", "expectant", "rupture of membranes", "infection", "corticosteroids", "gbs prophylaxis"),
     "preterm labor": ("tocolysis", "corticosteroids", "magnesium sulfate", "delivery", "cervical change", "contractions", "cerclage", "latency"),
-    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "blood pressure", "hypertensive", "proteinuria", "antihypertensive", "seizure prophylaxis", "aspirin", "expectant management", "timing of delivery", "late preterm", "planned delivery", "definitive treatment", "severe hypertension"),
+    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "blood pressure", "hypertensive", "proteinuria", "antihypertensive", "seizure prophylaxis", "aspirin", "expectant management", "timing of delivery", "late preterm", "planned delivery", "definitive treatment", "severe hypertension", "labetalol", "hydralazine", "nifedipine", "37 weeks"),
     "eclampsia": ("seizure", "magnesium sulfate", "delivery", "severe features"),
     "postpartum hemorrhage": ("uterine atony", "tranexamic", "uterotonic", "massive transfusion", "hemorrhage", "bleeding", "bakri", "balloon tamponade"),
     "fetal surveillance": ("biophysical profile", "nonstress test", "doppler", "monitoring"),
@@ -257,7 +257,7 @@ TOPIC_SIGNAL_MARKERS = {
     "operative vaginal delivery": ("vacuum", "forceps", "prerequisite", "contraindication", "station"),
     "placenta previa": ("bleeding", "ultrasound", "cesarean", "placental edge", "digital examination"),
     "placenta accreta spectrum": ("placenta accreta spectrum", "cesarean hysterectomy", "multidisciplinary", "placenta left in situ"),
-    "gestational diabetes": ("screening", "glucose", "diet", "fasting", "insulin", "glyburide", "metformin", "postpartum screening"),
+    "gestational diabetes": ("screening", "glucose", "diet", "fasting", "insulin", "glyburide", "metformin", "postpartum screening", "24 to 28 weeks", "self-monitoring", "delivery", "39 weeks"),
     "chronic hypertension in pregnancy": ("antihypertensive", "labetalol", "nifedipine", "surveillance", "delivery"),
     "superimposed preeclampsia": ("severe features", "chronic hypertension", "magnesium sulfate", "delivery"),
     "cervical insufficiency": ("short cervix", "painless dilation", "second trimester loss", "cerclage"),
@@ -477,9 +477,9 @@ GABBE_MANUAL_TOPIC_RANGES = {
         {"page_start": 720, "page_end": 735},
     ],
     "preeclampsia": [
-        {"page_start": 854, "page_end": 876},
-        {"page_start": 1175, "page_end": 1199},
-        {"page_start": 1024, "page_end": 1039},
+        {"page_start": 861, "page_end": 866},
+        {"page_start": 1030, "page_end": 1033},
+        {"page_start": 854, "page_end": 859},
     ],
     "postpartum hemorrhage": [
         {"page_start": 476, "page_end": 514},
@@ -537,8 +537,9 @@ GABBE_MANUAL_TOPIC_RANGES = {
         {"page_start": 1001, "page_end": 1016},
     ],
     "gestational diabetes": [
-        {"page_start": 601, "page_end": 619},
-        {"page_start": 620, "page_end": 632},
+        {"page_start": 1058, "page_end": 1073},
+        {"page_start": 1068, "page_end": 1073},
+        {"page_start": 618, "page_end": 619},
     ],
     "labor dystocia": [
         {"page_start": 512, "page_end": 517},

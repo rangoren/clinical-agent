@@ -225,7 +225,7 @@ LOW_SIGNAL_SENTENCE_MARKERS = (
 
 TOPIC_PRIORITY_MARKERS = {
     "preterm labor": ("tocolysis", "antenatal corticosteroids", "magnesium sulfate", "delivery", "transfer"),
-    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "antihypertensive", "expectant management", "aspirin", "timing of delivery", "late preterm", "planned delivery", "definitive treatment", "severe hypertension"),
+    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "antihypertensive", "expectant management", "aspirin", "timing of delivery", "late preterm", "planned delivery", "definitive treatment", "severe hypertension", "labetalol", "hydralazine", "nifedipine", "37 weeks"),
     "postpartum hemorrhage": ("uterotonic", "tranexamic", "balloon tamponade", "massive transfusion", "hysterectomy"),
     "labor induction": ("bishop", "cervical ripening", "oxytocin", "prostaglandin", "balloon catheter"),
     "cesarean delivery": ("prophylaxis", "skin incision", "uterine incision", "hemorrhage"),
@@ -234,7 +234,7 @@ TOPIC_PRIORITY_MARKERS = {
     "operative vaginal delivery": ("forceps", "vacuum", "prerequisite", "contraindication"),
     "placenta previa": ("digital examination", "bleeding", "cesarean delivery", "placental edge"),
     "placenta accreta spectrum": ("multidisciplinary", "cesarean hysterectomy", "left in situ"),
-    "gestational diabetes": ("diet", "insulin", "metformin", "postpartum screening"),
+    "gestational diabetes": ("screening", "24 and 28 weeks", "insulin", "metformin", "glyburide", "diet", "self-monitoring", "39 weeks", "postpartum screening"),
     "chronic hypertension in pregnancy": ("labetalol", "nifedipine", "surveillance", "delivery timing"),
     "superimposed preeclampsia": ("severe features", "magnesium sulfate", "delivery", "chronic hypertension"),
     "cervical insufficiency": ("painless dilation", "second trimester", "cerclage", "short cervix"),
