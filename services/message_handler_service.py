@@ -378,6 +378,21 @@ def _build_missing_textbook_context_reply(textbook_context):
     )
 
 
+def _build_textbook_overload_fallback(textbook_context):
+    lines = [
+        f"According to {textbook_context['book_title']}, I couldn't generate a full synthesized textbook answer right now because the model is temporarily overloaded.",
+        "Here are the most relevant textbook excerpts I found:",
+    ]
+
+    for excerpt in (textbook_context.get("excerpts") or [])[:3]:
+        lines.append(
+            f"- [{excerpt['source_id']}] Pages {excerpt['page_start']}-{excerpt['page_end']}: {excerpt['text']}"
+        )
+
+    lines.append("This is raw textbook support rather than a polished synthesis.")
+    return "\n".join(lines)
+
+
 def _handle_new_user_onboarding(session_id):
     start_onboarding(session_id)
     log_event("session_started", session_id, {"mode": "onboarding"})
@@ -839,6 +854,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
     question_route = infer_question_route(user_message)
     candidate_sources = []
     basic_clinical_question = intent == "clinical_consult" and _looks_like_basic_clinical_question(user_message)
+    textbook_context = None
     log_event(
         "intent_classified",
         session_id,
@@ -1014,6 +1030,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         system_prompt=system_prompt,
         chat_history=chat_history,
         user_message=user_message,
+        fallback_reply=_build_textbook_overload_fallback(textbook_context) if textbook_context else None,
     )
     mark("llm_reply_ms", stage_started_at)
 
