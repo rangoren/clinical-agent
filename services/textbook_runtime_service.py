@@ -604,4 +604,5 @@ def build_textbook_overload_fallback_reply(textbook_context):
             )
 
     lines.append("This is a direct excerpt-based fallback rather than a polished textbook synthesis.")
+    lines.append("The answer is intentionally kept in English for textbook-mode consistency.")
     return "\n".join(lines)

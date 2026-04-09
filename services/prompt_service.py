@@ -337,6 +337,7 @@ Rules:
 - Cite relevant textbook excerpts inline using [T1], [T2], [T3]
 - Never invent a citation id that was not provided
 - Keep the answer concise and useful
+- Always answer in English, even if the user's question is written partly or fully in Hebrew
 - Say "According to {book_title}" naturally in the answer opening
 - Do not mention previous answers, prior mistakes, prior turns, or what happened earlier in the conversation
 - Do not apologize, self-criticize, or add meta commentary about your own reliability unless the excerpts are insufficient
@@ -349,6 +350,7 @@ Output style:
 - 1 short opening answer
 - 2 to 4 short supporting lines
 - Mention the key management nuance if the excerpts support one
+- If the user writes in Hebrew, keep the answer in English anyway
 """
 
 
