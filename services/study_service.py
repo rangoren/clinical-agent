@@ -127,6 +127,7 @@ DEMOTION_THRESHOLD = 4
 MAX_CONSECUTIVE_TOPIC_REPEATS = 2
 STYLE_HISTORY_WINDOW = 12
 LEVEL_HISTORY_WINDOW = 12
+IDLE_CARDS_CACHE_TTL_SECONDS = 300
 
 
 STUDY_SEED_ITEMS = [
@@ -1275,6 +1276,22 @@ def _get_items(item_type=None, topic=None, exclude_ids=None):
     return items
 
 
+def _get_cached_idle_cards(state):
+    cards = state.get("idle_cards_cache")
+    generated_at = state.get("idle_cards_cache_generated_at")
+    if not cards or not generated_at:
+        return None
+
+    try:
+        age_seconds = (_utc_now() - generated_at).total_seconds()
+    except Exception:
+        return None
+
+    if age_seconds < 0 or age_seconds > IDLE_CARDS_CACHE_TTL_SECONDS:
+        return None
+    return {"cards": cards}
+
+
 def _rng_for_session(session_id, salt):
     seed = f"{session_id}:{salt}:{_utc_now().strftime('%Y-%m-%d')}"
     return Random(seed)
@@ -1701,6 +1718,11 @@ def _pick_targeted_item(
 def get_idle_study_cards(session_id):
     ensure_study_content_seed()
     state = _load_state(session_id)
+    cached_cards = _get_cached_idle_cards(state)
+    if cached_cards:
+        log_event("study_cards_cache_hit", session_id, {"card_ids": [card["content_item_id"] for card in cached_cards["cards"]]})
+        return cached_cards
+
     user_profile = get_user_profile(session_id)
     policy = _difficulty_policy_for_profile(user_profile)
     recent_topics = state.get("recent_topic_history") or []
@@ -1803,6 +1825,8 @@ def get_idle_study_cards(session_id):
         {
             "last_opened_at": _utc_now(),
             "cards_shown_history": shown_history,
+            "idle_cards_cache": cards[:3],
+            "idle_cards_cache_generated_at": _utc_now(),
         },
     )
     log_event("study_cards_impression", session_id, {"card_ids": [card["content_item_id"] for card in cards]})
