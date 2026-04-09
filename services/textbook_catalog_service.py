@@ -91,6 +91,18 @@ SPEROFF_TOPIC_MAP = [
     {"topic": "fertility preservation", "domain": "fertility", "tier": "B", "priority": "medium", "why": "important counseling topic before gonadotoxic treatment"},
     {"topic": "hirsutism", "domain": "fertility", "tier": "B", "priority": "medium", "why": "high-yield hyperandrogenism symptom pathway"},
     {"topic": "hydrosalpinx", "domain": "fertility", "tier": "B", "priority": "medium", "why": "important IVF and tubal-factor management question"},
+    {"topic": "intracytoplasmic sperm injection", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common ART technique and male-factor question"},
+    {"topic": "embryo transfer", "domain": "fertility", "tier": "B", "priority": "medium", "why": "high-yield IVF procedure and success topic"},
+    {"topic": "donor oocyte ivf", "domain": "fertility", "tier": "B", "priority": "medium", "why": "important pathway for ovarian failure and age-related infertility"},
+    {"topic": "uterine factor infertility", "domain": "fertility", "tier": "B", "priority": "medium", "why": "broad structural infertility evaluation topic"},
+    {"topic": "fibroids and infertility", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common counseling and surgical decision topic"},
+    {"topic": "endometriosis pain management", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common overlap of pain control and fertility planning"},
+    {"topic": "adenomyosis and fertility", "domain": "fertility", "tier": "B", "priority": "low", "why": "important but narrower infertility overlap topic"},
+    {"topic": "antiphospholipid syndrome pregnancy loss", "domain": "fertility", "tier": "B", "priority": "medium", "why": "high-yield recurrent pregnancy loss management topic"},
+    {"topic": "vasomotor symptoms", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common menopause symptom-management question"},
+    {"topic": "genitourinary syndrome of menopause", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common menopause and vaginal estrogen counseling topic"},
+    {"topic": "menopause osteoporosis prevention", "domain": "fertility", "tier": "B", "priority": "low", "why": "common long-term counseling topic"},
+    {"topic": "obesity and reproduction", "domain": "fertility", "tier": "B", "priority": "medium", "why": "frequent fertility counseling and treatment-response issue"},
 ]
 
 CHAPTER_TITLE_RE = re.compile(r"^\s*(\d{1,3})\s*[.\-]?\s+([A-Z][A-Za-z0-9,\-:;/()' ]{6,120})\s*$")
@@ -184,6 +196,18 @@ SPEROFF_TOPIC_QUERIES = {
     "fertility preservation": ["fertility preservation", "oocyte cryopreservation", "egg freezing"],
     "hirsutism": ["hirsutism", "androgen excess", "excess hair growth"],
     "hydrosalpinx": ["hydrosalpinx", "salpingectomy before ivf", "proximal tubal occlusion"],
+    "intracytoplasmic sperm injection": ["intracytoplasmic sperm injection", "icsi", "sperm injection"],
+    "embryo transfer": ["embryo transfer", "single embryo transfer", "blastocyst transfer"],
+    "donor oocyte ivf": ["donor oocyte", "egg donation", "donor egg ivf"],
+    "uterine factor infertility": ["uterine factor infertility", "uterine cavity", "mullerian anomaly infertility"],
+    "fibroids and infertility": ["fibroids infertility", "leiomyoma infertility", "submucosal fibroid infertility"],
+    "endometriosis pain management": ["endometriosis pain", "medical treatment of endometriosis", "endometriosis pain management"],
+    "adenomyosis and fertility": ["adenomyosis infertility", "adenomyosis and fertility", "adenomyosis reproduction"],
+    "antiphospholipid syndrome pregnancy loss": ["antiphospholipid syndrome pregnancy loss", "aps recurrent pregnancy loss", "antiphospholipid recurrent miscarriage"],
+    "vasomotor symptoms": ["vasomotor symptoms", "hot flashes", "night sweats menopause"],
+    "genitourinary syndrome of menopause": ["genitourinary syndrome of menopause", "gsm", "vaginal atrophy menopause"],
+    "menopause osteoporosis prevention": ["menopause osteoporosis prevention", "bone loss menopause", "osteoporosis prevention hormone therapy"],
+    "obesity and reproduction": ["obesity and fertility", "obesity reproduction", "weight loss fertility"],
 }
 
 LOW_SIGNAL_SNIPPET_MARKERS = (
@@ -260,6 +284,18 @@ TOPIC_SIGNAL_MARKERS = {
     "fertility preservation": ("cryopreservation", "oocyte", "embryo", "gonadotoxic", "oncology"),
     "hirsutism": ("androgen", "testosterone", "spironolactone", "cosmetic", "pcos"),
     "hydrosalpinx": ("salpingectomy", "proximal tubal occlusion", "ivf", "implantation", "tubal"),
+    "intracytoplasmic sperm injection": ("icsi", "male factor", "fertilization", "sperm", "oocyte"),
+    "embryo transfer": ("blastocyst", "single embryo transfer", "uterine cavity", "implantation", "transfer"),
+    "donor oocyte ivf": ("donor oocyte", "recipient", "egg donation", "ovarian failure", "pregnancy rate"),
+    "uterine factor infertility": ("uterine cavity", "septum", "synechiae", "submucosal", "implantation"),
+    "fibroids and infertility": ("submucosal", "myomectomy", "leiomyoma", "cavity distortion", "fertility"),
+    "endometriosis pain management": ("pain", "laparoscopy", "suppression", "progestin", "surgery"),
+    "adenomyosis and fertility": ("adenomyosis", "implantation", "ivf", "uterine"),
+    "antiphospholipid syndrome pregnancy loss": ("antiphospholipid", "heparin", "aspirin", "pregnancy loss", "thrombosis"),
+    "vasomotor symptoms": ("hot flashes", "night sweats", "estrogen therapy", "nonhormonal"),
+    "genitourinary syndrome of menopause": ("vaginal estrogen", "dyspareunia", "atrophy", "moisturizer", "gsm"),
+    "menopause osteoporosis prevention": ("bone density", "fracture", "calcium", "vitamin d", "estrogen"),
+    "obesity and reproduction": ("bmi", "weight loss", "metabolic", "ovulation", "ivf outcome"),
 }
 
 SPEROFF_MANUAL_TOPIC_RANGES = {
