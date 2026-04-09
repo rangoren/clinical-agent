@@ -79,6 +79,21 @@ TEXTBOOK_REQUEST_HINTS = (
     "by gabbe",
     "by speroff",
     "by berek",
+    "in gabbe",
+    "in speroff",
+    "in berek",
+    "from gabbe",
+    "from speroff",
+    "from berek",
+    "per gabbe",
+    "per speroff",
+    "per berek",
+    "gabbe on",
+    "speroff on",
+    "berek on",
+    "gabbe about",
+    "speroff about",
+    "berek about",
     "according gabbe",
     "according speroff",
     "according berek",
@@ -146,6 +161,10 @@ TEXTBOOK_ACTION_HINTS = (
     "write",
     "book",
     "textbook",
+    "from",
+    "per",
+    "on",
+    "about",
     "לפי",
     "כתוב",
     "כותב",
@@ -331,7 +350,7 @@ TOPIC_PRIORITY_MARKERS = {
 }
 
 TOPIC_REQUEST_ALIASES = {
-    "preeclampsia": ("רעלת", "רעלת הריון", "פרה אקלמפסיה", "פרה-אקלמפסיה", "pet", "severe pet"),
+    "preeclampsia": ("רעלת", "רעלת הריון", "פרה אקלמפסיה", "פרה-אקלמפסיה", "pet", "severe pet", "pec", "severe pec"),
     "pprom": ("ירידת מים מוקדמת", "ירידת מים מוקדמת מוקדמת", "פקיעת קרומים מוקדמת", "פקיעת קרומים מוקדמת לפני לידה"),
     "cervical insufficiency": ("אי ספיקת צוואר הרחם", "אי ספיקה צווארית", "צוואר רחם קצר", "צוואר קצר"),
     "gestational diabetes": ("סוכרת הריון", "סכרת הריון", "gdm"),
@@ -362,9 +381,10 @@ def detect_textbook_request(user_message):
         return None
 
     if not explicit_request and not normalized.startswith(matched_alias):
-        by_book_pattern = rf"\b(by|from|in)\s+{re.escape(matched_alias)}\b"
+        by_book_pattern = rf"\b(by|from|in|per)\s+{re.escape(matched_alias)}\b"
         if not re.search(by_book_pattern, normalized):
-            return None
+            if not re.search(rf"\b{re.escape(matched_alias)}\s+(on|about)\b", normalized):
+                return None
 
     book = get_book_object(matched_book_id)
     if not book:
