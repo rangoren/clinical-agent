@@ -1088,6 +1088,11 @@
             box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
         }
 
+        .composer-mode-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .composer-main {
             display: flex;
             align-items: center;
@@ -1747,6 +1752,14 @@
                         </svg>
                         <span>Scheduling</span>
                     </button>
+                    <button id="composer-open-cards" class="composer-mode-button" type="button" onclick="openStudyCardsFromComposer()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3.5" y="5.5" width="17" height="13" rx="2.5"></rect>
+                            <path d="M7 9.5H17"></path>
+                            <path d="M7 13.5H13"></path>
+                        </svg>
+                        <span>Open cards</span>
+                    </button>
                 </div>
                 <div class="composer-main">
                     <button id="composer-plus-button" class="composer-plus-button" type="button" aria-label="Open quick actions" aria-expanded="false" onclick="toggleComposerModeStrip()">
@@ -2023,6 +2036,19 @@
             updateComposerState();
         }
 
+        async function openStudyCardsFromComposer() {
+            if (appMode !== "clinical") return;
+            studyCardsDismissed = false;
+            setComposerModeStripOpen(false);
+            dismissEntryGuidance();
+            const input = document.getElementById("input");
+            if (input) {
+                input.blur();
+            }
+            await maybeShowStudyCards(true);
+            updateComposerState();
+        }
+
         function getStudyCardsShell() {
             return document.getElementById("study-cards-shell");
         }
@@ -2237,6 +2263,10 @@
         function renderModeState() {
             document.getElementById("composer-mode-clinical").classList.toggle("active", appMode === "clinical");
             document.getElementById("composer-mode-scheduling").classList.toggle("active", appMode === "scheduling");
+            const openCardsButton = document.getElementById("composer-open-cards");
+            if (openCardsButton) {
+                openCardsButton.disabled = appMode !== "clinical";
+            }
             document.getElementById("settings-shell").classList.toggle("visible", appMode === "scheduling");
             const versionStamp = document.getElementById("version-stamp");
             const contextLabelText = document.getElementById("context-label-text");
