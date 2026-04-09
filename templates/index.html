@@ -1088,6 +1088,11 @@
             box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.08);
         }
 
+        .composer-mode-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .composer-main {
             display: flex;
             align-items: center;
@@ -1747,6 +1752,14 @@
                         </svg>
                         <span>Scheduling</span>
                     </button>
+                    <button id="composer-open-cards" class="composer-mode-button" type="button" onclick="openStudyCardsFromComposer()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="3.5" y="5.5" width="17" height="13" rx="2.5"></rect>
+                            <path d="M7 9.5H17"></path>
+                            <path d="M7 13.5H13"></path>
+                        </svg>
+                        <span>Open cards</span>
+                    </button>
                 </div>
                 <div class="composer-main">
                     <button id="composer-plus-button" class="composer-plus-button" type="button" aria-label="Open quick actions" aria-expanded="false" onclick="toggleComposerModeStrip()">
@@ -1774,12 +1787,14 @@
         let googleCalendarConnected = false;
         let studyCardsRequested = false;
         let studyCardsDismissed = false;
+        let studyCardsRequestToken = 0;
         let entryGuidanceDismissed = false;
         let composerModeStripOpen = false;
         let pullRefreshState = "idle";
         let pullTouchStartY = 0;
         let pullDistance = 0;
         let pullTracking = false;
+        let pendingStudyCardsTimer = null;
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
         const studyCardsCacheKey = "entry_study_cards_v1";
@@ -2023,6 +2038,19 @@
             updateComposerState();
         }
 
+        async function openStudyCardsFromComposer() {
+            if (appMode !== "clinical") return;
+            studyCardsDismissed = false;
+            setComposerModeStripOpen(false);
+            dismissEntryGuidance();
+            const input = document.getElementById("input");
+            if (input) {
+                input.blur();
+            }
+            await maybeShowStudyCards(true);
+            updateComposerState();
+        }
+
         function getStudyCardsShell() {
             return document.getElementById("study-cards-shell");
         }
@@ -2091,21 +2119,44 @@
             refreshEntryGuidanceVisibility();
         }
 
+        function invalidateStudyCardsRequests() {
+            studyCardsRequestToken += 1;
+            studyCardsRequested = false;
+        }
+
         function dismissStudyCards() {
+            cancelDeferredStudyCardsLoad();
+            invalidateStudyCardsRequests();
             studyCardsDismissed = true;
             hideStudyCards();
             dismissEntryGuidance();
             updateComposerState();
         }
 
-        function shouldShowStudyCards() {
+        function cancelDeferredStudyCardsLoad() {
+            if (pendingStudyCardsTimer) {
+                clearTimeout(pendingStudyCardsTimer);
+                pendingStudyCardsTimer = null;
+            }
+        }
+
+        function scheduleDeferredStudyCardsLoad(force = false) {
+            cancelDeferredStudyCardsLoad();
+            pendingStudyCardsTimer = setTimeout(() => {
+                pendingStudyCardsTimer = null;
+                maybeShowStudyCards(force);
+            }, 120);
+        }
+
+        function shouldShowStudyCards(manual = false) {
             const input = document.getElementById("input");
-            return (
-                appMode === "clinical" &&
-                !studyCardsDismissed &&
-                input &&
-                !input.value.trim()
-            );
+            if (appMode !== "clinical" || !input || input.value.trim()) return false;
+            if (document.getElementById("thinking-row")) return false;
+            if (manual) return true;
+            if (studyCardsDismissed) return false;
+            const chat = document.getElementById("chat");
+            if (chat && chat.children.length > 0) return false;
+            return true;
         }
 
         function renderStudyCards(cards) {
@@ -2181,15 +2232,16 @@
         }
 
         async function maybeShowStudyCards(force = false) {
-            if (!shouldShowStudyCards()) {
+            if (!shouldShowStudyCards(force)) {
                 hideStudyCards();
                 return;
             }
 
             const shell = getStudyCardsShell();
             if (!shell) return;
+            const hasExistingCards = shell.children.length > 0;
 
-            if (!force && shell.children.length > 0) {
+            if (!force && hasExistingCards) {
                 shell.classList.add("visible");
                 refreshEntryGuidanceVisibility();
                 return;
@@ -2197,7 +2249,13 @@
 
             if (studyCardsRequested) return;
             studyCardsRequested = true;
-            renderStudyCardPlaceholders();
+            const requestToken = ++studyCardsRequestToken;
+            if (!hasExistingCards) {
+                renderStudyCardPlaceholders();
+            } else {
+                shell.classList.add("visible");
+                refreshEntryGuidanceVisibility();
+            }
 
             try {
                 const response = await fetch("/study/cards", {
@@ -2210,9 +2268,23 @@
                     })
                 });
                 const data = await response.json();
+                if (requestToken !== studyCardsRequestToken) {
+                    return;
+                }
+                studyCardsRequested = false;
+                if (!shouldShowStudyCards(force)) {
+                    hideStudyCards();
+                    return;
+                }
                 renderStudyCards(data.cards || []);
             } catch (_error) {
-                clearStudyCards();
+                if (requestToken !== studyCardsRequestToken) {
+                    return;
+                }
+                studyCardsRequested = false;
+                if (!hasExistingCards) {
+                    clearStudyCards();
+                }
             }
         }
 
@@ -2237,6 +2309,10 @@
         function renderModeState() {
             document.getElementById("composer-mode-clinical").classList.toggle("active", appMode === "clinical");
             document.getElementById("composer-mode-scheduling").classList.toggle("active", appMode === "scheduling");
+            const openCardsButton = document.getElementById("composer-open-cards");
+            if (openCardsButton) {
+                openCardsButton.disabled = appMode !== "clinical";
+            }
             document.getElementById("settings-shell").classList.toggle("visible", appMode === "scheduling");
             const versionStamp = document.getElementById("version-stamp");
             const contextLabelText = document.getElementById("context-label-text");
@@ -2989,6 +3065,7 @@
                 return;
             }
 
+            hideStudyCards();
             if (existing) return;
             const row = createMessageRow(
                 "assistant",
@@ -3003,6 +3080,7 @@
 
         async function bootstrapSession() {
             studyCardsDismissed = false;
+            cancelDeferredStudyCardsLoad();
             setComposerEnabled(false);
             setStatus("Checking");
             refreshEntryGuidanceVisibility();
@@ -3044,13 +3122,11 @@
                 hideSessionBanner();
                 if (data.reply) {
                     appendAssistantMessage(data.reply);
-                } else if (data.cards && data.cards.length > 0) {
-                    renderStudyCards(data.cards);
                 }
                 await refreshCalendarStatus();
                 setComposerEnabled(true);
-                if (!data.cards || data.cards.length === 0) {
-                    maybeShowStudyCards(true);
+                if (!data.reply) {
+                    scheduleDeferredStudyCardsLoad(true);
                 }
                 refreshEntryGuidanceVisibility();
                 attemptInitialComposerFocus();

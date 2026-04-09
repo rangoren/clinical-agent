@@ -4,8 +4,8 @@ from llm_client import client
 from settings import ANTHROPIC_MODEL
 
 
-MAX_REPLY_RETRIES = 2
-RETRY_BACKOFF_SECONDS = 0.45
+MAX_REPLY_RETRIES = 4
+RETRY_BACKOFF_SECONDS = 1.0
 
 
 def _sanitize_reply(text):
@@ -62,7 +62,7 @@ def _build_message_entry(item):
     }
 
 
-def generate_reply(system_prompt, chat_history, user_message):
+def generate_reply(system_prompt, chat_history, user_message, fallback_reply=None):
     messages = []
     normalized_user_message = (user_message or "").strip().lower()
     is_fresh_case_prompt = (
@@ -95,8 +95,13 @@ def generate_reply(system_prompt, chat_history, user_message):
             return _sanitize_reply(response.content[0].text)
         except Exception as exc:
             last_exc = exc
-            if attempt >= MAX_REPLY_RETRIES or not _is_transient_llm_error(exc):
+            is_transient = _is_transient_llm_error(exc)
+            if attempt >= MAX_REPLY_RETRIES or not is_transient:
+                if is_transient and fallback_reply:
+                    return _sanitize_reply(fallback_reply)
                 raise
-            time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
+            time.sleep(RETRY_BACKOFF_SECONDS * (2 ** attempt))
 
+    if fallback_reply and _is_transient_llm_error(last_exc):
+        return _sanitize_reply(fallback_reply)
     raise last_exc

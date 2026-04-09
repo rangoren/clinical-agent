@@ -31,10 +31,21 @@ from services.profile_service import (
     update_user_profile,
     build_soft_onboarding_followup,
 )
-from services.prompt_service import build_basic_clinical_system_prompt, build_clinical_system_prompt, build_general_system_prompt
+from services.prompt_service import (
+    build_basic_clinical_system_prompt,
+    build_clinical_system_prompt,
+    build_general_system_prompt,
+    build_textbook_system_prompt,
+)
 from services.response_service import generate_reply
 from services.study_service import resolve_study_chat_message
 from services.text_formatting import format_basic_clinical_response, format_response
+from services.textbook_runtime_service import (
+    build_gabbe_textbook_context,
+    build_speroff_textbook_context,
+    build_textbook_overload_fallback_reply,
+    detect_textbook_request,
+)
 from services.trusted_source_registry import get_domain_tier, get_source_domain, infer_question_route
 from services.undo_service import clear_last_saved, record_last_saved
 import re
@@ -69,6 +80,16 @@ TRAINING_STAGE_STATUS_PATTERNS = (
     "what training stage do you have",
     "what do you know about my training",
 )
+
+
+def _build_textbook_llm_user_message(user_message):
+    question_text = (user_message or "").strip()
+    return (
+        "Answer in English only.\n"
+        "Do not answer in Hebrew, even if the user's question is in Hebrew.\n"
+        "Use the textbook excerpts and answer the user's question directly.\n\n"
+        f"Original user question:\n{question_text}"
+    )
 
 
 def _reply_has_visible_text(reply):
@@ -182,7 +203,7 @@ def _collect_internal_sources(principles, protocol_entries, knowledge_entries):
 
 
 def _extract_cited_source_ids(reply):
-    return set(re.findall(r"\[((?:E|P|K|PR|LP|IK)\d+)\]", reply or ""))
+    return set(re.findall(r"\[((?:E|P|K|T|PR|LP|IK)\d+)\]", reply or ""))
 
 
 def _filter_sources_by_citation(reply, sources):
@@ -208,7 +229,7 @@ def _fallback_display_sources(sources):
             internal_only_sources.append(source)
             seen_source_ids.add(source_id)
             continue
-        if source.get("url") or source_id.startswith(("E", "P", "K")):
+        if source.get("url") or source_id.startswith(("E", "P", "K", "T")):
             preferred_sources.append(source)
             seen_source_ids.add(source_id)
 
@@ -355,6 +376,25 @@ def _looks_like_basic_clinical_question(user_message):
     if any(marker in cleaned for marker in acute_markers):
         return False
     return any(marker in cleaned for marker in basic_markers) or (cleaned.endswith("?") and len(cleaned.split()) <= 14)
+
+
+def _build_unsupported_textbook_reply(textbook_request):
+    book_title = textbook_request.get("book_title") or "that textbook"
+    return (
+        f"I only have on-demand textbook access wired into runtime for Gabbe and Speroff right now. "
+        f"{book_title} is not connected yet."
+    )
+
+
+def _build_missing_textbook_context_reply(textbook_context):
+    return textbook_context.get("message") or (
+        "I couldn't confidently map this textbook request to one of the indexed topics yet. "
+        "Try phrasing it as 'What does Gabbe say about <topic>?'."
+    )
+
+
+def _build_textbook_overload_fallback(textbook_context):
+    return build_textbook_overload_fallback_reply(textbook_context)
 
 
 def _handle_new_user_onboarding(session_id):
@@ -804,6 +844,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
     mark("intent_ms", stage_started_at)
     intent = classifier_result["label"]
     confidence = classifier_result["confidence"]
+    textbook_request = detect_textbook_request(user_message)
     principles = []
     knowledge_items = []
     protocol_items = []
@@ -817,6 +858,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
     question_route = infer_question_route(user_message)
     candidate_sources = []
     basic_clinical_question = intent == "clinical_consult" and _looks_like_basic_clinical_question(user_message)
+    textbook_context = None
     log_event(
         "intent_classified",
         session_id,
@@ -858,44 +900,103 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             suggested_save=_build_suggested_save_payload(intent, user_message),
         )
 
-    if intent == "clinical_consult":
-        stage_started_at = time.perf_counter()
-        principles = load_principles()
-        relevant_knowledge_entries = get_relevant_knowledge_entries(user_message, user_profile=user_profile)
-        relevant_protocol_entries = get_relevant_protocol_entries(user_message, user_profile=user_profile)
-        relevant_knowledge = [entry["text"] for entry in relevant_knowledge_entries]
-        relevant_protocols = [entry["text"] for entry in relevant_protocol_entries]
-        linked_sources = _collect_linked_sources(relevant_protocol_entries, relevant_knowledge_entries)
-        internal_sources = _collect_internal_sources(principles, relevant_protocol_entries, relevant_knowledge_entries)
-        mark("memory_load_ms", stage_started_at)
-
-        stage_started_at = time.perf_counter()
-        external_sources = get_external_sources(
-            user_message,
-            user_profile=user_profile,
-            include_live=True,
+    if textbook_request and not textbook_request.get("supported"):
+        reply = _build_unsupported_textbook_reply(textbook_request)
+        if save_user_message:
+            save_message("user", user_message, session_id)
+        assistant_message_id = save_message(
+            "assistant",
+            reply,
+            session_id,
+            metadata={"intent": "textbook_request_unsupported", "confidence": confidence},
         )
-        mark("external_sources_ms", stage_started_at)
-        candidate_sources = linked_sources + external_sources + internal_sources
+        return _build_message_response(
+            reply=reply,
+            assistant_message_id=assistant_message_id,
+        )
 
-        stage_started_at = time.perf_counter()
-        if basic_clinical_question:
-            system_prompt = build_basic_clinical_system_prompt(
-                principles=principles,
-                knowledge_entries=relevant_knowledge_entries,
-                protocol_entries=relevant_protocol_entries,
-                external_sources=external_sources,
+    if intent == "clinical_consult":
+        if textbook_request and textbook_request.get("book_id") in {"gabbe_9", "speroff_10"}:
+            stage_started_at = time.perf_counter()
+            if textbook_request.get("book_id") == "gabbe_9":
+                textbook_context = build_gabbe_textbook_context(user_message)
+            else:
+                textbook_context = build_speroff_textbook_context(user_message)
+            mark("textbook_context_ms", stage_started_at)
+
+            if textbook_context.get("status") != "ok":
+                reply = _build_missing_textbook_context_reply(textbook_context)
+                if save_user_message:
+                    save_message("user", user_message, session_id)
+                assistant_message_id = save_message(
+                    "assistant",
+                    reply,
+                    session_id,
+                    metadata={"intent": "textbook_request_unresolved", "confidence": confidence},
+                )
+                return _build_message_response(
+                    reply=reply,
+                    assistant_message_id=assistant_message_id,
+                )
+
+            candidate_sources = textbook_context.get("sources") or []
+            stage_started_at = time.perf_counter()
+            system_prompt = build_textbook_system_prompt(
+                book_title=textbook_context["book_title"],
+                edition=textbook_context["edition"],
+                matched_topic=textbook_context["matched_topic"],
+                textbook_excerpts=textbook_context["excerpts"],
                 user_profile=user_profile,
+            )
+            mark("prompt_build_ms", stage_started_at)
+
+            log_event(
+                "textbook_runtime_context_built",
+                session_id,
+                {
+                    "book_id": textbook_context.get("book_id"),
+                    "matched_topic": textbook_context.get("matched_topic"),
+                    "source_count": len(candidate_sources),
+                },
             )
         else:
-            system_prompt = build_clinical_system_prompt(
-                principles=principles,
-                knowledge_entries=relevant_knowledge_entries,
-                protocol_entries=relevant_protocol_entries,
-                external_sources=external_sources,
+            stage_started_at = time.perf_counter()
+            principles = load_principles()
+            relevant_knowledge_entries = get_relevant_knowledge_entries(user_message, user_profile=user_profile)
+            relevant_protocol_entries = get_relevant_protocol_entries(user_message, user_profile=user_profile)
+            relevant_knowledge = [entry["text"] for entry in relevant_knowledge_entries]
+            relevant_protocols = [entry["text"] for entry in relevant_protocol_entries]
+            linked_sources = _collect_linked_sources(relevant_protocol_entries, relevant_knowledge_entries)
+            internal_sources = _collect_internal_sources(principles, relevant_protocol_entries, relevant_knowledge_entries)
+            mark("memory_load_ms", stage_started_at)
+
+            stage_started_at = time.perf_counter()
+            external_sources = get_external_sources(
+                user_message,
                 user_profile=user_profile,
+                include_live=True,
             )
-        mark("prompt_build_ms", stage_started_at)
+            mark("external_sources_ms", stage_started_at)
+            candidate_sources = linked_sources + external_sources + internal_sources
+
+            stage_started_at = time.perf_counter()
+            if basic_clinical_question:
+                system_prompt = build_basic_clinical_system_prompt(
+                    principles=principles,
+                    knowledge_entries=relevant_knowledge_entries,
+                    protocol_entries=relevant_protocol_entries,
+                    external_sources=external_sources,
+                    user_profile=user_profile,
+                )
+            else:
+                system_prompt = build_clinical_system_prompt(
+                    principles=principles,
+                    knowledge_entries=relevant_knowledge_entries,
+                    protocol_entries=relevant_protocol_entries,
+                    external_sources=external_sources,
+                    user_profile=user_profile,
+                )
+            mark("prompt_build_ms", stage_started_at)
     else:
         stage_started_at = time.perf_counter()
         system_prompt = build_general_system_prompt(user_profile)
@@ -911,6 +1012,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             "external_source_count": len(external_sources),
             "internal_source_count": len(internal_sources),
             "intent": intent,
+            "textbook_request": bool(textbook_request),
             "basic_clinical_question": basic_clinical_question,
             "question_route": question_route,
             "external_sources": [
@@ -930,11 +1032,18 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
             ),
         },
     )
+    llm_chat_history = chat_history
+    llm_user_message = user_message
+    if textbook_request:
+        llm_chat_history = []
+        llm_user_message = _build_textbook_llm_user_message(user_message)
+
     stage_started_at = time.perf_counter()
     raw_reply = generate_reply(
         system_prompt=system_prompt,
-        chat_history=chat_history,
-        user_message=user_message,
+        chat_history=llm_chat_history,
+        user_message=llm_user_message,
+        fallback_reply=_build_textbook_overload_fallback(textbook_context) if textbook_context else None,
     )
     mark("llm_reply_ms", stage_started_at)
 
@@ -942,15 +1051,17 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
     display_sources = _filter_sources_by_citation(raw_reply, candidate_sources)
     if intent == "clinical_consult" and not display_sources:
         display_sources = _fallback_display_sources(candidate_sources)
-    if intent == "clinical_consult" and not display_sources:
+    if intent == "clinical_consult" and not display_sources and not textbook_request:
         display_sources = get_forced_authoritative_source(user_message)
-    if intent == "clinical_consult":
+    if intent == "clinical_consult" and not textbook_request:
         display_sources = _maybe_override_fertility_display_source(user_message, display_sources)
         display_sources = _maybe_override_targeted_display_source(user_message, display_sources)
 
     reply = raw_reply
     if intent == "clinical_consult":
-        if basic_clinical_question:
+        if textbook_request:
+            reply = raw_reply.strip()
+        elif basic_clinical_question:
             reply = format_basic_clinical_response(reply, user_message=user_message)
         else:
             reply = format_response(reply)

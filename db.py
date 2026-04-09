@@ -23,6 +23,7 @@ user_calendars_collection = db["user_calendars"]
 oauth_states_collection = db["oauth_states"]
 study_content_collection = db["study_content"]
 study_user_state_collection = db["study_user_state"]
+textbook_cache_collection = db["textbook_cache"]
 
 
 def _ensure_indexes():
@@ -43,6 +44,7 @@ def _ensure_indexes():
         study_content_collection.create_index([("approved_for_stage_b", ASCENDING), ("topic", ASCENDING), ("item_type", ASCENDING)])
         study_user_state_collection.create_index([("session_id", ASCENDING)], unique=True)
         interaction_logs_collection.create_index([("session_id", ASCENDING), ("event_type", ASCENDING), ("created_at", ASCENDING)])
+        textbook_cache_collection.create_index([("cache_key", ASCENDING)], unique=True)
     except Exception:
         pass
 

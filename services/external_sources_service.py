@@ -4,6 +4,7 @@ from services.live_search_service import get_live_trusted_sources
 from services.source_preference_service import is_israel_relevant
 from services.trusted_source_registry import build_search_stages, get_domain_tier, get_source_domain, infer_question_route
 
+SOURCE_DATE_PLACEHOLDERS = {"2025-01-01"}
 
 SOURCE_ROUTING_RULES = {
     "obstetric_acute": {
@@ -564,6 +565,12 @@ def _dedupe_sources(sources):
     return deduped
 
 
+def _clean_source_updated_at(value):
+    if value in SOURCE_DATE_PLACEHOLDERS:
+        return None
+    return value
+
+
 def _detect_source_routing_focus(user_message):
     normalized = _normalize_text(user_message)
     for focus, rule in SOURCE_ROUTING_RULES.items():
@@ -623,7 +630,7 @@ def _assign_source_ids(sources):
                 "url": source["url"],
                 "source_type": source["source_type"],
                 "excerpt": source.get("excerpt"),
-                "updated_at": source.get("updated_at"),
+                "updated_at": _clean_source_updated_at(source.get("updated_at")),
                 "domain": source.get("domain") or get_source_domain(source["url"]),
                 "tier": source.get("tier") or get_domain_tier(source.get("domain") or get_source_domain(source["url"])),
             }

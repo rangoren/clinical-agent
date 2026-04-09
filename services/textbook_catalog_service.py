@@ -1,0 +1,1074 @@
+import re
+from functools import lru_cache
+
+from services.book_storage_service import get_book_object, get_r2_client
+from services.pdf_extraction_service import open_book_pdf_document_from_bytes
+from services.textbook_cache_service import append_textbook_page_cache, get_textbook_cache
+from settings import R2_BUCKET_NAME
+
+
+GABBE_TOPIC_MAP = [
+    {"topic": "preeclampsia", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "core board topic and management pivot"},
+    {"topic": "gestational hypertension", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "common overlap with severe-feature triage"},
+    {"topic": "eclampsia", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "classic emergency topic linked to seizure and magnesium"},
+    {"topic": "preterm labor", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "tocolysis, steroids, magnesium, transfer decisions"},
+    {"topic": "pprom", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "high-yield board management and admission logic"},
+    {"topic": "antenatal corticosteroids", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "frequently paired with preterm labor decisions"},
+    {"topic": "magnesium neuroprotection", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "common overlap with preterm labor and delivery timing"},
+    {"topic": "chorioamnionitis", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "important trigger that changes management now"},
+    {"topic": "group b strep", "domain": "obstetrics", "tier": "A", "priority": "medium", "why": "common intrapartum antibiotic pathway"},
+    {"topic": "fetal growth restriction", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "surveillance and timing of delivery"},
+    {"topic": "fetal surveillance", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "NST/BPP/CTG interpretation and action"},
+    {"topic": "labor induction", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "Bishop score and ripening decisions"},
+    {"topic": "cesarean delivery", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "core intrapartum decision and complication source"},
+    {"topic": "trial of labor after cesarean", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "counseling and contraindications"},
+    {"topic": "shoulder dystocia", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "classic emergency sequence topic"},
+    {"topic": "operative vaginal delivery", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "indications, contraindications, and traps"},
+    {"topic": "postpartum hemorrhage", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "acute management sequence"},
+    {"topic": "placenta previa", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "bleeding triage and delivery planning"},
+    {"topic": "placenta accreta spectrum", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "critical obstetric planning topic"},
+    {"topic": "postpartum hypertension", "domain": "obstetrics", "tier": "A", "priority": "medium", "why": "real-world overlap and follow-up issue"},
+    {"topic": "gestational diabetes", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "common exam and clinic topic"},
+    {"topic": "multiple gestation", "domain": "obstetrics", "tier": "A", "priority": "medium", "why": "timing, surveillance, and complications"},
+    {"topic": "twin pregnancy", "domain": "obstetrics", "tier": "A", "priority": "medium", "why": "high-yield subtopic of multiple gestation"},
+    {"topic": "chronic hypertension in pregnancy", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "common overlap with medication choice and surveillance"},
+    {"topic": "superimposed preeclampsia", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "high-risk overlap that changes management quickly"},
+    {"topic": "cervical insufficiency", "domain": "obstetrics", "tier": "A", "priority": "medium", "why": "important pathway in preterm birth prevention"},
+    {"topic": "cerclage", "domain": "obstetrics", "tier": "A", "priority": "medium", "why": "procedural decision tightly linked to preterm prevention"},
+    {"topic": "preterm birth prevention", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "bridges history, cervical length, progesterone, and cerclage"},
+    {"topic": "periviable birth", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "important counseling and steroid/magnesium threshold topic"},
+    {"topic": "labor dystocia", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "common labor floor management problem"},
+    {"topic": "abnormal fetal heart rate tracing", "domain": "obstetrics", "tier": "A", "priority": "high", "why": "frequent intrapartum interpretation and action topic"},
+    {"topic": "breech presentation", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "delivery planning and counseling topic"},
+    {"topic": "external cephalic version", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "procedural alternative to breech cesarean delivery"},
+    {"topic": "oligohydramnios", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "common surveillance and timing question"},
+    {"topic": "polyhydramnios", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "differential and monitoring topic"},
+    {"topic": "fetal macrosomia", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "delivery planning and shoulder dystocia overlap"},
+    {"topic": "rh alloimmunization", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "classic testing and monitoring topic"},
+    {"topic": "postpartum endometritis", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "common postpartum infection management topic"},
+    {"topic": "postterm pregnancy", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "timing and surveillance decisions"},
+    {"topic": "amniotic fluid abnormalities", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "oligohydramnios and polyhydramnios pathways"},
+    {"topic": "placental abruption", "domain": "obstetrics", "tier": "B", "priority": "high", "why": "important acute bleeding differential"},
+    {"topic": "ectopic pregnancy", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "core emergency pregnancy topic"},
+    {"topic": "early pregnancy loss", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "common triage and counseling topic"},
+    {"topic": "nausea and vomiting of pregnancy", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "common practical management topic"},
+    {"topic": "anemia in pregnancy", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "common overlap and outpatient issue"},
+    {"topic": "thyroid disease in pregnancy", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "frequent medical overlap"},
+    {"topic": "asthma in pregnancy", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "medical overlap with pregnancy-specific management"},
+    {"topic": "venous thromboembolism in pregnancy", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "important overlap with anticoagulation decisions"},
+    {"topic": "cardiac disease in pregnancy", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "high-stakes maternal medicine overlap"},
+    {"topic": "intrahepatic cholestasis of pregnancy", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "common board-style timing question"},
+    {"topic": "vaccination in pregnancy", "domain": "obstetrics", "tier": "B", "priority": "low", "why": "high-yield preventive counseling topic"},
+    {"topic": "stillbirth evaluation", "domain": "obstetrics", "tier": "B", "priority": "medium", "why": "important workup and counseling topic"},
+    {"topic": "breastfeeding and lactation", "domain": "obstetrics", "tier": "B", "priority": "low", "why": "postpartum counseling and overlap topic"},
+]
+
+SPEROFF_TOPIC_MAP = [
+    {"topic": "amenorrhea", "domain": "fertility", "tier": "A", "priority": "high", "why": "core endocrine workup and differential topic"},
+    {"topic": "pcos", "domain": "fertility", "tier": "A", "priority": "high", "why": "common endocrine and infertility management topic"},
+    {"topic": "ovulation induction", "domain": "fertility", "tier": "A", "priority": "high", "why": "central infertility treatment pathway"},
+    {"topic": "letrozole", "domain": "fertility", "tier": "A", "priority": "high", "why": "high-yield ovulation induction medication topic"},
+    {"topic": "clomiphene citrate", "domain": "fertility", "tier": "A", "priority": "medium", "why": "classic ovulation induction therapy topic"},
+    {"topic": "infertility evaluation", "domain": "fertility", "tier": "A", "priority": "high", "why": "broad entry point for many user questions"},
+    {"topic": "diminished ovarian reserve", "domain": "fertility", "tier": "A", "priority": "medium", "why": "common testing and counseling question"},
+    {"topic": "premature ovarian insufficiency", "domain": "fertility", "tier": "A", "priority": "medium", "why": "important ovarian failure topic"},
+    {"topic": "hyperprolactinemia", "domain": "fertility", "tier": "A", "priority": "medium", "why": "classic amenorrhea and infertility overlap"},
+    {"topic": "hypogonadotropic hypogonadism", "domain": "fertility", "tier": "B", "priority": "medium", "why": "important amenorrhea differential"},
+    {"topic": "endometriosis infertility", "domain": "fertility", "tier": "A", "priority": "high", "why": "common infertility and pain overlap"},
+    {"topic": "tubal factor infertility", "domain": "fertility", "tier": "A", "priority": "medium", "why": "core infertility evaluation domain"},
+    {"topic": "male factor infertility", "domain": "fertility", "tier": "A", "priority": "medium", "why": "high-yield infertility evaluation domain"},
+    {"topic": "ivf", "domain": "fertility", "tier": "A", "priority": "high", "why": "central assisted reproduction topic"},
+    {"topic": "controlled ovarian stimulation", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common IVF protocol topic"},
+    {"topic": "ohss", "domain": "fertility", "tier": "A", "priority": "high", "why": "important fertility treatment complication"},
+    {"topic": "luteal phase support", "domain": "fertility", "tier": "B", "priority": "low", "why": "common assisted reproduction support topic"},
+    {"topic": "menopause hormone therapy", "domain": "fertility", "tier": "A", "priority": "high", "why": "high-yield endocrine management topic"},
+    {"topic": "abnormal uterine bleeding ovulatory dysfunction", "domain": "fertility", "tier": "B", "priority": "medium", "why": "endocrine bleeding overlap topic"},
+    {"topic": "thyroid dysfunction and reproduction", "domain": "fertility", "tier": "B", "priority": "medium", "why": "fertility-endocrine overlap topic"},
+    {"topic": "functional hypothalamic amenorrhea", "domain": "fertility", "tier": "A", "priority": "medium", "why": "common amenorrhea branch with management implications"},
+    {"topic": "recurrent pregnancy loss", "domain": "fertility", "tier": "A", "priority": "high", "why": "common fertility workup and counseling topic"},
+    {"topic": "unexplained infertility", "domain": "fertility", "tier": "A", "priority": "medium", "why": "common counseling and treatment sequencing topic"},
+    {"topic": "intrauterine insemination", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common intermediate fertility treatment pathway"},
+    {"topic": "fertility preservation", "domain": "fertility", "tier": "B", "priority": "medium", "why": "important counseling topic before gonadotoxic treatment"},
+    {"topic": "hirsutism", "domain": "fertility", "tier": "B", "priority": "medium", "why": "high-yield hyperandrogenism symptom pathway"},
+    {"topic": "hydrosalpinx", "domain": "fertility", "tier": "B", "priority": "medium", "why": "important IVF and tubal-factor management question"},
+    {"topic": "intracytoplasmic sperm injection", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common ART technique and male-factor question"},
+    {"topic": "embryo transfer", "domain": "fertility", "tier": "B", "priority": "medium", "why": "high-yield IVF procedure and success topic"},
+    {"topic": "donor oocyte ivf", "domain": "fertility", "tier": "B", "priority": "medium", "why": "important pathway for ovarian failure and age-related infertility"},
+    {"topic": "uterine factor infertility", "domain": "fertility", "tier": "B", "priority": "medium", "why": "broad structural infertility evaluation topic"},
+    {"topic": "fibroids and infertility", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common counseling and surgical decision topic"},
+    {"topic": "endometriosis pain management", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common overlap of pain control and fertility planning"},
+    {"topic": "adenomyosis and fertility", "domain": "fertility", "tier": "B", "priority": "low", "why": "important but narrower infertility overlap topic"},
+    {"topic": "antiphospholipid syndrome pregnancy loss", "domain": "fertility", "tier": "B", "priority": "medium", "why": "high-yield recurrent pregnancy loss management topic"},
+    {"topic": "vasomotor symptoms", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common menopause symptom-management question"},
+    {"topic": "genitourinary syndrome of menopause", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common menopause and vaginal estrogen counseling topic"},
+    {"topic": "menopause osteoporosis prevention", "domain": "fertility", "tier": "B", "priority": "low", "why": "common long-term counseling topic"},
+    {"topic": "obesity and reproduction", "domain": "fertility", "tier": "B", "priority": "medium", "why": "frequent fertility counseling and treatment-response issue"},
+    {"topic": "frozen embryo transfer", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common IVF sequencing and endometrial preparation topic"},
+    {"topic": "preimplantation genetic testing", "domain": "fertility", "tier": "B", "priority": "medium", "why": "common IVF genetics and embryo selection topic"},
+    {"topic": "donor sperm insemination", "domain": "fertility", "tier": "B", "priority": "low", "why": "important third-party reproduction counseling topic"},
+    {"topic": "azoospermia", "domain": "fertility", "tier": "B", "priority": "medium", "why": "high-yield male infertility diagnosis and treatment topic"},
+    {"topic": "varicocele infertility", "domain": "fertility", "tier": "B", "priority": "low", "why": "common male infertility counseling question"},
+    {"topic": "uterine septum infertility", "domain": "fertility", "tier": "B", "priority": "low", "why": "important structural infertility and miscarriage overlap topic"},
+    {"topic": "asherman syndrome", "domain": "fertility", "tier": "B", "priority": "low", "why": "classic acquired uterine factor infertility topic"},
+    {"topic": "menopausal transition", "domain": "fertility", "tier": "B", "priority": "low", "why": "common counseling topic on perimenopausal physiology and symptoms"},
+]
+
+CHAPTER_TITLE_RE = re.compile(r"^\s*(\d{1,3})\s*[.\-]?\s+([A-Z][A-Za-z0-9,\-:;/()' ]{6,120})\s*$")
+SHORT_ALL_CAPS_RE = re.compile(r"^[A-Z][A-Z0-9,\-:;/()' ]{6,90}$")
+
+TEXT_SCAN_START_PAGE = 1
+TEXT_SCAN_END_PAGE = 250
+TOPIC_SEARCH_SCAN_END_PAGE = 900
+
+GABBE_TOPIC_QUERIES = {
+    "preeclampsia": ["preeclampsia", "pre-eclampsia", "severe features", "magnesium sulfate", "severe hypertension"],
+    "gestational hypertension": ["gestational hypertension", "hypertension in pregnancy"],
+    "eclampsia": ["eclampsia", "seizure in pregnancy"],
+    "preterm labor": ["preterm labor", "preterm labour", "tocolysis"],
+    "pprom": ["pprom", "prelabor rupture of membranes", "preterm premature rupture"],
+    "antenatal corticosteroids": ["antenatal corticosteroids", "betamethasone", "dexamethasone"],
+    "magnesium neuroprotection": ["magnesium sulfate for neuroprotection", "fetal neuroprotection", "magnesium sulfate"],
+    "chorioamnionitis": ["chorioamnionitis", "intraamniotic infection"],
+    "group b strep": ["group b streptococcus", "group b strep", "gbs"],
+    "fetal growth restriction": ["fetal growth restriction", "growth restriction", "fgr"],
+    "fetal surveillance": ["fetal surveillance", "biophysical profile", "nonstress test", "ctg"],
+    "labor induction": ["labor induction", "labour induction", "cervical ripening"],
+    "cesarean delivery": ["cesarean delivery", "caesarean delivery", "cesarean section"],
+    "trial of labor after cesarean": ["trial of labor after cesarean", "tOLAC", "VBAC", "vaginal birth after cesarean"],
+    "shoulder dystocia": ["shoulder dystocia"],
+    "operative vaginal delivery": ["operative vaginal delivery", "vacuum extraction", "forceps delivery"],
+    "postpartum hemorrhage": ["postpartum hemorrhage", "pph", "uterine atony"],
+    "placenta previa": ["placenta previa"],
+    "placenta accreta spectrum": ["placenta accreta", "accreta spectrum"],
+    "postpartum hypertension": ["postpartum hypertension", "postpartum preeclampsia", "postpartum gestational hypertension"],
+    "multiple gestation": ["multiple gestation", "twin pregnancy", "triplet pregnancy"],
+    "twin pregnancy": ["twin pregnancy", "twin gestation", "monochorionic twins"],
+    "gestational diabetes": ["gestational diabetes", "gdm", "insulin", "metformin", "glyburide"],
+    "postterm pregnancy": ["postterm pregnancy", "post-term pregnancy", "late-term pregnancy"],
+    "amniotic fluid abnormalities": ["oligohydramnios", "polyhydramnios", "amniotic fluid"],
+    "placental abruption": ["placental abruption", "abruption placentae"],
+    "chronic hypertension in pregnancy": ["chronic hypertension in pregnancy", "chronic hypertension", "antihypertensive therapy"],
+    "superimposed preeclampsia": ["superimposed preeclampsia", "chronic hypertension with preeclampsia"],
+    "cervical insufficiency": ["cervical insufficiency", "cervical incompetence", "short cervix"],
+    "cerclage": ["cerclage", "history-indicated cerclage", "ultrasound-indicated cerclage"],
+    "preterm birth prevention": ["preterm birth prevention", "progesterone", "short cervix", "prior spontaneous preterm birth"],
+    "periviable birth": ["periviable birth", "periviable", "threshold of viability"],
+    "labor dystocia": ["labor dystocia", "arrest of labor", "protracted labor"],
+    "abnormal fetal heart rate tracing": ["category ii tracing", "category iii tracing", "fetal heart rate tracing", "late decelerations"],
+    "breech presentation": ["breech presentation", "frank breech", "complete breech"],
+    "external cephalic version": ["external cephalic version", "ecv"],
+    "oligohydramnios": ["oligohydramnios", "amniotic fluid index", "single deepest pocket"],
+    "polyhydramnios": ["polyhydramnios", "excess amniotic fluid"],
+    "fetal macrosomia": ["fetal macrosomia", "large for gestational age", "estimated fetal weight"],
+    "rh alloimmunization": ["rh alloimmunization", "anti-d", "middle cerebral artery doppler"],
+    "postpartum endometritis": ["postpartum endometritis", "endometritis postpartum", "clindamycin gentamicin"],
+    "ectopic pregnancy": ["ectopic pregnancy", "tubal pregnancy"],
+    "early pregnancy loss": ["early pregnancy loss", "miscarriage"],
+    "nausea and vomiting of pregnancy": ["nausea and vomiting of pregnancy", "hyperemesis gravidarum"],
+    "anemia in pregnancy": ["anemia in pregnancy", "iron deficiency anemia"],
+    "thyroid disease in pregnancy": ["thyroid disease in pregnancy", "hypothyroidism", "hyperthyroidism"],
+    "asthma in pregnancy": ["asthma in pregnancy", "asthma exacerbation"],
+    "venous thromboembolism in pregnancy": ["venous thromboembolism", "vte", "deep vein thrombosis", "pulmonary embolism"],
+    "cardiac disease in pregnancy": ["cardiac disease in pregnancy", "heart disease in pregnancy"],
+    "intrahepatic cholestasis of pregnancy": ["intrahepatic cholestasis of pregnancy", "cholestasis of pregnancy"],
+    "vaccination in pregnancy": ["vaccination in pregnancy", "influenza vaccine", "tdap"],
+    "stillbirth evaluation": ["stillbirth evaluation", "intrauterine fetal demise", "fetal death"],
+    "breastfeeding and lactation": ["breastfeeding", "lactation", "mastitis"],
+}
+
+SPEROFF_TOPIC_QUERIES = {
+    "amenorrhea": ["amenorrhea", "secondary amenorrhea", "primary amenorrhea"],
+    "pcos": ["pcos", "polycystic ovary syndrome", "polycystic ovarian syndrome"],
+    "ovulation induction": ["ovulation induction", "anovulation treatment", "induce ovulation"],
+    "letrozole": ["letrozole", "femara"],
+    "clomiphene citrate": ["clomiphene", "clomiphene citrate", "clomid"],
+    "infertility evaluation": ["infertility evaluation", "workup of infertility", "infertility workup"],
+    "diminished ovarian reserve": ["diminished ovarian reserve", "low amh", "ovarian reserve"],
+    "premature ovarian insufficiency": ["premature ovarian insufficiency", "poi", "premature ovarian failure"],
+    "hyperprolactinemia": ["hyperprolactinemia", "prolactin elevation", "elevated prolactin"],
+    "hypogonadotropic hypogonadism": ["hypogonadotropic hypogonadism", "functional hypothalamic amenorrhea"],
+    "endometriosis infertility": ["endometriosis infertility", "endometriosis", "infertility with endometriosis"],
+    "tubal factor infertility": ["tubal factor infertility", "hydrosalpinx", "tubal disease"],
+    "male factor infertility": ["male factor infertility", "semen analysis", "male infertility"],
+    "ivf": ["ivf", "in vitro fertilization", "assisted reproduction"],
+    "controlled ovarian stimulation": ["controlled ovarian stimulation", "gonadotropin stimulation", "ovarian stimulation"],
+    "ohss": ["ohss", "ovarian hyperstimulation syndrome"],
+    "luteal phase support": ["luteal phase support", "progesterone support"],
+    "menopause hormone therapy": ["menopausal hormone therapy", "hormone therapy", "estrogen therapy"],
+    "abnormal uterine bleeding ovulatory dysfunction": ["abnormal uterine bleeding ovulatory dysfunction", "aub-o", "ovulatory dysfunction bleeding"],
+    "thyroid dysfunction and reproduction": ["thyroid", "hypothyroidism", "hyperthyroidism", "thyroid and reproduction"],
+    "functional hypothalamic amenorrhea": ["functional hypothalamic amenorrhea", "hypothalamic amenorrhea", "exercise amenorrhea"],
+    "recurrent pregnancy loss": ["recurrent pregnancy loss", "recurrent miscarriage", "recurrent spontaneous abortion"],
+    "unexplained infertility": ["unexplained infertility", "idiopathic infertility"],
+    "intrauterine insemination": ["intrauterine insemination", "iui", "therapeutic insemination"],
+    "fertility preservation": ["fertility preservation", "oocyte cryopreservation", "egg freezing"],
+    "hirsutism": ["hirsutism", "androgen excess", "excess hair growth"],
+    "hydrosalpinx": ["hydrosalpinx", "salpingectomy before ivf", "proximal tubal occlusion"],
+    "intracytoplasmic sperm injection": ["intracytoplasmic sperm injection", "icsi", "sperm injection"],
+    "embryo transfer": ["embryo transfer", "single embryo transfer", "blastocyst transfer"],
+    "donor oocyte ivf": ["donor oocyte", "egg donation", "donor egg ivf"],
+    "uterine factor infertility": ["uterine factor infertility", "uterine cavity", "mullerian anomaly infertility"],
+    "fibroids and infertility": ["fibroid", "leiomyoma", "uterine fibroids", "submucosal fibroid infertility"],
+    "endometriosis pain management": ["endometriosis pain", "medical treatment of endometriosis", "endometriosis pain management"],
+    "adenomyosis and fertility": ["adenomyosis", "adenomyosis infertility", "adenomyosis and fertility"],
+    "antiphospholipid syndrome pregnancy loss": ["antiphospholipid", "antiphospholipid syndrome", "aps recurrent pregnancy loss"],
+    "vasomotor symptoms": ["vasomotor symptoms", "hot flashes", "night sweats menopause"],
+    "genitourinary syndrome of menopause": ["genitourinary syndrome of menopause", "gsm", "vaginal atrophy menopause"],
+    "menopause osteoporosis prevention": ["postmenopausal osteoporosis", "osteoporosis prevention hormone therapy", "bone loss menopause"],
+    "obesity and reproduction": ["obesity", "obesity and fertility", "body mass index fertility", "weight loss fertility"],
+    "frozen embryo transfer": ["frozen embryo transfer", "fet", "frozen blastocyst transfer"],
+    "preimplantation genetic testing": ["preimplantation genetic testing", "pgt", "pgt-a", "preimplantation genetic screening"],
+    "donor sperm insemination": ["donor sperm insemination", "donor insemination", "therapeutic donor insemination"],
+    "azoospermia": ["azoospermia", "obstructive azoospermia", "nonobstructive azoospermia"],
+    "varicocele infertility": ["varicocele infertility", "varicocele", "varicocelectomy"],
+    "uterine septum infertility": ["uterine septum infertility", "septate uterus infertility", "septum miscarriage"],
+    "asherman syndrome": ["asherman syndrome", "intrauterine adhesions", "uterine synechiae"],
+    "menopausal transition": ["menopausal transition", "perimenopause", "menopause transition"],
+}
+
+LOW_SIGNAL_SNIPPET_MARKERS = (
+    "doi.org",
+    "downloaded for",
+    "references",
+    "summary",
+    "outline",
+    "abbreviations",
+    "consortium",
+    "systematic review",
+    "trial",
+    "microbiome",
+)
+
+TOPIC_SIGNAL_MARKERS = {
+    "pprom": ("latency", "antibiotic", "delivery", "expectant", "rupture of membranes", "infection", "corticosteroids", "gbs prophylaxis"),
+    "preterm labor": ("tocolysis", "corticosteroids", "magnesium sulfate", "delivery", "cervical change", "contractions", "cerclage", "latency"),
+    "preeclampsia": ("severe features", "magnesium sulfate", "delivery", "blood pressure", "hypertensive", "proteinuria", "antihypertensive", "seizure prophylaxis", "aspirin", "expectant management", "timing of delivery", "late preterm", "planned delivery", "definitive treatment", "severe hypertension", "labetalol", "hydralazine", "nifedipine", "37 weeks"),
+    "eclampsia": ("seizure", "magnesium sulfate", "delivery", "severe features"),
+    "postpartum hemorrhage": ("uterine atony", "tranexamic", "uterotonic", "massive transfusion", "hemorrhage", "bleeding", "bakri", "balloon tamponade"),
+    "fetal surveillance": ("biophysical profile", "nonstress test", "doppler", "monitoring"),
+    "antenatal corticosteroids": ("betamethasone", "dexamethasone", "rescue course", "lung maturity", "preterm birth"),
+    "magnesium neuroprotection": ("magnesium sulfate", "neuroprotection", "cerebral palsy", "imminent preterm birth"),
+    "chorioamnionitis": ("intraamniotic infection", "ampicillin", "gentamicin", "delivery", "fever"),
+    "group b strep": ("prophylaxis", "penicillin", "ampicillin", "colonization", "intrapartum"),
+    "labor induction": ("bishop", "ripening", "oxytocin", "cervix", "induction", "prostaglandin", "balloon catheter"),
+    "cesarean delivery": ("skin incision", "uterine incision", "antibiotic prophylaxis", "hemorrhage", "complication"),
+    "trial of labor after cesarean": ("vbac", "uterine rupture", "candidate", "contraindication", "counseling"),
+    "shoulder dystocia": ("mcroberts", "suprapubic pressure", "posterior arm", "delivery of posterior arm"),
+    "operative vaginal delivery": ("vacuum", "forceps", "prerequisite", "contraindication", "station"),
+    "placenta previa": ("bleeding", "ultrasound", "cesarean", "placental edge", "digital examination"),
+    "placenta accreta spectrum": ("placenta accreta spectrum", "cesarean hysterectomy", "multidisciplinary", "placenta left in situ"),
+    "gestational diabetes": ("screening", "glucose", "diet", "fasting", "insulin", "glyburide", "metformin", "postpartum screening", "24 to 28 weeks", "self-monitoring", "delivery", "39 weeks"),
+    "chronic hypertension in pregnancy": ("antihypertensive", "labetalol", "nifedipine", "surveillance", "delivery"),
+    "superimposed preeclampsia": ("severe features", "chronic hypertension", "magnesium sulfate", "delivery"),
+    "cervical insufficiency": ("short cervix", "painless dilation", "second trimester loss", "cerclage"),
+    "cerclage": ("history-indicated", "ultrasound-indicated", "rescue cerclage", "short cervix"),
+    "preterm birth prevention": ("progesterone", "short cervix", "prior spontaneous preterm birth", "cerclage"),
+    "periviable birth": ("corticosteroids", "magnesium sulfate", "resuscitation", "counseling"),
+    "labor dystocia": ("active phase", "arrest", "adequate contractions", "cesarean delivery", "first-stage arrest", "second stage", "failed induction", "6 cm"),
+    "abnormal fetal heart rate tracing": ("late decelerations", "variable decelerations", "resuscitative measures", "category iii"),
+    "breech presentation": ("external cephalic version", "frank breech", "planned cesarean"),
+    "external cephalic version": ("tocolysis", "success rate", "contraindication", "breech"),
+    "oligohydramnios": ("single deepest pocket", "surveillance", "delivery timing", "rupture of membranes"),
+    "polyhydramnios": ("amnioreduction", "diabetes", "fetal anomaly", "preterm labor"),
+    "fetal macrosomia": ("shoulder dystocia", "estimated fetal weight", "cesarean delivery", "diabetes"),
+    "rh alloimmunization": ("anti-d", "middle cerebral artery", "doppler", "intrauterine transfusion"),
+    "postpartum endometritis": ("fever", "clindamycin", "gentamicin", "postpartum infection"),
+    "amenorrhea": ("pregnancy test", "prolactin", "tsh", "fsh", "estradiol", "workup", "evaluation", "breast development", "outflow tract", "primary amenorrhea", "secondary amenorrhea"),
+    "pcos": ("hyperandrogenism", "oligo-ovulation", "metabolic", "letrozole", "weight loss"),
+    "ovulation induction": ("letrozole", "clomiphene", "gonadotropin", "monitoring"),
+    "letrozole": ("ovulation", "live birth", "pcos", "dose"),
+    "clomiphene citrate": ("ovulation", "dose", "multiple gestation", "resistance"),
+    "infertility evaluation": ("ovulation", "tubal", "semen analysis", "uterine cavity"),
+    "diminished ovarian reserve": ("amh", "antral follicle count", "fsH", "counseling"),
+    "premature ovarian insufficiency": ("fsH", "estradiol", "hormone therapy", "bone health"),
+    "hyperprolactinemia": ("pituitary", "cabergoline", "bromocriptine", "mri"),
+    "hypogonadotropic hypogonadism": ("hypothalamic", "gonadotropin", "pulsatile gnrh", "low gonadotropin"),
+    "endometriosis infertility": ("laparoscopy", "ivf", "pain", "surgery"),
+    "tubal factor infertility": ("hsg", "hydrosalpinx", "salpingectomy", "ivf"),
+    "male factor infertility": ("semen analysis", "varicocele", "icsi", "azoospermia"),
+    "ivf": ("embryo transfer", "oocyte retrieval", "fertilization", "success"),
+    "controlled ovarian stimulation": ("gonadotropin", "follicle", "trigger", "monitoring"),
+    "ohss": ("ascites", "cabergoline", "coasting", "thrombosis"),
+    "luteal phase support": ("progesterone", "embryo transfer", "supplementation"),
+    "menopause hormone therapy": ("vasomotor symptoms", "estrogen", "progestin", "contraindication"),
+    "abnormal uterine bleeding ovulatory dysfunction": ("anovulation", "progestin", "endometrial protection", "bleeding"),
+    "thyroid dysfunction and reproduction": ("tsh", "hypothyroidism", "hyperthyroidism", "thyroid", "prolactin"),
+    "functional hypothalamic amenorrhea": ("weight loss", "exercise", "stress", "hypoestrogenism", "bone"),
+    "recurrent pregnancy loss": ("parental karyotype", "antiphospholipid", "uterine cavity", "loss", "miscarriage"),
+    "unexplained infertility": ("expectant management", "iui", "ivf", "ovulation induction", "couple"),
+    "intrauterine insemination": ("washed sperm", "timing", "ovulation", "stimulation", "insemination"),
+    "fertility preservation": ("cryopreservation", "oocyte", "embryo", "gonadotoxic", "oncology"),
+    "hirsutism": ("androgen", "testosterone", "spironolactone", "cosmetic", "pcos"),
+    "hydrosalpinx": ("salpingectomy", "proximal tubal occlusion", "ivf", "implantation", "tubal"),
+    "intracytoplasmic sperm injection": ("icsi", "male factor", "fertilization", "sperm", "oocyte"),
+    "embryo transfer": ("blastocyst", "single embryo transfer", "uterine cavity", "implantation", "transfer"),
+    "donor oocyte ivf": ("donor oocyte", "recipient", "egg donation", "ovarian failure", "pregnancy rate"),
+    "uterine factor infertility": ("uterine cavity", "septum", "synechiae", "submucosal", "implantation"),
+    "fibroids and infertility": ("submucosal", "myomectomy", "leiomyoma", "fibroid", "cavity distortion", "fertility"),
+    "endometriosis pain management": ("pain", "laparoscopy", "suppression", "progestin", "surgery"),
+    "adenomyosis and fertility": ("adenomyosis", "implantation", "infertility", "ivf", "uterine"),
+    "antiphospholipid syndrome pregnancy loss": ("antiphospholipid", "heparin", "aspirin", "pregnancy loss", "recurrent miscarriage", "thrombosis"),
+    "vasomotor symptoms": ("hot flashes", "night sweats", "estrogen therapy", "nonhormonal"),
+    "genitourinary syndrome of menopause": ("vaginal estrogen", "dyspareunia", "atrophy", "moisturizer", "gsm"),
+    "menopause osteoporosis prevention": ("bone density", "fracture", "calcium", "vitamin d", "estrogen", "osteoporosis"),
+    "obesity and reproduction": ("bmi", "weight loss", "metabolic", "ovulation", "obesity", "ivf outcome"),
+    "frozen embryo transfer": ("frozen embryo transfer", "endometrial preparation", "progesterone", "blastocyst", "implantation"),
+    "preimplantation genetic testing": ("euploid", "aneuploidy", "trophectoderm", "embryo biopsy", "screening"),
+    "donor sperm insemination": ("donor sperm", "insemination", "iui", "screening", "counseling"),
+    "azoospermia": ("obstructive", "nonobstructive", "testicular sperm extraction", "icsi", "semen"),
+    "varicocele infertility": ("varicocele", "varicocelectomy", "semen parameters", "male infertility", "repair"),
+    "uterine septum infertility": ("septate uterus", "hysteroscopic resection", "miscarriage", "uterine cavity", "implantation"),
+    "asherman syndrome": ("intrauterine adhesions", "hysteroscopy", "amenorrhea", "synechiae", "uterine cavity"),
+    "menopausal transition": ("perimenopause", "cycle variability", "hot flashes", "follicle", "bleeding"),
+}
+
+SPEROFF_MANUAL_TOPIC_RANGES = {
+    "amenorrhea": [
+        {"page_start": 816, "page_end": 849},
+        {"page_start": 901, "page_end": 933},
+        {"page_start": 849, "page_end": 879},
+    ],
+    "pcos": [
+        {"page_start": 947, "page_end": 1052},
+        {"page_start": 2810, "page_end": 2827},
+        {"page_start": 2862, "page_end": 2882},
+    ],
+    "ovulation induction": [
+        {"page_start": 2818, "page_end": 2840},
+        {"page_start": 2840, "page_end": 2850},
+        {"page_start": 2863, "page_end": 2884},
+    ],
+    "letrozole": [
+        {"page_start": 2812, "page_end": 2827},
+        {"page_start": 2863, "page_end": 2884},
+    ],
+    "infertility evaluation": [
+        {"page_start": 2556, "page_end": 2561},
+        {"page_start": 2590, "page_end": 2595},
+        {"page_start": 2698, "page_end": 2703},
+    ],
+    "diminished ovarian reserve": [
+        {"page_start": 2541, "page_end": 2552},
+        {"page_start": 2641, "page_end": 2651},
+        {"page_start": 2904, "page_end": 2915},
+    ],
+    "premature ovarian insufficiency": [
+        {"page_start": 870, "page_end": 879},
+        {"page_start": 879, "page_end": 893},
+        {"page_start": 1440, "page_end": 1452},
+    ],
+    "hyperprolactinemia": [
+        {"page_start": 780, "page_end": 790},
+        {"page_start": 838, "page_end": 849},
+        {"page_start": 2856, "page_end": 2866},
+    ],
+    "endometriosis infertility": [
+        {"page_start": 2617, "page_end": 2627},
+        {"page_start": 3209, "page_end": 3299},
+    ],
+    "tubal factor infertility": [
+        {"page_start": 2602, "page_end": 2610},
+        {"page_start": 2611, "page_end": 2622},
+        {"page_start": 2907, "page_end": 2915},
+    ],
+    "male factor infertility": [
+        {"page_start": 2688, "page_end": 2713},
+        {"page_start": 2728, "page_end": 2738},
+        {"page_start": 2763, "page_end": 2782},
+    ],
+    "recurrent pregnancy loss": [
+        {"page_start": 3071, "page_end": 3154},
+        {"page_start": 2956, "page_end": 2961},
+        {"page_start": 2594, "page_end": 2601},
+    ],
+    "unexplained infertility": [
+        {"page_start": 2617, "page_end": 2633},
+        {"page_start": 2708, "page_end": 2716},
+        {"page_start": 2582, "page_end": 2587},
+    ],
+    "hydrosalpinx": [
+        {"page_start": 2887, "page_end": 2925},
+        {"page_start": 2602, "page_end": 2622},
+    ],
+    "embryo transfer": [
+        {"page_start": 2955, "page_end": 2983},
+        {"page_start": 3004, "page_end": 3026},
+        {"page_start": 3027, "page_end": 3047},
+    ],
+    "donor oocyte ivf": [
+        {"page_start": 2985, "page_end": 2999},
+        {"page_start": 2898, "page_end": 2905},
+        {"page_start": 2680, "page_end": 2687},
+    ],
+    "thyroid dysfunction and reproduction": [
+        {"page_start": 13, "page_end": 18},
+        {"page_start": 272, "page_end": 281},
+    ],
+    "fibroids and infertility": [
+        {"page_start": 244, "page_end": 258},
+        {"page_start": 2594, "page_end": 2601},
+    ],
+    "adenomyosis and fertility": [
+        {"page_start": 251, "page_end": 260},
+        {"page_start": 1234, "page_end": 1238},
+    ],
+    "antiphospholipid syndrome pregnancy loss": [
+        {"page_start": 3074, "page_end": 3103},
+        {"page_start": 3098, "page_end": 3105},
+    ],
+    "vasomotor symptoms": [
+        {"page_start": 1462, "page_end": 1479},
+        {"page_start": 1565, "page_end": 1572},
+    ],
+    "genitourinary syndrome of menopause": [
+        {"page_start": 1772, "page_end": 1786},
+        {"page_start": 1793, "page_end": 1808},
+        {"page_start": 1809, "page_end": 1820},
+    ],
+    "frozen embryo transfer": [
+        {"page_start": 3004, "page_end": 3026},
+        {"page_start": 2955, "page_end": 2970},
+    ],
+    "preimplantation genetic testing": [
+        {"page_start": 3027, "page_end": 3047},
+        {"page_start": 2955, "page_end": 2974},
+    ],
+    "donor sperm insemination": [
+        {"page_start": 2708, "page_end": 2718},
+        {"page_start": 2739, "page_end": 2748},
+    ],
+    "azoospermia": [
+        {"page_start": 2739, "page_end": 2762},
+        {"page_start": 2688, "page_end": 2713},
+    ],
+    "varicocele infertility": [
+        {"page_start": 2749, "page_end": 2762},
+        {"page_start": 2688, "page_end": 2713},
+    ],
+    "uterine septum infertility": [
+        {"page_start": 228, "page_end": 239},
+        {"page_start": 2594, "page_end": 2601},
+    ],
+    "asherman syndrome": [
+        {"page_start": 901, "page_end": 914},
+        {"page_start": 2594, "page_end": 2601},
+    ],
+    "menopausal transition": [
+        {"page_start": 1413, "page_end": 1435},
+        {"page_start": 1462, "page_end": 1470},
+    ],
+    "menopause osteoporosis prevention": [
+        {"page_start": 1732, "page_end": 1758},
+        {"page_start": 1861, "page_end": 1872},
+    ],
+    "obesity and reproduction": [
+        {"page_start": 945, "page_end": 972},
+        {"page_start": 13, "page_end": 21},
+    ],
+}
+
+GABBE_MANUAL_TOPIC_RANGES = {
+    "pprom": [
+        {"page_start": 823, "page_end": 850},
+        {"page_start": 800, "page_end": 813},
+    ],
+    "preterm labor": [
+        {"page_start": 791, "page_end": 846},
+        {"page_start": 720, "page_end": 735},
+    ],
+    "preeclampsia": [
+        {"page_start": 861, "page_end": 866},
+        {"page_start": 1030, "page_end": 1033},
+        {"page_start": 854, "page_end": 859},
+    ],
+    "postpartum hemorrhage": [
+        {"page_start": 476, "page_end": 514},
+        {"page_start": 567, "page_end": 579},
+    ],
+    "antenatal corticosteroids": [
+        {"page_start": 36, "page_end": 48},
+        {"page_start": 148, "page_end": 152},
+    ],
+    "magnesium neuroprotection": [
+        {"page_start": 147, "page_end": 158},
+        {"page_start": 280, "page_end": 284},
+    ],
+    "chorioamnionitis": [
+        {"page_start": 72, "page_end": 76},
+        {"page_start": 79, "page_end": 85},
+        {"page_start": 90, "page_end": 98},
+    ],
+    "group b strep": [
+        {"page_start": 90, "page_end": 100},
+        {"page_start": 107, "page_end": 114},
+    ],
+    "fetal surveillance": [
+        {"page_start": 174, "page_end": 180},
+        {"page_start": 329, "page_end": 333},
+        {"page_start": 416, "page_end": 421},
+    ],
+    "labor induction": [
+        {"page_start": 71, "page_end": 75},
+        {"page_start": 316, "page_end": 321},
+        {"page_start": 334, "page_end": 339},
+    ],
+    "cesarean delivery": [
+        {"page_start": 1017, "page_end": 1033},
+        {"page_start": 1048, "page_end": 1060},
+    ],
+    "trial of labor after cesarean": [
+        {"page_start": 1060, "page_end": 1078},
+        {"page_start": 1086, "page_end": 1094},
+    ],
+    "shoulder dystocia": [
+        {"page_start": 1141, "page_end": 1152},
+        {"page_start": 1153, "page_end": 1159},
+    ],
+    "operative vaginal delivery": [
+        {"page_start": 1107, "page_end": 1125},
+        {"page_start": 1126, "page_end": 1137},
+    ],
+    "placenta previa": [
+        {"page_start": 960, "page_end": 973},
+        {"page_start": 974, "page_end": 983},
+    ],
+    "placenta accreta spectrum": [
+        {"page_start": 984, "page_end": 1000},
+        {"page_start": 1001, "page_end": 1016},
+    ],
+    "gestational diabetes": [
+        {"page_start": 1058, "page_end": 1073},
+        {"page_start": 1068, "page_end": 1073},
+        {"page_start": 618, "page_end": 619},
+    ],
+    "labor dystocia": [
+        {"page_start": 512, "page_end": 517},
+        {"page_start": 330, "page_end": 334},
+        {"page_start": 454, "page_end": 459},
+    ],
+}
+
+
+def _clean_text(value):
+    text = re.sub(r"[^\x20-\x7E]+", " ", str(value or ""))
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _page_text_lines(raw_text):
+    cleaned_lines = []
+    for line in str(raw_text or "").splitlines():
+        cleaned = _clean_text(line)
+        if cleaned:
+            cleaned_lines.append(cleaned)
+    return cleaned_lines
+
+
+def _page_text(raw_text):
+    return "\n".join(_page_text_lines(raw_text))
+
+
+BOOK_TOPIC_MAPS = {
+    "gabbe_9": GABBE_TOPIC_MAP,
+    "speroff_10": SPEROFF_TOPIC_MAP,
+}
+
+BOOK_TOPIC_QUERIES = {
+    "gabbe_9": GABBE_TOPIC_QUERIES,
+    "speroff_10": SPEROFF_TOPIC_QUERIES,
+}
+
+BOOK_MANUAL_TOPIC_RANGES = {
+    "gabbe_9": GABBE_MANUAL_TOPIC_RANGES,
+    "speroff_10": SPEROFF_MANUAL_TOPIC_RANGES,
+}
+
+
+def _cache_key(book_id, suffix):
+    if book_id == "gabbe_9":
+        legacy_keys = {
+            "page_text": "gabbe_page_text",
+            "topic_mapping": "gabbe_topic_mapping",
+        }
+        if suffix in legacy_keys:
+            return legacy_keys[suffix]
+    return f"{book_id}_{suffix}"
+
+
+def _topic_queries_for_book(book_id, topic):
+    queries = (BOOK_TOPIC_QUERIES.get(book_id) or {}).get(topic, [])
+    if queries:
+        return queries
+    return [topic]
+
+
+def _load_book_reader(book_id):
+    book = get_book_object(book_id)
+    client = get_r2_client()
+    response = client.get_object(Bucket=R2_BUCKET_NAME, Key=book["key"])
+    try:
+        pdf_bytes = response["Body"].read()
+    finally:
+        response["Body"].close()
+
+    return open_book_pdf_document_from_bytes(book_id, pdf_bytes)
+
+
+def _candidate_heading(line):
+    if not line:
+        return None
+
+    chapter_match = CHAPTER_TITLE_RE.match(line)
+    if chapter_match:
+        return {
+            "title": f"{chapter_match.group(1)}. {chapter_match.group(2).strip()}",
+            "level": "chapter",
+        }
+
+    if SHORT_ALL_CAPS_RE.match(line):
+        if any(token in line.lower() for token in ("copyright", "elsevier", "isbn", "printed")):
+            return None
+        return {
+            "title": line.title(),
+            "level": "section",
+        }
+
+    return None
+
+
+def _dedupe_preserve_order(entries):
+    seen = set()
+    deduped = []
+    for entry in entries:
+        key = (entry["title"].lower(), entry["page_start"], entry["level"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(entry)
+    return deduped
+
+
+def _scan_gabbe_text_catalog(reader):
+    page_limit = min(TEXT_SCAN_END_PAGE, reader.page_count)
+    candidates = []
+
+    for page_number in range(TEXT_SCAN_START_PAGE, page_limit + 1):
+        page_text = reader.extract_page_text(page_number)
+        for line in _page_text_lines(page_text)[:18]:
+            heading = _candidate_heading(line)
+            if not heading:
+                continue
+            candidates.append(
+                {
+                    "title": heading["title"],
+                    "level": heading["level"],
+                    "page_start": page_number,
+                }
+            )
+
+    deduped = _dedupe_preserve_order(candidates)
+
+    catalog = []
+    for index, entry in enumerate(deduped):
+        next_page = page_limit
+        for later in deduped[index + 1:]:
+            if later["page_start"] > entry["page_start"]:
+                next_page = later["page_start"] - 1
+                break
+        catalog.append(
+            {
+                "title": entry["title"],
+                "level": entry["level"],
+                "page_start": entry["page_start"],
+                "page_end": next_page,
+            }
+        )
+
+    return catalog
+
+
+def _snippet_around_match(text, match_start, radius=180):
+    start = max(0, match_start - radius)
+    end = min(len(text), match_start + radius)
+    snippet = text[start:end]
+    snippet = re.sub(r"\s+", " ", snippet).strip()
+    return snippet
+
+
+def _search_book_topic_matches(book_id, topic):
+    page_cache = get_textbook_cache(_cache_key(book_id, "page_text")) or {}
+    page_payload = page_cache.get("payload") or {}
+    cached_pages = page_payload.get("pages") or []
+    normalized_queries = [query.lower() for query in _topic_queries_for_book(book_id, topic)]
+    results = []
+
+    for page_entry in cached_pages:
+        page_number = page_entry.get("page")
+        text = page_entry.get("text") or ""
+        if not text:
+            continue
+        lower_text = text.lower()
+        for query in normalized_queries:
+            match_index = lower_text.find(query)
+            if match_index == -1:
+                continue
+            results.append(
+                {
+                    "query": query,
+                    "page": page_number,
+                    "snippet": _snippet_around_match(text, match_index),
+                }
+            )
+            break
+
+    return page_payload, normalized_queries, results
+
+
+def _search_gabbe_topic_matches(topic):
+    return _search_book_topic_matches("gabbe_9", topic)
+
+
+@lru_cache(maxsize=16)
+def search_gabbe_topic(topic):
+    page_payload, normalized_queries, results = _search_gabbe_topic_matches(topic)
+
+    return {
+        "topic": topic,
+        "queries": normalized_queries,
+        "scan_window": {
+            "start_page": page_payload.get("start_page", 1),
+            "end_page": page_payload.get("end_page", 0),
+        },
+        "match_count": len(results),
+        "matches": results[:12],
+    }
+
+
+@lru_cache(maxsize=16)
+def search_speroff_topic(topic):
+    page_payload, normalized_queries, results = _search_book_topic_matches("speroff_10", topic)
+
+    return {
+        "topic": topic,
+        "queries": normalized_queries,
+        "scan_window": {
+            "start_page": page_payload.get("start_page", 1),
+            "end_page": page_payload.get("end_page", 0),
+        },
+        "match_count": len(results),
+        "matches": results[:12],
+    }
+
+
+def build_book_page_text_batch(book_id, start_page=1, limit=25):
+    reader = _load_book_reader(book_id)
+    total_pages = reader.page_count
+    end_page = min(total_pages, start_page + limit - 1)
+    extracted_pages = []
+
+    for page_number in range(start_page, end_page + 1):
+        text = _page_text(reader.extract_page_text(page_number))
+        extracted_pages.append(
+            {
+                "page": page_number,
+                "text": text,
+            }
+        )
+
+    return {
+        "book_id": book_id,
+        "start_page": start_page,
+        "end_page": end_page,
+        "batch_count": len(extracted_pages),
+        "total_pages": total_pages,
+        "pages": extracted_pages,
+    }
+
+
+def build_gabbe_page_text_batch(start_page=1, limit=25):
+    return build_book_page_text_batch("gabbe_9", start_page=start_page, limit=limit)
+
+
+def build_speroff_page_text_batch(start_page=1, limit=25):
+    return build_book_page_text_batch("speroff_10", start_page=start_page, limit=limit)
+
+
+def cache_book_page_text_batch(book_id, start_page=1, limit=25):
+    payload = build_book_page_text_batch(book_id, start_page=start_page, limit=limit)
+    cached = append_textbook_page_cache(
+        _cache_key(book_id, "page_text"),
+        payload["pages"],
+        metadata={"book_id": book_id, "start_page": 1, "end_page": payload["end_page"], "total_pages": payload["total_pages"]},
+    )
+    return {
+        "cache_updated_at": cached.get("updated_at"),
+        "book_id": payload["book_id"],
+        "start_page": payload["start_page"],
+        "end_page": payload["end_page"],
+        "batch_count": payload["batch_count"],
+        "total_pages": payload["total_pages"],
+        "sample_pages": [page["page"] for page in payload["pages"][:5]],
+    }
+
+
+def cache_gabbe_page_text_batch(start_page=1, limit=25):
+    return cache_book_page_text_batch("gabbe_9", start_page=start_page, limit=limit)
+
+
+def cache_speroff_page_text_batch(start_page=1, limit=25):
+    return cache_book_page_text_batch("speroff_10", start_page=start_page, limit=limit)
+
+
+def _cluster_match_pages(matches, gap=3):
+    pages = sorted({match["page"] for match in matches})
+    if not pages:
+        return []
+
+    clusters = []
+    current_start = pages[0]
+    current_end = pages[0]
+
+    for page in pages[1:]:
+        if page - current_end <= gap:
+            current_end = page
+            continue
+        clusters.append({"page_start": current_start, "page_end": current_end})
+        current_start = page
+        current_end = page
+
+    clusters.append({"page_start": current_start, "page_end": current_end})
+    return clusters
+
+
+def _match_quality_score(topic, match):
+    snippet = (match.get("snippet") or "").lower()
+    score = 1
+
+    if any(marker in snippet for marker in LOW_SIGNAL_SNIPPET_MARKERS):
+        score -= 2
+
+    query = (match.get("query") or "").lower()
+    topic_markers = TOPIC_SIGNAL_MARKERS.get(topic, ())
+
+    if query == topic.lower():
+        score += 3
+    elif topic.lower() in query:
+        score += 2
+
+    for marker in topic_markers:
+        if marker in snippet:
+            score += 2
+
+    if "management" in snippet or "treatment" in snippet:
+        score += 2
+
+    return score
+
+
+def _cluster_topic_matches(topic, matches, gap=3):
+    if not matches:
+        return []
+
+    sorted_matches = sorted(matches, key=lambda item: item["page"])
+    clusters = []
+    current_matches = [sorted_matches[0]]
+    current_start = sorted_matches[0]["page"]
+    current_end = sorted_matches[0]["page"]
+
+    for match in sorted_matches[1:]:
+        page = match["page"]
+        if page - current_end <= gap:
+            current_matches.append(match)
+            current_end = page
+            continue
+        clusters.append(
+            {
+                "page_start": current_start,
+                "page_end": current_end,
+                "score": sum(_match_quality_score(topic, item) for item in current_matches),
+                "match_count": len(current_matches),
+            }
+        )
+        current_matches = [match]
+        current_start = page
+        current_end = page
+
+    clusters.append(
+        {
+            "page_start": current_start,
+            "page_end": current_end,
+            "score": sum(_match_quality_score(topic, item) for item in current_matches),
+            "match_count": len(current_matches),
+        }
+    )
+    return clusters
+
+
+def _range_for_cluster(cluster, padding=2):
+    return {
+        "page_start": max(1, cluster["page_start"] - padding),
+        "page_end": cluster["page_end"] + padding,
+    }
+
+
+def _map_single_book_topic(book_id, topic_entry):
+    topic = topic_entry["topic"]
+    _, queries, all_matches = _search_book_topic_matches(book_id, topic)
+    preview_matches = all_matches[:12]
+    manual_ranges = (BOOK_MANUAL_TOPIC_RANGES.get(book_id) or {}).get(topic)
+    if manual_ranges:
+        return {
+            **topic_entry,
+            "queries": queries,
+            "match_count": len(all_matches),
+            "candidate_ranges": manual_ranges,
+            "sample_matches": preview_matches[:3],
+            "status": "mapped",
+            "mapping_mode": "manual_override",
+        }
+
+    clusters = _cluster_topic_matches(topic, all_matches, gap=3)
+    ranked_clusters = sorted(
+        clusters,
+        key=lambda cluster: (cluster["score"], cluster["match_count"], -cluster["page_start"]),
+        reverse=True,
+    )
+    candidate_ranges = [_range_for_cluster(cluster, padding=2) for cluster in ranked_clusters[:3] if cluster["score"] > 0]
+
+    return {
+        **topic_entry,
+        "queries": queries,
+        "match_count": len(all_matches),
+        "candidate_ranges": candidate_ranges,
+        "sample_matches": preview_matches[:3],
+        "status": "mapped" if candidate_ranges else "unmapped",
+        "mapping_mode": "ranked_auto",
+    }
+
+
+def _map_single_gabbe_topic(topic_entry):
+    return _map_single_book_topic("gabbe_9", topic_entry)
+
+
+def build_book_topic_mapping_batch(book_id, offset=0, limit=5, tier=None):
+    topic_entries = list(BOOK_TOPIC_MAPS.get(book_id) or [])
+    if tier:
+        topic_entries = [entry for entry in topic_entries if entry.get("tier") == tier]
+
+    selected_topics = topic_entries[offset : offset + limit]
+    mappings = []
+    for topic_entry in selected_topics:
+        mappings.append(_map_single_book_topic(book_id, topic_entry))
+
+    return {
+        "book_id": book_id,
+        "offset": offset,
+        "limit": limit,
+        "tier": tier,
+        "batch_count": len(mappings),
+        "total_available_topics": len(topic_entries),
+        "topics": mappings,
+    }
+
+
+@lru_cache(maxsize=8)
+def build_gabbe_topic_mapping_batch(offset=0, limit=5, tier=None):
+    return build_book_topic_mapping_batch("gabbe_9", offset=offset, limit=limit, tier=tier)
+
+
+@lru_cache(maxsize=8)
+def build_speroff_topic_mapping_batch(offset=0, limit=5, tier=None):
+    return build_book_topic_mapping_batch("speroff_10", offset=offset, limit=limit, tier=tier)
+
+
+@lru_cache(maxsize=1)
+def build_gabbe_topic_mapping():
+    mappings = []
+    for topic_entry in GABBE_TOPIC_MAP:
+        mappings.append(_map_single_gabbe_topic(topic_entry))
+
+    return {
+        "book_id": "gabbe_9",
+        "topic_count": len(mappings),
+        "mapped_count": sum(1 for item in mappings if item["status"] == "mapped"),
+        "unmapped_count": sum(1 for item in mappings if item["status"] != "mapped"),
+        "topics": mappings,
+    }
+
+
+@lru_cache(maxsize=1)
+def build_speroff_topic_mapping():
+    mappings = []
+    for topic_entry in SPEROFF_TOPIC_MAP:
+        mappings.append(_map_single_book_topic("speroff_10", topic_entry))
+
+    return {
+        "book_id": "speroff_10",
+        "topic_count": len(mappings),
+        "mapped_count": sum(1 for item in mappings if item["status"] == "mapped"),
+        "unmapped_count": sum(1 for item in mappings if item["status"] != "mapped"),
+        "topics": mappings,
+    }
+
+
+def build_gabbe_topic_mapping_summary(payload):
+    topics = payload.get("topics") or []
+    return {
+        "book_id": payload.get("book_id", "gabbe_9"),
+        "topic_count": payload.get("topic_count", len(topics)),
+        "mapped_count": payload.get("mapped_count", sum(1 for item in topics if item.get("status") == "mapped")),
+        "unmapped_count": payload.get("unmapped_count", sum(1 for item in topics if item.get("status") != "mapped")),
+        "tier_a_count": sum(1 for item in topics if item.get("tier") == "A"),
+        "tier_b_count": sum(1 for item in topics if item.get("tier") == "B"),
+        "preview": topics[:12],
+    }
+
+
+@lru_cache(maxsize=4)
+def build_textbook_catalog(book_id):
+    book = get_book_object(book_id)
+    if not book:
+        raise ValueError(f"Unknown book_id '{book_id}'.")
+
+    client = get_r2_client()
+    response = client.get_object(Bucket=R2_BUCKET_NAME, Key=book["key"])
+    try:
+        pdf_bytes = response["Body"].read()
+    finally:
+        response["Body"].close()
+    reader = open_book_pdf_document_from_bytes(book_id, pdf_bytes)
+
+    if book_id != "gabbe_9":
+        return {
+            "book_id": book["book_id"],
+            "title": book["title"],
+            "edition": book["edition"],
+            "domain": book["domain"],
+            "page_count": reader.page_count,
+            "catalog": [],
+            "catalog_entry_count": 0,
+            "scan_window": {"start_page": TEXT_SCAN_START_PAGE, "end_page": min(TEXT_SCAN_END_PAGE, reader.page_count)},
+            "extractor_backend": reader.backend,
+        }
+
+    catalog = _scan_gabbe_text_catalog(reader)
+
+    return {
+        "book_id": book["book_id"],
+        "title": book["title"],
+        "edition": book["edition"],
+        "domain": book["domain"],
+        "page_count": reader.page_count,
+        "catalog_entry_count": len(catalog),
+        "catalog": catalog,
+        "scan_window": {"start_page": TEXT_SCAN_START_PAGE, "end_page": min(TEXT_SCAN_END_PAGE, reader.page_count)},
+        "extractor_backend": reader.backend,
+    }
+
+
+def get_gabbe_mvp_topic_map():
+    return list(GABBE_TOPIC_MAP)
+
+
+def get_speroff_mvp_topic_map():
+    return list(SPEROFF_TOPIC_MAP)
