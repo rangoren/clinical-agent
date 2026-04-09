@@ -17,7 +17,12 @@ from services.textbook_catalog_service import (
     get_gabbe_mvp_topic_map,
     search_gabbe_topic,
 )
-from services.textbook_audit_service import audit_textbook_objects, to_isoformat
+from services.textbook_audit_service import (
+    audit_textbook_objects,
+    get_cached_deep_textbook_audit,
+    run_deep_textbook_audit,
+    to_isoformat,
+)
 from settings import (
     APP_BASE_URL,
     APP_ENV,
@@ -56,6 +61,36 @@ def health_textbooks():
     if APP_ENV == "production":
         return JSONResponse({"status": "forbidden"}, status_code=403)
     return JSONResponse(audit_textbook_objects())
+
+
+@router.get("/health/textbooks/{book_id}/deep-audit")
+def health_textbooks_book_deep_audit(book_id: str):
+    if APP_ENV == "production":
+        return JSONResponse({"status": "forbidden"}, status_code=403)
+
+    cached = get_cached_deep_textbook_audit(book_id)
+    if not cached:
+        return JSONResponse(
+            {
+                "status": "not_ready",
+                "message": f"Deep textbook audit has not been run for {book_id} yet.",
+            },
+            status_code=202,
+        )
+
+    return JSONResponse({"status": "ok", **cached})
+
+
+@router.post("/health/textbooks/{book_id}/deep-audit/rebuild")
+def health_textbooks_book_deep_audit_rebuild(
+    book_id: str,
+    sample_pages: int = Query(5, ge=1, le=10),
+):
+    if APP_ENV == "production":
+        return JSONResponse({"status": "forbidden"}, status_code=403)
+
+    payload = run_deep_textbook_audit(book_id, sample_pages=sample_pages)
+    return JSONResponse({"status": "ok", **payload})
 
 
 @router.get("/health/textbooks/gabbe")
