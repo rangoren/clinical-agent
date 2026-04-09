@@ -1,6 +1,6 @@
 import io
 from dataclasses import dataclass
-from typing import BinaryIO, Dict, List, Optional
+from typing import Dict, List, Optional
 
 
 def list_available_pdf_backends() -> List[str]:
@@ -20,6 +20,21 @@ def list_available_pdf_backends() -> List[str]:
         pass
 
     return backends
+
+
+BOOK_PREFERRED_BACKENDS = {
+    "gabbe_9": ["pypdf", "pymupdf"],
+    "speroff_10": ["pypdf", "pymupdf"],
+    "berek_17": ["pymupdf", "pypdf"],
+}
+
+
+def preferred_backends_for_book(book_id: Optional[str]) -> List[str]:
+    preferred = BOOK_PREFERRED_BACKENDS.get(book_id or "", [])
+    available = list_available_pdf_backends()
+    ordered = [backend for backend in preferred if backend in available]
+    ordered.extend(backend for backend in available if backend not in ordered)
+    return ordered
 
 
 @dataclass
@@ -139,3 +154,21 @@ def open_pdf_document_from_bytes(pdf_bytes: bytes, preferred_backend: Optional[s
 
 def open_pdf_document_from_path(path: str, preferred_backend: Optional[str] = None) -> PDFDocumentAdapter:
     return open_pdf_document(path, preferred_backend=preferred_backend)
+
+
+def open_book_pdf_document_from_bytes(book_id: str, pdf_bytes: bytes) -> PDFDocumentAdapter:
+    for backend in preferred_backends_for_book(book_id):
+        try:
+            return open_pdf_document_from_bytes(pdf_bytes, preferred_backend=backend)
+        except Exception:
+            continue
+    raise RuntimeError(f"No usable PDF extraction backend is available for {book_id}.")
+
+
+def open_book_pdf_document_from_path(book_id: str, path: str) -> PDFDocumentAdapter:
+    for backend in preferred_backends_for_book(book_id):
+        try:
+            return open_pdf_document_from_path(path, preferred_backend=backend)
+        except Exception:
+            continue
+    raise RuntimeError(f"No usable PDF extraction backend is available for {book_id}.")

@@ -8,3 +8,4 @@ requests==2.32.3
 beautifulsoup4==4.12.3
 boto3==1.39.9
 pypdf==5.9.0
+PyMuPDF==1.26.5

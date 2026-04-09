@@ -2,7 +2,7 @@ import re
 from functools import lru_cache
 
 from services.book_storage_service import get_book_object, get_r2_client
-from services.pdf_extraction_service import open_pdf_document_from_bytes
+from services.pdf_extraction_service import open_book_pdf_document_from_bytes
 from services.textbook_cache_service import append_textbook_page_cache, get_textbook_cache
 from settings import R2_BUCKET_NAME
 
@@ -610,7 +610,7 @@ def _load_book_reader(book_id):
     finally:
         response["Body"].close()
 
-    return open_pdf_document_from_bytes(pdf_bytes)
+    return open_book_pdf_document_from_bytes(book_id, pdf_bytes)
 
 
 def _candidate_heading(line):
@@ -1035,7 +1035,7 @@ def build_textbook_catalog(book_id):
         pdf_bytes = response["Body"].read()
     finally:
         response["Body"].close()
-    reader = open_pdf_document_from_bytes(pdf_bytes)
+    reader = open_book_pdf_document_from_bytes(book_id, pdf_bytes)
 
     if book_id != "gabbe_9":
         return {

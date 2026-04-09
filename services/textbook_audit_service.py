@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from services.book_storage_service import build_r2_object_url, get_book_object, get_book_objects, get_r2_client, is_r2_configured
 from services.pdf_extraction_service import (
     list_available_pdf_backends,
-    open_pdf_document_from_bytes,
-    open_pdf_document_from_path,
+    open_book_pdf_document_from_bytes,
+    open_book_pdf_document_from_path,
 )
 from services.textbook_cache_service import get_textbook_cache, save_textbook_cache
 from services.logging_service import log_event
@@ -53,14 +53,14 @@ def _basic_pdf_probe(client, key):
     }
 
 
-def _extract_full_pdf_audit(client, key):
+def _extract_full_pdf_audit(book_id, client, key):
     response = client.get_object(Bucket=R2_BUCKET_NAME, Key=key)
     try:
         pdf_bytes = response["Body"].read()
     finally:
         response["Body"].close()
 
-    document = open_pdf_document_from_bytes(pdf_bytes)
+    document = open_book_pdf_document_from_bytes(book_id, pdf_bytes)
     first_page_text = document.extract_page_text(1) if document.page_count else ""
     text_extractable = bool(first_page_text)
 
@@ -123,8 +123,8 @@ def _sample_page_numbers(page_count, sample_pages=5):
     return sorted(sampled[:sample_pages])
 
 
-def _extract_streamed_pdf_audit(temp_path, sample_pages=5):
-    document = open_pdf_document_from_path(temp_path)
+def _extract_streamed_pdf_audit(book_id, temp_path, sample_pages=5):
+    document = open_book_pdf_document_from_path(book_id, temp_path)
     page_count = document.page_count
     probe_pages = _sample_page_numbers(page_count, sample_pages=sample_pages)
     sampled_pages = []
@@ -168,7 +168,7 @@ def run_deep_textbook_audit(book_id, sample_pages=5):
     client = get_r2_client()
     temp_path = _stream_book_to_tempfile(client, book["key"])
     try:
-        audit = _extract_streamed_pdf_audit(temp_path, sample_pages=sample_pages)
+        audit = _extract_streamed_pdf_audit(book_id, temp_path, sample_pages=sample_pages)
     finally:
         if temp_path and os.path.exists(temp_path):
             os.unlink(temp_path)
@@ -274,7 +274,7 @@ def audit_textbook_objects():
             continue
 
         try:
-            entry["full_text_audit"] = _extract_full_pdf_audit(client, key)
+                entry["full_text_audit"] = _extract_full_pdf_audit(book["book_id"], client, key)
         except Exception as exc:
             entry["full_text_audit"] = {
                 "skipped": False,
