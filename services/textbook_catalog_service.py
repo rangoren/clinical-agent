@@ -119,6 +119,25 @@ TOPIC_SIGNAL_MARKERS = {
     "gestational diabetes": ("insulin", "screening", "glucose", "diet", "management"),
 }
 
+GABBE_MANUAL_TOPIC_RANGES = {
+    "pprom": [
+        {"page_start": 823, "page_end": 850},
+        {"page_start": 800, "page_end": 813},
+    ],
+    "preterm labor": [
+        {"page_start": 791, "page_end": 846},
+        {"page_start": 720, "page_end": 735},
+    ],
+    "preeclampsia": [
+        {"page_start": 854, "page_end": 876},
+        {"page_start": 1024, "page_end": 1039},
+    ],
+    "postpartum hemorrhage": [
+        {"page_start": 476, "page_end": 514},
+        {"page_start": 567, "page_end": 579},
+    ],
+}
+
 
 def _clean_text(value):
     text = re.sub(r"[^\x20-\x7E]+", " ", str(value or ""))
@@ -426,6 +445,18 @@ def _map_single_gabbe_topic(topic_entry):
     topic = topic_entry["topic"]
     _, queries, all_matches = _search_gabbe_topic_matches(topic)
     preview_matches = all_matches[:12]
+    manual_ranges = GABBE_MANUAL_TOPIC_RANGES.get(topic)
+    if manual_ranges:
+        return {
+            **topic_entry,
+            "queries": queries,
+            "match_count": len(all_matches),
+            "candidate_ranges": manual_ranges,
+            "sample_matches": preview_matches[:3],
+            "status": "mapped",
+            "mapping_mode": "manual_override",
+        }
+
     clusters = _cluster_topic_matches(topic, all_matches, gap=3)
     ranked_clusters = sorted(
         clusters,
@@ -441,6 +472,7 @@ def _map_single_gabbe_topic(topic_entry):
         "candidate_ranges": candidate_ranges,
         "sample_matches": preview_matches[:3],
         "status": "mapped" if candidate_ranges else "unmapped",
+        "mapping_mode": "ranked_auto",
     }
 
 
