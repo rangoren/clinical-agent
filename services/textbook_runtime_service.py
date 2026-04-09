@@ -2,6 +2,7 @@ import re
 
 from services.book_storage_service import get_book_object
 from services.textbook_cache_service import get_textbook_cache
+from services.textbook_catalog_service import _search_gabbe_topic_matches
 
 
 TEXTBOOK_REQUEST_HINTS = (
@@ -133,6 +134,44 @@ def _build_range_excerpt(page_map, page_start, page_end):
     return _trim_excerpt(" ".join(pages))
 
 
+def _matches_within_range(matches, page_start, page_end):
+    return [match for match in matches if page_start <= (match.get("page") or 0) <= page_end]
+
+
+def _format_match_snippets(topic, matches, limit=2):
+    snippets = []
+    seen = set()
+    topic_words = set(_normalize_text(topic).split())
+
+    ranked_matches = []
+    for match in matches:
+        snippet = _normalize_text(match.get("snippet"))
+        if not snippet:
+            continue
+        score = 0
+        query = _normalize_text(match.get("query"))
+        if query in topic_words or query == _normalize_text(topic):
+            score += 3
+        if any(word in snippet for word in topic_words):
+            score += 2
+        if any(marker in snippet for marker in ("management", "treatment", "delivery", "antibiotic", "magnesium", "tocolysis", "rupture")):
+            score += 2
+        ranked_matches.append((score, match))
+
+    for _, match in sorted(ranked_matches, key=lambda item: item[0], reverse=True):
+        snippet = re.sub(r"\s+", " ", str(match.get("snippet") or "")).strip()
+        if not snippet:
+            continue
+        if snippet in seen:
+            continue
+        seen.add(snippet)
+        snippets.append(f"Page {match['page']}: {snippet}")
+        if len(snippets) >= limit:
+            break
+
+    return _trim_excerpt(" ".join(snippets), limit=1400)
+
+
 def build_gabbe_textbook_context(user_message, max_ranges=3):
     topic_entry = _find_best_gabbe_topic(user_message)
     if not topic_entry:
@@ -151,6 +190,7 @@ def build_gabbe_textbook_context(user_message, max_ranges=3):
         }
 
     page_map = {entry.get("page"): entry.get("text") for entry in cached_pages if entry.get("page")}
+    _, topic_queries, topic_matches = _search_gabbe_topic_matches(topic_entry["topic"])
     candidate_ranges = topic_entry.get("candidate_ranges") or []
     sources = []
     excerpts = []
@@ -160,7 +200,10 @@ def build_gabbe_textbook_context(user_message, max_ranges=3):
         page_end = candidate_range.get("page_end")
         if not page_start or not page_end:
             continue
-        excerpt_text = _build_range_excerpt(page_map, page_start, page_end)
+        range_matches = _matches_within_range(topic_matches, page_start, page_end)
+        excerpt_text = _format_match_snippets(topic_entry["topic"], range_matches, limit=2)
+        if not excerpt_text:
+            excerpt_text = _build_range_excerpt(page_map, page_start, min(page_end, page_start + 2))
         if not excerpt_text:
             continue
 
@@ -183,6 +226,7 @@ def build_gabbe_textbook_context(user_message, max_ranges=3):
             {
                 "source_id": source_id,
                 "topic": topic_entry["topic"],
+                "queries": topic_queries,
                 "page_start": page_start,
                 "page_end": page_end,
                 "text": excerpt_text,
