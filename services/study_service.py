@@ -1144,6 +1144,8 @@ def _difficulty_policy_for_profile(user_profile):
         "max_level": max_level,
         "prefer_advanced_mcq_stack": residency_year == "R6",
         "prefer_stage_b_judgment": residency_year == "R6",
+        "enforce_r6_main_flow_gate": residency_year == "R6",
+        "main_flow_min_target_10": 7 if residency_year == "R6" else 0,
         "practice_floor": max(min_level, baseline_level - 1) if residency_year == "R6" else min_level,
     }
 
@@ -1494,6 +1496,13 @@ def _stage_b_quality_metadata(item):
     required_failures = [name for name in rule["required"] if not checks.get(name)]
     recommended_gaps = [name for name in rule["recommended"] if not checks.get(name)]
     difficulty_engine_ready = not required_failures
+    effective_target = difficulty_target
+    quality_status = "ready"
+    rewrite_actions = []
+    if difficulty_target >= 7 and not difficulty_engine_ready:
+        effective_target = min(difficulty_target, 6)
+        quality_status = "needs_rewrite" if len(required_failures) >= 2 else "downgraded"
+        rewrite_actions = list(required_failures)
 
     return {
         "stage_b_quality_score": score,
@@ -1504,6 +1513,9 @@ def _stage_b_quality_metadata(item):
         "difficulty_engine_required_failures": required_failures,
         "difficulty_engine_recommended_gaps": recommended_gaps,
         "difficulty_engine_rule": f"{rule['min_target']}-{rule['max_target']}",
+        "effective_difficulty_target_10": effective_target,
+        "difficulty_engine_status": quality_status,
+        "rewrite_actions": rewrite_actions,
     }
 
 
@@ -1814,6 +1826,17 @@ def _selection_score(
     return score
 
 
+def _eligible_for_main_flow(item, policy):
+    if not item:
+        return False
+    if not policy.get("enforce_r6_main_flow_gate"):
+        return True
+    target_10 = int(item.get("effective_difficulty_target_10") or item.get("difficulty_target_10") or 0)
+    if target_10 < int(policy.get("main_flow_min_target_10") or 0):
+        return False
+    return bool(item.get("difficulty_engine_ready"))
+
+
 def _pick_best_item(
     session_id,
     candidates,
@@ -2049,6 +2072,10 @@ def _practice_candidates_for_policy(mcq_pool, used_ids, target_level, policy):
         and practice_floor <= item.get("difficulty_level", 0) <= target_level
     ]
     if candidates:
+        if policy.get("enforce_r6_main_flow_gate"):
+            strict = [item for item in candidates if _eligible_for_main_flow(item, policy)]
+            if strict:
+                return strict
         if policy.get("prefer_stage_b_judgment"):
             advanced = [item for item in candidates if item.get("difficulty_engine_ready")]
             if advanced:
@@ -2061,6 +2088,11 @@ def _practice_candidates_for_policy(mcq_pool, used_ids, target_level, policy):
         item for item in mcq_pool
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= practice_floor
     ]
+    if policy.get("enforce_r6_main_flow_gate"):
+        strict = [item for item in fallback if _eligible_for_main_flow(item, policy)]
+        if strict:
+            return strict
+        return []
     if policy.get("prefer_stage_b_judgment"):
         advanced = [item for item in fallback if item.get("difficulty_engine_ready")]
         if advanced:
@@ -2078,6 +2110,10 @@ def _advanced_mcq_candidates_for_policy(mcq_pool, used_ids, target_level, policy
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= challenge_floor
     ]
     if candidates:
+        if policy.get("enforce_r6_main_flow_gate"):
+            strict = [item for item in candidates if _eligible_for_main_flow(item, policy)]
+            if strict:
+                return strict
         if policy.get("prefer_stage_b_judgment"):
             advanced = [item for item in candidates if item.get("difficulty_engine_ready")]
             if advanced:
@@ -2090,6 +2126,11 @@ def _advanced_mcq_candidates_for_policy(mcq_pool, used_ids, target_level, policy
         item for item in mcq_pool
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= target_level
     ]
+    if policy.get("enforce_r6_main_flow_gate"):
+        strict = [item for item in fallback if _eligible_for_main_flow(item, policy)]
+        if strict:
+            return strict
+        return []
     if policy.get("prefer_stage_b_judgment"):
         advanced = [item for item in fallback if item.get("difficulty_engine_ready")]
         if advanced:
@@ -2197,6 +2238,8 @@ def get_idle_study_cards(session_id):
 
     if len(cards) < 3:
         fallback_pool = _get_items(exclude_ids=used_ids | recent_exclude_ids) or _get_items(exclude_ids=used_ids)
+        if policy.get("enforce_r6_main_flow_gate"):
+            fallback_pool = [item for item in fallback_pool if _eligible_for_main_flow(item, policy)]
         scored_fallback = sorted(
             fallback_pool,
             key=lambda item: _selection_score(item, state, preferred_difficulty_level=target_level),
