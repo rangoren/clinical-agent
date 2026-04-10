@@ -721,7 +721,6 @@ def _handle_profile_status_message(session_id, user_profile, user_message):
     return _build_message_response(
         reply=reply,
         assistant_message_id=assistant_message_id,
-        sources=_build_profile_source(detail="Saved profile lookup"),
     )
 
 
@@ -762,7 +761,6 @@ def _handle_profile_update_message(session_id, user_profile, user_message, save_
     return _build_message_response(
         reply=reply,
         assistant_message_id=assistant_message_id,
-        sources=_build_profile_source(detail="Saved profile update"),
     )
 
 
