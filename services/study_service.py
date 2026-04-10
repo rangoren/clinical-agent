@@ -26,6 +26,19 @@ STAGE_B_AUTHORING_RUBRIC = {
     ],
 }
 
+STAGE_B_QUESTION_RUBRIC = {
+    "advanced_mcq": [
+        "At least two options must be clinically reasonable near-miss choices",
+        "At least one threshold, timing cue, or measured value must meaningfully change management",
+        "At least one competing variable or risk axis must create real tension",
+        "Avoid throwaway distractors, absolutes, and obviously impossible management steps",
+        "The question should force best-next-step judgment, not simple recall",
+    ],
+}
+
+ABSOLUTE_DISTRACTOR_MARKERS = (" never ", " always ", " only ", " immediately ", " solely ")
+HIGH_JUDGMENT_STYLE_NAMES = {"trap", "overlap", "diagnosis_refinement"}
+
 DIFFICULTY_LEVEL_DISTRIBUTIONS = {
     "R1": {1: 70, 2: 20, 3: 10},
     "R2": {2: 50, 3: 30, 1: 20},
@@ -136,22 +149,28 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "Preeclampsia",
         "subtopic": "Timing of delivery",
-        "question_stem": "A 35-week pregnant patient is diagnosed with preeclampsia with severe features. What is the most appropriate next step in management?",
+        "question_stem": "A 33+5-week patient with preeclampsia has persistent blood pressures around 156-162/102-108, platelets 118,000, creatinine 0.9, reassuring fetal testing, and completed betamethasone 24 hours ago. She has no headache, no visual symptoms, and urine output is adequate. What is the best next step now?",
         "options": [
-            {"key": "A", "text": "Expectant management with close inpatient observation until 37 weeks"},
-            {"key": "B", "text": "Delivery after maternal stabilization"},
-            {"key": "C", "text": "Complete a full steroid course before making a delivery plan"},
-            {"key": "D", "text": "Outpatient management with repeat labs in 48 hours"},
+            {"key": "A", "text": "Continue inpatient expectant management with frequent maternal-fetal reassessment and treat severe-range pressures if they recur"},
+            {"key": "B", "text": "Proceed to delivery now because severe features before 34 weeks should never be managed expectantly"},
+            {"key": "C", "text": "Discharge for home blood pressure monitoring because laboratory values are still reassuring"},
+            {"key": "D", "text": "Delay any decision until a full second course of corticosteroids has been completed"},
         ],
-        "correct_answer_key": "B",
-        "explanation": "At 35 weeks, preeclampsia with severe features is generally managed with maternal stabilization followed by delivery rather than routine expectant management.",
-        "exam_clue": "Severe features at 35 weeks",
-        "board_takeaway": "Severe features at 34 weeks or more: stabilize the mother, then deliver.",
-        "decision_point": "Timing of delivery in preeclampsia with severe features",
+        "correct_answer_key": "A",
+        "explanation": "Before 34 weeks, carefully selected patients with severe disease but stable maternal-fetal status may undergo inpatient expectant management. The nuance is that intermittently severe pressures alone do not force delivery if they respond and there is no evolving end-organ or fetal deterioration.",
+        "exam_clue": "Severe preeclampsia before 34 weeks but currently stable maternal-fetal status",
+        "board_takeaway": "Before 34 weeks, severe preeclampsia can still be managed expectantly only in a tightly monitored inpatient setting when both maternal and fetal conditions remain stable.",
+        "decision_point": "Choose expectant management versus delivery in early severe preeclampsia",
         "difficulty_band": "standard",
-        "tempting_wrong_option": "A",
-        "tempting_wrong_reason": "Expectant management is generally reserved for selected earlier gestations, not routine management at 35 weeks with severe features.",
-        "estimated_time_seconds": 60,
+        "tempting_wrong_option": "B",
+        "tempting_wrong_reason": "Immediate delivery is a reasonable reflex, but the gestational age and currently stable maternal-fetal picture make expectant inpatient management the better choice for now.",
+        "estimated_time_seconds": 85,
+        "difficulty_target_10": 9,
+        "ambiguity_level": 8,
+        "threshold_variable": "<34 weeks with stable maternal-fetal status",
+        "conflicting_axes": ["prematurity risk vs maternal severe disease", "intermittent severe blood pressure vs reassuring labs/testing"],
+        "management_nuance": ["expectant inpatient management", "delivery trigger thresholds", "steroid timing should not dominate the decision"],
+        "near_miss_options": ["A", "B"],
         "source_id": "study_src_nice_hypertension",
         "source_name": "NICE Guideline: Hypertension in Pregnancy",
         "source_type": "Guideline",
@@ -352,22 +371,28 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "PID",
         "subtopic": "Need for hospitalization",
-        "question_stem": "A patient with PID is found to have a tubo-ovarian abscess on ultrasound. What is the most appropriate management now?",
+        "question_stem": "A 27-year-old with PID has a 4.8-cm tubo-ovarian abscess on ultrasound. She has received 48 hours of broad-spectrum IV antibiotics, is hemodynamically stable, still has temperature 38.1 C, and continues to have significant pelvic pain. What is the best next step now?",
         "options": [
-            {"key": "A", "text": "Outpatient oral antibiotics with review in one week"},
-            {"key": "B", "text": "Inpatient treatment with parenteral broad-spectrum antibiotics"},
-            {"key": "C", "text": "Immediate hysterectomy"},
-            {"key": "D", "text": "Observation only if she is afebrile"},
+            {"key": "A", "text": "Continue IV antibiotics alone for another 24-48 hours because the abscess is still under 5 cm"},
+            {"key": "B", "text": "Arrange image-guided drainage while continuing antibiotics because she has not improved after 48 hours"},
+            {"key": "C", "text": "Switch to oral outpatient antibiotics because she is hemodynamically stable"},
+            {"key": "D", "text": "Proceed directly to salpingo-oophorectomy because any tubo-ovarian abscess requires surgery"},
         ],
         "correct_answer_key": "B",
-        "explanation": "Tubo-ovarian abscess is a board-level severity clue in PID and generally requires inpatient management with parenteral broad-spectrum antibiotics.",
-        "exam_clue": "PID plus tubo-ovarian abscess",
-        "board_takeaway": "PID with tubo-ovarian abscess: admit for parenteral broad-spectrum therapy.",
-        "decision_point": "Recognize when PID requires inpatient rather than outpatient management",
+        "explanation": "The hard part here is that both continuing IV therapy and drainage are plausible. Ongoing fever and pain after 48 hours of appropriate inpatient treatment favor drainage rather than simply extending the same regimen.",
+        "exam_clue": "Stable TOA without improvement after 48 hours of IV therapy",
+        "board_takeaway": "TOA management is not just admit-or-not; lack of early clinical improvement should push you toward drainage rather than passive continuation.",
+        "decision_point": "Choose continued IV therapy versus drainage in a stable tubo-ovarian abscess",
         "difficulty_band": "standard",
         "tempting_wrong_option": "A",
-        "tempting_wrong_reason": "A tubo-ovarian abscess raises severity and complication risk, so routine outpatient oral therapy is not the best board answer.",
-        "estimated_time_seconds": 55,
+        "tempting_wrong_reason": "The abscess size alone is not the decisive variable; the failure to improve after 48 hours is what shifts management toward drainage.",
+        "estimated_time_seconds": 90,
+        "difficulty_target_10": 9,
+        "ambiguity_level": 9,
+        "threshold_variable": "No meaningful clinical improvement after 48 hours of IV therapy",
+        "conflicting_axes": ["hemodynamic stability vs persistent infection", "moderate abscess size vs failure of medical therapy"],
+        "management_nuance": ["continued IV therapy vs drainage", "size does not override trajectory", "inpatient status alone is not enough"],
+        "near_miss_options": ["A", "B"],
         "source_id": "study_src_cdc_pid",
         "source_name": "CDC STI Treatment Guidelines: PID",
         "source_type": "Guideline",
@@ -498,22 +523,28 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "Gynecologic oncology",
         "subtopic": "Referral threshold",
-        "question_stem": "A 52-year-old has bloating, early satiety, and a new adnexal mass on ultrasound. What is the best next step?",
+        "question_stem": "A 52-year-old reports 3 months of bloating and early satiety. Ultrasound shows a 7-cm complex adnexal mass with papillary projections and moderate free fluid. She is otherwise stable and asks whether you can just repeat imaging first because the pain is mild. What is the best next step?",
         "options": [
-            {"key": "A", "text": "Repeat ultrasound in 6 weeks before taking any other action"},
-            {"key": "B", "text": "Order CA-125 and refer to gynecologic oncology"},
-            {"key": "C", "text": "Start empiric antibiotics for presumed pelvic infection"},
-            {"key": "D", "text": "Reassure her that most adnexal masses are benign"},
+            {"key": "A", "text": "Repeat ultrasound in 6-8 weeks because most adnexal masses in stable patients are managed initially with surveillance"},
+            {"key": "B", "text": "Obtain tumor-marker risk stratification and refer to gynecologic oncology without delaying for interval imaging"},
+            {"key": "C", "text": "Schedule laparoscopic cystectomy with a general gynecologist because she is only mildly symptomatic"},
+            {"key": "D", "text": "Treat empirically for pelvic infection and re-image after antibiotics"},
         ],
         "correct_answer_key": "B",
-        "explanation": "In a symptomatic peri- or postmenopausal patient with a new adnexal mass, malignancy risk is high enough that CA-125 and gynecologic oncology referral are appropriate rather than short-interval observation alone.",
-        "exam_clue": "Early satiety plus a new adnexal mass in a 52-year-old",
-        "board_takeaway": "Adnexal mass plus concerning symptoms in this age group should trigger oncologic risk stratification and specialist referral.",
-        "decision_point": "Recognize when an adnexal mass should be escalated rather than observed",
+        "explanation": "Several options sound superficially reasonable because the patient is stable and symptoms are not dramatic. The decisive nuance is the malignant ultrasound morphology plus symptom pattern, which makes oncologic referral preferable to surveillance or routine benign surgery planning.",
+        "exam_clue": "Complex postmenopausal mass with papillary projections and ascites-type free fluid",
+        "board_takeaway": "Adnexal mass decisions turn on risk pattern, not just symptom intensity; suspicious morphology plus symptoms should move you toward oncologic triage, not watchful waiting.",
+        "decision_point": "Choose surveillance versus oncologic escalation for a suspicious adnexal mass",
         "difficulty_band": "standard",
-        "tempting_wrong_option": "A",
-        "tempting_wrong_reason": "Short-interval repeat imaging alone is not enough when the symptom profile raises concern for malignancy.",
-        "estimated_time_seconds": 60,
+        "tempting_wrong_option": "C",
+        "tempting_wrong_reason": "Operating without oncologic planning is the near-miss error; the issue is not whether surgery may occur, but who should own the initial escalation.",
+        "estimated_time_seconds": 85,
+        "difficulty_target_10": 8,
+        "ambiguity_level": 8,
+        "threshold_variable": "Complex morphology with papillary projections and free fluid",
+        "conflicting_axes": ["clinical stability vs oncologic sonographic risk", "patient preference for surveillance vs referral threshold"],
+        "management_nuance": ["surveillance vs referral", "general gyne surgery vs gyn-onc triage"],
+        "near_miss_options": ["B", "C"],
         "source_id": "study_src_acog_adnexal_mass",
         "source_name": "ACOG Practice Bulletin: Evaluation and Management of Adnexal Masses",
         "source_type": "Guideline",
@@ -529,22 +560,28 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "Gynecologic oncology",
         "subtopic": "Postmenopausal bleeding workup",
-        "question_stem": "A 58-year-old presents with new postmenopausal bleeding. What is the best next step in evaluation?",
+        "question_stem": "A 58-year-old with a single episode of light postmenopausal bleeding is hemodynamically stable and not using hormone therapy. Transvaginal ultrasound performed the same day shows a homogeneous endometrial stripe of 3 mm. What is the best next step now?",
         "options": [
-            {"key": "A", "text": "Reassure her because atrophy is the most common cause"},
-            {"key": "B", "text": "Endometrial biopsy with transvaginal ultrasound as complementary evaluation"},
-            {"key": "C", "text": "Empiric progesterone therapy before any workup"},
-            {"key": "D", "text": "Repeat evaluation only if bleeding recurs again"},
+            {"key": "A", "text": "Offer reassurance with return precautions because a thin endometrial stripe makes immediate biopsy unnecessary after a first isolated episode"},
+            {"key": "B", "text": "Perform endometrial biopsy now because every case of postmenopausal bleeding requires tissue diagnosis regardless of ultrasound findings"},
+            {"key": "C", "text": "Start empiric vaginal estrogen and reassess only if symptoms worsen"},
+            {"key": "D", "text": "Repeat transvaginal ultrasound in 6 weeks before making any management decision"},
         ],
-        "correct_answer_key": "B",
-        "explanation": "Postmenopausal bleeding requires malignancy-focused evaluation. Endometrial biopsy is central, and transvaginal ultrasound can complement risk stratification rather than replace tissue assessment.",
-        "exam_clue": "New postmenopausal bleeding",
-        "board_takeaway": "Postmenopausal bleeding means endometrial pathology must be excluded first, not treated empirically.",
-        "decision_point": "Recognize malignancy-first evaluation in postmenopausal bleeding",
+        "correct_answer_key": "A",
+        "explanation": "This is exactly the kind of question where both ultrasound-first and biopsy-first can sound reasonable. The thin stripe after a first isolated episode allows reassurance with follow-up instructions rather than mandatory biopsy at the first visit.",
+        "exam_clue": "Postmenopausal bleeding with endometrial thickness 3 mm",
+        "board_takeaway": "Postmenopausal bleeding is not one-size-fits-all; endometrial thickness changes whether biopsy is mandatory immediately or can be deferred after an isolated episode.",
+        "decision_point": "Choose biopsy versus reassurance after ultrasound in postmenopausal bleeding",
         "difficulty_band": "standard",
-        "tempting_wrong_option": "A",
-        "tempting_wrong_reason": "Atrophy may be common, but it cannot be assumed before malignancy exclusion.",
-        "estimated_time_seconds": 55,
+        "tempting_wrong_option": "B",
+        "tempting_wrong_reason": "Biopsy is tempting because cancer exclusion is the overall frame, but the thin stripe is the threshold variable that changes the immediate next step.",
+        "estimated_time_seconds": 90,
+        "difficulty_target_10": 9,
+        "ambiguity_level": 9,
+        "threshold_variable": "Endometrial stripe 3 mm after first isolated bleeding episode",
+        "conflicting_axes": ["malignancy concern vs reassuring ultrasound threshold", "first episode vs desire for immediate tissue diagnosis"],
+        "management_nuance": ["TVUS-first vs biopsy-first", "reassurance with return precautions vs invasive testing"],
+        "near_miss_options": ["A", "B"],
         "source_id": "study_src_acog_pmb",
         "source_name": "ACOG: Perimenopausal Bleeding and Bleeding After Menopause",
         "source_type": "Guideline",
@@ -560,22 +597,28 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "General gynecology",
         "subtopic": "Endometrial sampling threshold",
-        "question_stem": "A 46-year-old presents with abnormal uterine bleeding and a known fibroid uterus. What is the best next step in evaluation?",
+        "question_stem": "A 46-year-old with obesity and chronic anovulation presents with 4 months of heavier irregular bleeding. Ultrasound shows a 3-cm intramural fibroid that does not distort the cavity. Hemoglobin is 10.8. She asks whether you can just adjust medical therapy because the fibroid already explains the bleeding. What is the best next step?",
         "options": [
-            {"key": "A", "text": "Treat empirically for fibroids only and defer tissue evaluation"},
-            {"key": "B", "text": "Endometrial sampling as part of the initial evaluation"},
-            {"key": "C", "text": "Observe for 6 months because fibroids explain the bleeding"},
-            {"key": "D", "text": "Hysterectomy before office evaluation"},
+            {"key": "A", "text": "Begin fibroid-directed medical therapy first and defer biopsy unless bleeding fails to improve"},
+            {"key": "B", "text": "Perform endometrial sampling as part of the initial evaluation even though a fibroid is present"},
+            {"key": "C", "text": "Repeat ultrasound after the next cycle because the fibroid is the most likely explanation"},
+            {"key": "D", "text": "Proceed directly to hysteroscopy because office-based sampling is not appropriate when fibroids are seen on ultrasound"},
         ],
         "correct_answer_key": "B",
-        "explanation": "In abnormal uterine bleeding at age 45 or older, endometrial sampling is part of the initial evaluation even when fibroids seem like an obvious structural explanation.",
-        "exam_clue": "Age 46 with AUB despite a known structural explanation",
-        "board_takeaway": "Age 45 or older with AUB should trigger endometrial sampling rather than anchoring on fibroids alone.",
-        "decision_point": "Do not let a plausible structural cause replace indicated malignancy-focused evaluation",
+        "explanation": "The trap is anchoring on the fibroid. Age 45 or older already lowers the threshold for sampling, and obesity plus anovulation add competing endometrial risk that makes biopsy part of the initial evaluation.",
+        "exam_clue": "AUB age 46 with obesity/anovulation despite a plausible fibroid explanation",
+        "board_takeaway": "A structural explanation does not cancel biopsy thresholds; age and endometrial risk factors can outweigh the temptation to blame the fibroid.",
+        "decision_point": "Decide when fibroid-directed management is insufficient without initial endometrial sampling",
         "difficulty_band": "standard",
         "tempting_wrong_option": "A",
-        "tempting_wrong_reason": "Fibroids can coexist with endometrial pathology, so they do not remove the need for sampling in this age group.",
-        "estimated_time_seconds": 55,
+        "tempting_wrong_reason": "Medical therapy is reasonable for fibroid-related bleeding, but here it becomes a near-miss because age and endometrial risk factors shift the first step toward sampling.",
+        "estimated_time_seconds": 85,
+        "difficulty_target_10": 8,
+        "ambiguity_level": 8,
+        "threshold_variable": "Age >=45 with additional endometrial risk factors",
+        "conflicting_axes": ["visible structural cause vs endometrial cancer risk", "medical management preference vs biopsy threshold"],
+        "management_nuance": ["sampling first vs empiric treatment first", "fibroid presence does not end the workup"],
+        "near_miss_options": ["A", "B"],
         "source_id": "study_src_acog_aub",
         "source_name": "ACOG: Abnormal Uterine Bleeding",
         "source_type": "Guideline",
@@ -693,22 +736,28 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "Obstetrics",
         "subtopic": "Postpartum severe hypertension",
-        "question_stem": "Five days postpartum, a patient presents with severe headache, blood pressure 170/112, and visual symptoms. What is the most appropriate next step?",
+        "question_stem": "Five days postpartum, a patient presents with severe headache, blood pressure 170/112, visual spots, normal oxygen saturation, and only trace protein on dipstick. She is neurologically intact and asks whether this could wait until formal labs result because she had no hypertension before discharge. What is the best next step?",
         "options": [
-            {"key": "A", "text": "Treat as postpartum preeclampsia with severe features, begin acute blood pressure control, and give magnesium sulfate"},
-            {"key": "B", "text": "Reassure her because preeclampsia only occurs before delivery"},
-            {"key": "C", "text": "Delay treatment until urine protein results return"},
-            {"key": "D", "text": "Manage as simple postpartum headache with oral analgesics only"},
+            {"key": "A", "text": "Treat as postpartum preeclampsia with severe features, begin acute blood pressure control, and give magnesium sulfate now"},
+            {"key": "B", "text": "Repeat blood pressure after analgesia and wait for urine protein quantification before treating aggressively"},
+            {"key": "C", "text": "Admit for observation and labs but hold magnesium unless proteinuria is confirmed"},
+            {"key": "D", "text": "Arrange urgent outpatient follow-up the same day because postpartum hypertension often peaks after discharge"},
         ],
         "correct_answer_key": "A",
-        "explanation": "Postpartum preeclampsia can present after discharge. Severe hypertension with neurologic symptoms requires urgent treatment and seizure prophylaxis rather than waiting for proteinuria confirmation.",
-        "exam_clue": "Postpartum severe-range blood pressure with headache and visual symptoms",
-        "board_takeaway": "Severe postpartum hypertension is still preeclampsia territory and needs urgent treatment now.",
-        "decision_point": "Recognize and treat postpartum preeclampsia with severe features",
+        "explanation": "The nuance is that several conservative options sound defensible because she is postpartum and dipstick protein is minimal. Severe-range pressure plus neurologic symptoms is enough to treat now; postpartum timing and limited proteinuria do not make it safe to wait.",
+        "exam_clue": "Postpartum severe-range blood pressure with neurologic symptoms despite minimal proteinuria",
+        "board_takeaway": "In postpartum hypertension, severe symptoms and severe-range blood pressure matter more than waiting for protein confirmation.",
+        "decision_point": "Choose immediate treatment versus delayed confirmation in postpartum severe hypertension",
         "difficulty_band": "standard",
         "tempting_wrong_option": "C",
-        "tempting_wrong_reason": "Proteinuria is not required before treating severe postpartum hypertension with neurologic symptoms.",
-        "estimated_time_seconds": 60,
+        "tempting_wrong_reason": "Admission is reasonable, but withholding magnesium is the near-miss error because the severe neurologic presentation already crosses the treatment threshold.",
+        "estimated_time_seconds": 85,
+        "difficulty_target_10": 8,
+        "ambiguity_level": 8,
+        "threshold_variable": "Severe-range blood pressure with headache/visual symptoms postpartum",
+        "conflicting_axes": ["minimal proteinuria vs severe symptoms", "clinically stable appearance vs need for urgent treatment"],
+        "management_nuance": ["treat now vs await confirmation", "magnesium threshold in postpartum disease"],
+        "near_miss_options": ["A", "C"],
         "source_id": "study_src_acog_preeclampsia",
         "source_name": "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia",
         "source_type": "Guideline",
@@ -786,22 +835,28 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "Obstetrics",
         "subtopic": "Procedural overlap",
-        "question_stem": "A patient with severe preeclampsia in labor has platelets of 68,000 and requests epidural analgesia. What is the best next step?",
+        "question_stem": "A laboring patient with severe preeclampsia requests epidural analgesia. Platelets were 92,000 six hours ago and are now 68,000 with an otherwise normal coagulation profile. She is uncomfortable but fetal status remains reassuring and induction is ongoing. What is the best next step?",
         "options": [
-            {"key": "A", "text": "Avoid routine neuraxial placement at this platelet count and discuss alternative analgesia while the obstetric plan proceeds"},
-            {"key": "B", "text": "Place the epidural because thrombocytopenia from preeclampsia never changes neuraxial decisions"},
-            {"key": "C", "text": "Delay all obstetric management until platelets normalize"},
-            {"key": "D", "text": "Give aspirin and then proceed with epidural placement"},
+            {"key": "A", "text": "Avoid routine neuraxial placement at this platelet count, discuss alternative analgesia, and continue the obstetric plan"},
+            {"key": "B", "text": "Proceed with epidural placement because the coagulation profile is otherwise normal and she strongly desires neuraxial analgesia"},
+            {"key": "C", "text": "Stop the induction until platelet count recovers to above 100,000"},
+            {"key": "D", "text": "Give platelet transfusion solely to facilitate epidural placement in an otherwise stable labor course"},
         ],
         "correct_answer_key": "A",
-        "explanation": "Significant thrombocytopenia changes neuraxial risk assessment. The board point is not to freeze the entire obstetric plan, but to recognize that epidural placement may be unsafe at this range.",
-        "exam_clue": "Severe preeclampsia with platelets 68,000",
-        "board_takeaway": "Low platelets can change neuraxial decisions without changing the need to keep the delivery plan moving.",
-        "decision_point": "Recognize when thrombocytopenia changes neuraxial analgesia decisions in obstetrics",
+        "explanation": "This is not a question about abandoning delivery; it is about separating the neuraxial decision from the obstetric plan. The falling platelet trend into the high-60s makes neuraxial placement difficult to justify even though some surrounding details sound reassuring.",
+        "exam_clue": "Rapid platelet decline to 68,000 in severe preeclampsia",
+        "board_takeaway": "Neuraxial decisions in preeclampsia depend on platelet range and trajectory; a reassuring labor course does not neutralize hematoma risk.",
+        "decision_point": "Choose alternative analgesia versus neuraxial placement when platelets are falling in severe preeclampsia",
         "difficulty_band": "standard",
-        "tempting_wrong_option": "C",
-        "tempting_wrong_reason": "The mistake is stopping the obstetric plan entirely; the real pivot is the neuraxial decision, not whether preeclampsia still needs management.",
-        "estimated_time_seconds": 65,
+        "tempting_wrong_option": "B",
+        "tempting_wrong_reason": "Normal coagulation studies and patient preference are not enough to overcome the platelet threshold and downward trend.",
+        "estimated_time_seconds": 90,
+        "difficulty_target_10": 9,
+        "ambiguity_level": 8,
+        "threshold_variable": "Platelets 68,000 and falling",
+        "conflicting_axes": ["analgesia request vs neuraxial bleeding risk", "normal coagulation profile vs unsafe platelet threshold"],
+        "management_nuance": ["neuraxial decision separate from delivery plan", "platelet trend matters, not just one number"],
+        "near_miss_options": ["A", "B"],
         "source_id": "study_src_society_ob_anesthesia",
         "source_name": "SOAP Consensus Statement on Thrombocytopenia and Neuraxial Procedures",
         "source_type": "Consensus statement",
@@ -978,6 +1033,7 @@ def _difficulty_policy_for_profile(user_profile):
         "min_level": min_level,
         "max_level": max_level,
         "prefer_advanced_mcq_stack": residency_year == "R6",
+        "prefer_stage_b_judgment": residency_year == "R6",
         "practice_floor": max(min_level, baseline_level - 1) if residency_year == "R6" else min_level,
     }
 
@@ -1135,6 +1191,11 @@ def _normalize_study_item(item):
     )
     normalized["question_style"] = normalized.get("question_style") or _infer_question_style(normalized)
     normalized["difficulty_band"] = _difficulty_band_for_level(normalized["difficulty_level"])
+    normalized["difficulty_target_10"] = int(normalized.get("difficulty_target_10") or normalized["difficulty_level"])
+    normalized["ambiguity_level"] = int(normalized.get("ambiguity_level") or 0)
+    normalized["conflicting_axes"] = [axis for axis in (normalized.get("conflicting_axes") or []) if axis]
+    normalized["management_nuance"] = [axis for axis in (normalized.get("management_nuance") or []) if axis]
+    normalized["near_miss_options"] = [option for option in (normalized.get("near_miss_options") or []) if option]
 
     if normalized.get("item_type") == "mcq":
         normalized["correct_answer_key"] = (
@@ -1164,6 +1225,8 @@ def _normalize_study_item(item):
         )
         normalized["tempting_wrong_option"] = normalized.get("tempting_wrong_option")
         normalized["tempting_wrong_reason"] = normalized.get("tempting_wrong_reason")
+        quality = _stage_b_quality_metadata(normalized)
+        normalized.update(quality)
 
     if normalized.get("item_type") == "pearl":
         existing_bullets = [bullet for bullet in (normalized.get("bullets") or []) if bullet]
@@ -1195,6 +1258,45 @@ def _normalize_study_item(item):
         normalized["board_takeaway"] = normalized.get("board_takeaway") or board_focus
         normalized["bullets"] = [line for line in [key_fact, clinical_consequence, board_focus] if line]
     return normalized
+
+
+def _stage_b_quality_metadata(item):
+    options = item.get("options") or []
+    option_texts = [" " + (option.get("text") or "").strip().lower() + " " for option in options]
+    absolute_option_count = sum(
+        1 for text in option_texts if any(marker in text for marker in ABSOLUTE_DISTRACTOR_MARKERS)
+    )
+    high_quality_distractors = len(item.get("near_miss_options") or [])
+    has_threshold = bool(item.get("threshold_variable"))
+    has_conflict = bool(item.get("conflicting_axes"))
+    ambiguity_level = int(item.get("ambiguity_level") or 0)
+    management_nuance = len(item.get("management_nuance") or [])
+    difficulty_target = int(item.get("difficulty_target_10") or item.get("difficulty_level") or 0)
+    high_judgment_style = item.get("question_style") in HIGH_JUDGMENT_STYLE_NAMES
+
+    score = 0
+    if ambiguity_level >= 7:
+        score += 2
+    if high_quality_distractors >= 2:
+        score += 2
+    if has_threshold:
+        score += 2
+    if has_conflict:
+        score += 2
+    if management_nuance >= 2:
+        score += 1
+    if high_judgment_style:
+        score += 1
+    if difficulty_target >= 7:
+        score += 1
+    if absolute_option_count == 0:
+        score += 1
+
+    return {
+        "stage_b_quality_score": score,
+        "stage_b_ready": score >= 8,
+        "absolute_option_count": absolute_option_count,
+    }
 
 
 def _default_state(session_id):
@@ -1436,6 +1538,9 @@ def _selection_score(
         score += max(0, 34 - (distance * 10))
     if preferred_question_style and item.get("question_style") == preferred_question_style:
         score += 20
+    if item.get("stage_b_ready"):
+        score += 18
+    score += int(item.get("stage_b_quality_score") or 0) * 3
     if reinforcement:
         if topic == reinforcement.get("topic"):
             score += 26
@@ -1727,11 +1832,20 @@ def _practice_candidates_for_policy(mcq_pool, used_ids, target_level, policy):
         and practice_floor <= item.get("difficulty_level", 0) <= target_level
     ]
     if candidates:
+        if policy.get("prefer_stage_b_judgment"):
+            advanced = [item for item in candidates if item.get("stage_b_ready")]
+            if advanced:
+                return advanced
         return candidates
-    return [
+    fallback = [
         item for item in mcq_pool
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= practice_floor
     ]
+    if policy.get("prefer_stage_b_judgment"):
+        advanced = [item for item in fallback if item.get("stage_b_ready")]
+        if advanced:
+            return advanced
+    return fallback
 
 
 def _advanced_mcq_candidates_for_policy(mcq_pool, used_ids, target_level, policy):
@@ -1741,11 +1855,20 @@ def _advanced_mcq_candidates_for_policy(mcq_pool, used_ids, target_level, policy
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= challenge_floor
     ]
     if candidates:
+        if policy.get("prefer_stage_b_judgment"):
+            advanced = [item for item in candidates if item.get("stage_b_ready")]
+            if advanced:
+                return advanced
         return candidates
-    return [
+    fallback = [
         item for item in mcq_pool
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= target_level
     ]
+    if policy.get("prefer_stage_b_judgment"):
+        advanced = [item for item in fallback if item.get("stage_b_ready")]
+        if advanced:
+            return advanced
+    return fallback
 
 
 def get_idle_study_cards(session_id):
