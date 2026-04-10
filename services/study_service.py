@@ -77,6 +77,8 @@ DIFFICULTY_ENGINE_RULES = (
             "near_miss_distractors",
             "near_correct_trap",
             "plausible_option_count",
+            "tradeoff_axes",
+            "decision_pressure",
             "conflicting_axes",
             "threshold_variable",
             "dynamic_progression",
@@ -1375,6 +1377,8 @@ def _normalize_study_item(item):
     normalized["near_miss_options"] = [option for option in (normalized.get("near_miss_options") or []) if option]
     normalized["clinical_noise"] = [entry for entry in (normalized.get("clinical_noise") or []) if entry]
     normalized["dynamic_progression"] = [entry for entry in (normalized.get("dynamic_progression") or []) if entry]
+    normalized["tradeoff_axes"] = [axis for axis in (normalized.get("tradeoff_axes") or normalized.get("conflicting_axes") or []) if axis]
+    normalized["decision_pressure"] = [entry for entry in (normalized.get("decision_pressure") or normalized.get("dynamic_progression") or []) if entry]
     normalized["threshold_type"] = normalized.get("threshold_type")
     normalized["near_correct_trap"] = normalized.get("near_correct_trap")
     normalized["plausible_option_count"] = int(normalized.get("plausible_option_count") or 0)
@@ -1385,6 +1389,10 @@ def _normalize_study_item(item):
     normalized["template_family"] = (
         normalized.get("template_family")
         or _infer_template_family(normalized)
+    )
+    normalized["decision_archetype"] = (
+        normalized.get("decision_archetype")
+        or _infer_decision_archetype(normalized)
     )
 
     if normalized.get("item_type") == "mcq":
@@ -1485,6 +1493,22 @@ def _infer_template_family(item):
     return "core_decision"
 
 
+def _infer_decision_archetype(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+    template_family = (item.get("template_family") or "").strip().lower()
+    if threshold_type == "contraindication_vs_context":
+        return "contraindication_context"
+    if threshold_type in {"response_to_treatment", "treatment_response_plus_age"} or template_family == "response_over_time":
+        return "continue_vs_escalate"
+    if "timing" in threshold_type or template_family == "timing_threshold":
+        return "timing_pivot"
+    if template_family == "conflicting_risk_axes":
+        return "conflicting_strategies"
+    if template_family == "borderline_threshold":
+        return "threshold_reassessment"
+    return "core_decision"
+
+
 def _stage_b_quality_metadata(item):
     options = item.get("options") or []
     correct_key = (item.get("correct_answer_key") or "").upper()
@@ -1510,9 +1534,12 @@ def _stage_b_quality_metadata(item):
     has_decision_frame = item.get("decision_frame") == "best_next_step"
     clinical_noise_count = len(item.get("clinical_noise") or [])
     dynamic_progression_count = len(item.get("dynamic_progression") or [])
+    tradeoff_axes_count = len(item.get("tradeoff_axes") or [])
+    decision_pressure_count = len(item.get("decision_pressure") or [])
     plausible_option_count = int(item.get("plausible_option_count") or 0)
     has_near_correct_trap = bool(item.get("near_correct_trap"))
     has_template_family = bool(item.get("template_family"))
+    decision_archetype = item.get("decision_archetype")
 
     score = 0
     if has_decision_frame:
@@ -1537,6 +1564,10 @@ def _stage_b_quality_metadata(item):
         score += 1
     if dynamic_progression_count >= 1:
         score += 1
+    if tradeoff_axes_count >= 1:
+        score += 1
+    if decision_pressure_count >= 1:
+        score += 1
     if plausible_option_count >= 2:
         score += 1
     if has_near_correct_trap:
@@ -1547,6 +1578,8 @@ def _stage_b_quality_metadata(item):
         "near_miss_distractors": high_quality_distractors >= 2,
         "near_correct_trap": has_near_correct_trap,
         "plausible_option_count": plausible_option_count >= 2,
+        "tradeoff_axes": tradeoff_axes_count >= 1,
+        "decision_pressure": decision_pressure_count >= 1,
         "conflicting_axes": has_conflict,
         "threshold_variable": has_threshold,
         "dynamic_progression": dynamic_progression_count >= 1,
@@ -1569,6 +1602,21 @@ def _stage_b_quality_metadata(item):
         quality_status = "needs_rewrite" if len(required_failures) >= 2 else "downgraded"
         rewrite_actions = list(required_failures)
 
+    disguised_recall_archetype = None
+    if difficulty_target >= 7:
+        if decision_archetype == "contraindication_context":
+            disguised_recall_archetype = "contraindication_only"
+        elif (
+            "first-line" in (" " + (item.get("question_stem") or "").lower() + " ")
+            and dynamic_progression_count == 0
+        ):
+            disguised_recall_archetype = "first_line_only"
+        elif (
+            item.get("question_style") == "diagnosis_refinement"
+            and not item.get("decision_frame") == "best_next_step"
+        ):
+            disguised_recall_archetype = "classic_pattern_identification"
+
     return {
         "stage_b_quality_score": score,
         "stage_b_ready": score >= 8 and difficulty_engine_ready,
@@ -1581,6 +1629,7 @@ def _stage_b_quality_metadata(item):
         "effective_difficulty_target_10": effective_target,
         "difficulty_engine_status": quality_status,
         "rewrite_actions": rewrite_actions,
+        "disguised_recall_archetype": disguised_recall_archetype,
     }
 
 
@@ -1898,6 +1947,8 @@ def _eligible_for_main_flow(item, policy):
         return True
     target_10 = int(item.get("effective_difficulty_target_10") or item.get("difficulty_target_10") or 0)
     if target_10 < int(policy.get("main_flow_min_target_10") or 0):
+        return False
+    if item.get("disguised_recall_archetype"):
         return False
     return bool(item.get("difficulty_engine_ready"))
 
