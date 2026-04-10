@@ -6,7 +6,7 @@ from settings import APP_ENV
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
-APP_VERSION = "v0.3.101"
+APP_VERSION = "v0.3.102"
 
 
 @router.get("/")
