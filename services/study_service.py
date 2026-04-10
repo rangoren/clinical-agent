@@ -32,7 +32,7 @@ DIFFICULTY_LEVEL_DISTRIBUTIONS = {
     "R3": {3: 50, 4: 30, 2: 20},
     "R4": {4: 50, 5: 30, 3: 20},
     "R5": {5: 60, 6: 30, 4: 10},
-    "R6": {6: 70, 5: 20, 4: 10},
+    "R6": {6: 85, 5: 15},
 }
 
 DIFFICULTY_LEVEL_BOUNDS = {
@@ -41,7 +41,7 @@ DIFFICULTY_LEVEL_BOUNDS = {
     "R3": (2, 4),
     "R4": (3, 5),
     "R5": (4, 6),
-    "R6": (4, 6),
+    "R6": (5, 6),
 }
 
 QUESTION_STYLE_DISTRIBUTIONS = {
@@ -81,16 +81,15 @@ QUESTION_STYLE_DISTRIBUTIONS = {
         "pearl": 5,
     },
     6: {
-        "clinical_decision": 65,
-        "trap": 15,
-        "overlap": 10,
-        "diagnosis_refinement": 5,
-        "pearl": 5,
+        "clinical_decision": 35,
+        "trap": 35,
+        "overlap": 20,
+        "diagnosis_refinement": 10,
     },
 }
 
 SEED_ITEM_METADATA_OVERRIDES = {
-    "mcq_preeclampsia_delivery": {"difficulty_level": 5, "question_style": "clinical_decision"},
+    "mcq_preeclampsia_delivery": {"difficulty_level": 6, "question_style": "clinical_decision"},
     "mcq_pph_first_step": {"difficulty_level": 1, "question_style": "clinical_decision"},
     "mcq_ctg_late_decels": {"difficulty_level": 4, "question_style": "diagnosis_refinement"},
     "mcq_pprom_antibiotics": {"difficulty_level": 5, "question_style": "clinical_decision"},
@@ -103,16 +102,16 @@ SEED_ITEM_METADATA_OVERRIDES = {
     "pearl_emergency_contraception": {"difficulty_level": 3, "question_style": "pearl"},
     "pearl_endometriosis_first_line": {"difficulty_level": 4, "question_style": "pearl"},
     "pearl_menopause_bleeding": {"difficulty_level": 4, "question_style": "pearl"},
-    "mcq_unexplained_infertility_escalation": {"difficulty_level": 5, "question_style": "clinical_decision"},
+    "mcq_unexplained_infertility_escalation": {"difficulty_level": 6, "question_style": "clinical_decision"},
     "mcq_adnexal_mass_referral": {"difficulty_level": 6, "question_style": "trap"},
-    "mcq_postmenopausal_bleeding_biopsy": {"difficulty_level": 5, "question_style": "trap"},
-    "mcq_aub_age45_sampling": {"difficulty_level": 5, "question_style": "trap"},
+    "mcq_postmenopausal_bleeding_biopsy": {"difficulty_level": 6, "question_style": "trap"},
+    "mcq_aub_age45_sampling": {"difficulty_level": 6, "question_style": "trap"},
     "pearl_adnexal_mass_referral": {"difficulty_level": 5, "question_style": "pearl"},
     "pearl_postmenopausal_bleeding_workup": {"difficulty_level": 5, "question_style": "pearl"},
     "mcq_uti_nonpregnant_first_line": {"difficulty_level": 5, "question_style": "overlap"},
-    "mcq_postpartum_endometritis_antibiotics": {"difficulty_level": 5, "question_style": "clinical_decision"},
+    "mcq_postpartum_endometritis_antibiotics": {"difficulty_level": 6, "question_style": "clinical_decision"},
     "mcq_postpartum_pe_headache": {"difficulty_level": 6, "question_style": "trap"},
-    "mcq_vte_postpartum_estrogen": {"difficulty_level": 5, "question_style": "overlap"},
+    "mcq_vte_postpartum_estrogen": {"difficulty_level": 6, "question_style": "overlap"},
     "mcq_pregnancy_pyelo_admit": {"difficulty_level": 5, "question_style": "overlap"},
     "mcq_platelets_neuraxial_preeclampsia": {"difficulty_level": 6, "question_style": "trap"},
     "mcq_hypoosmolar_hyponatremia_labor": {"difficulty_level": 6, "question_style": "overlap"},
@@ -978,6 +977,8 @@ def _difficulty_policy_for_profile(user_profile):
         "baseline_level": baseline_level,
         "min_level": min_level,
         "max_level": max_level,
+        "prefer_advanced_mcq_stack": residency_year == "R6",
+        "practice_floor": max(min_level, baseline_level - 1) if residency_year == "R6" else min_level,
     }
 
 
@@ -1718,6 +1719,35 @@ def _pick_targeted_item(
     )
 
 
+def _practice_candidates_for_policy(mcq_pool, used_ids, target_level, policy):
+    practice_floor = min(policy["max_level"], int(policy.get("practice_floor") or policy["min_level"]))
+    candidates = [
+        item for item in mcq_pool
+        if item["id"] not in used_ids
+        and practice_floor <= item.get("difficulty_level", 0) <= target_level
+    ]
+    if candidates:
+        return candidates
+    return [
+        item for item in mcq_pool
+        if item["id"] not in used_ids and item.get("difficulty_level", 0) >= practice_floor
+    ]
+
+
+def _advanced_mcq_candidates_for_policy(mcq_pool, used_ids, target_level, policy):
+    challenge_floor = max(target_level, policy["max_level"] - 1)
+    candidates = [
+        item for item in mcq_pool
+        if item["id"] not in used_ids and item.get("difficulty_level", 0) >= challenge_floor
+    ]
+    if candidates:
+        return candidates
+    return [
+        item for item in mcq_pool
+        if item["id"] not in used_ids and item.get("difficulty_level", 0) >= target_level
+    ]
+
+
 def get_idle_study_cards(session_id):
     ensure_study_content_seed()
     state = _load_state(session_id)
@@ -1743,10 +1773,7 @@ def get_idle_study_cards(session_id):
     style_distribution = _prune_distribution(_distribution_for_level(target_level), available_styles)
     target_style = _target_question_style(state, target_level, style_distribution.keys())
 
-    practice_candidates = [
-        item for item in mcq_pool
-        if item["id"] not in used_ids and item.get("difficulty_level", 0) <= target_level
-    ]
+    practice_candidates = _practice_candidates_for_policy(mcq_pool, used_ids, target_level, policy)
     practice_item = _pick_targeted_item(
         session_id,
         state,
@@ -1782,21 +1809,39 @@ def get_idle_study_cards(session_id):
         used_ids.add(challenge_item["id"])
         cards.append(_build_card("dynamic_card", "dynamic", challenge_item, _title_for_dynamic(challenge_item, bool(preferred_topic)), "Push a bit harder", "Continue"))
 
-    pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids | recent_exclude_ids) or _get_items(item_type="pearl", exclude_ids=used_ids)
-    pearl_pool = _family_first_candidates(pearl_pool, state)
-    pearl_item = _pick_targeted_item(
-        session_id,
-        state,
-        pearl_pool,
-        "pearl",
-        preferred_item_type="pearl",
-        preferred_topic=preferred_topic,
-        preferred_difficulty_level=min(target_level, policy["max_level"]),
-        preferred_question_style="pearl",
-    )
-    if pearl_item:
-        used_ids.add(pearl_item["id"])
-        cards.append(_build_card("pearl_card", "pearl", pearl_item, "Quick Pearl", "Quick takeaway", "Open"))
+    if policy.get("prefer_advanced_mcq_stack"):
+        advanced_candidates = _advanced_mcq_candidates_for_policy(mcq_pool, used_ids, target_level, policy)
+        advanced_item = _pick_targeted_item(
+            session_id,
+            state,
+            advanced_candidates,
+            "advanced",
+            preferred_item_type="mcq",
+            preferred_topic=preferred_topic,
+            preferred_difficulty_level=policy["max_level"],
+            preferred_question_style=challenge_style or target_style,
+            reinforcement=reinforcement,
+        )
+        if advanced_item:
+            used_ids.add(advanced_item["id"])
+            cards.append(_build_card("advanced_card", "dynamic", advanced_item, "Senior Challenge", "Board-style trap", "Continue"))
+
+    if len(cards) < 3:
+        pearl_pool = _get_items(item_type="pearl", exclude_ids=used_ids | recent_exclude_ids) or _get_items(item_type="pearl", exclude_ids=used_ids)
+        pearl_pool = _family_first_candidates(pearl_pool, state)
+        pearl_item = _pick_targeted_item(
+            session_id,
+            state,
+            pearl_pool,
+            "pearl",
+            preferred_item_type="pearl",
+            preferred_topic=preferred_topic,
+            preferred_difficulty_level=min(target_level, policy["max_level"]),
+            preferred_question_style="pearl",
+        )
+        if pearl_item:
+            used_ids.add(pearl_item["id"])
+            cards.append(_build_card("pearl_card", "pearl", pearl_item, "Quick Pearl", "Quick takeaway", "Open"))
 
     if len(cards) < 3:
         fallback_pool = _get_items(exclude_ids=used_ids | recent_exclude_ids) or _get_items(exclude_ids=used_ids)
