@@ -47,6 +47,7 @@ OBVIOUS_WRONG_DISTRACTOR_MARKERS = (
     " delay all ",
 )
 HIGH_JUDGMENT_STYLE_NAMES = {"trap", "overlap", "diagnosis_refinement"}
+TEMPLATE_FAMILY_HISTORY_WINDOW = 8
 DECISION_FRAME_MARKERS = (
     "best next step",
     "best next move",
@@ -74,12 +75,15 @@ DIFFICULTY_ENGINE_RULES = (
         "required": (
             "decision_frame",
             "near_miss_distractors",
+            "near_correct_trap",
+            "plausible_option_count",
             "conflicting_axes",
             "threshold_variable",
+            "dynamic_progression",
             "clinical_noise",
             "no_obvious_wrong_distractors",
         ),
-        "recommended": ("high_ambiguity", "management_nuance", "high_judgment_style"),
+        "recommended": ("high_ambiguity", "management_nuance", "high_judgment_style", "template_family"),
     },
 )
 
@@ -213,10 +217,15 @@ STUDY_SEED_ITEMS = [
         "difficulty_target_10": 9,
         "ambiguity_level": 8,
         "threshold_variable": "<34 weeks with stable maternal-fetal status",
+        "threshold_type": "gestational_age_plus_stability",
         "conflicting_axes": ["prematurity risk vs maternal severe disease", "intermittent severe blood pressure vs reassuring labs/testing"],
         "management_nuance": ["expectant inpatient management", "delivery trigger thresholds", "steroid timing should not dominate the decision"],
         "near_miss_options": ["A", "B"],
+        "near_correct_trap": "B",
+        "plausible_option_count": 2,
         "clinical_noise": ["completed betamethasone 24 hours ago", "creatinine remains normal"],
+        "dynamic_progression": ["completed betamethasone 24 hours ago", "blood pressures have been persistently elevated but without progressive end-organ change"],
+        "template_family": "timing_threshold",
         "source_id": "study_src_nice_hypertension",
         "source_name": "NICE Guideline: Hypertension in Pregnancy",
         "source_type": "Guideline",
@@ -294,22 +303,35 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "PPROM",
         "subtopic": "Latency management",
-        "question_stem": "A patient has PPROM at 30 weeks with no signs of chorioamnionitis or fetal compromise. Which management step best improves latency and outcomes?",
+        "question_stem": "A 30+2-week patient with PPROM has been inpatient for 18 hours. She has no uterine tenderness, no fetal tachycardia, reassuring fetal testing, WBC 14,800, and mild irregular contractions that have now settled after hydration. She asks whether continued observation alone is enough if the tracing stays normal. What is the best next step now?",
         "options": [
-            {"key": "A", "text": "Latency antibiotics"},
-            {"key": "B", "text": "Immediate delivery because membranes are ruptured"},
-            {"key": "C", "text": "Prolonged routine tocolysis alone"},
-            {"key": "D", "text": "Observation only if fetal tracing is normal"},
+            {"key": "A", "text": "Begin latency antibiotics as part of ongoing expectant inpatient management"},
+            {"key": "B", "text": "Proceed to delivery now because the white count is elevated and contractions were present earlier"},
+            {"key": "C", "text": "Use prolonged maintenance tocolysis to gain the greatest latency benefit before giving antibiotics"},
+            {"key": "D", "text": "Continue observation alone because reassuring fetal testing makes antibiotics unnecessary"},
         ],
         "correct_answer_key": "A",
-        "explanation": "In appropriate PPROM cases before term and without infection, latency antibiotics help prolong pregnancy and reduce infectious morbidity.",
-        "exam_clue": "PPROM at 30 weeks without infection",
-        "board_takeaway": "PPROM before term without infection: give latency antibiotics as part of expectant management.",
-        "decision_point": "Choose a supportive management step in preterm PPROM",
+        "explanation": "This is not just a recall question about antibiotics. The patient has borderline noise that could push some learners toward delivery, but the absence of convincing infection or fetal compromise keeps her in the expectant-management pathway, where latency antibiotics remain part of the optimal next step.",
+        "exam_clue": "PPROM before 34 weeks with borderline but not convincing infection signals",
+        "board_takeaway": "In PPROM, mild noise such as leukocytosis or settled contractions should not automatically override the expectant-management bundle when infection and fetal compromise are not established.",
+        "decision_point": "Choose expectant management with latency antibiotics versus premature delivery in PPROM",
         "difficulty_band": "standard",
-        "tempting_wrong_option": "D",
-        "tempting_wrong_reason": "Normal fetal tracing does not remove the benefit of latency antibiotics in eligible preterm PPROM.",
-        "estimated_time_seconds": 55,
+        "tempting_wrong_option": "B",
+        "tempting_wrong_reason": "Earlier contractions and modest leukocytosis create tension, but without convincing clinical infection or fetal compromise they do not yet mandate delivery.",
+        "estimated_time_seconds": 85,
+        "decision_frame": "best_next_step",
+        "difficulty_target_10": 8,
+        "ambiguity_level": 8,
+        "threshold_variable": "30+2 weeks without clear infection or fetal compromise",
+        "threshold_type": "gestational_age_plus_clinical_trajectory",
+        "conflicting_axes": ["preterm latency benefit vs concern for evolving infection", "reassuring fetal status vs earlier contractions and leukocytosis"],
+        "management_nuance": ["expectant bundle vs delivery", "latency antibiotics vs observation alone", "do not overcall infection from one noisy variable"],
+        "near_miss_options": ["A", "B"],
+        "near_correct_trap": "B",
+        "plausible_option_count": 2,
+        "clinical_noise": ["WBC 14,800", "irregular contractions that settled after hydration"],
+        "dynamic_progression": ["18 hours into inpatient PPROM management", "earlier contractions have improved"],
+        "template_family": "conflicting_risk_axes",
         "source_id": "study_src_acog_prom",
         "source_name": "ACOG Practice Bulletin: Prelabor Rupture of Membranes",
         "source_type": "Guideline",
@@ -437,10 +459,15 @@ STUDY_SEED_ITEMS = [
         "difficulty_target_10": 9,
         "ambiguity_level": 9,
         "threshold_variable": "No meaningful clinical improvement after 48 hours of IV therapy",
+        "threshold_type": "response_to_treatment",
         "conflicting_axes": ["hemodynamic stability vs persistent infection", "moderate abscess size vs failure of medical therapy"],
         "management_nuance": ["continued IV therapy vs drainage", "size does not override trajectory", "inpatient status alone is not enough"],
         "near_miss_options": ["A", "B"],
+        "near_correct_trap": "A",
+        "plausible_option_count": 2,
         "clinical_noise": ["abscess remains under 5 cm", "hemodynamically stable on exam"],
+        "dynamic_progression": ["48 hours of IV antibiotics completed", "persistent fever and pain despite treatment"],
+        "template_family": "response_over_time",
         "source_id": "study_src_cdc_pid",
         "source_name": "CDC STI Treatment Guidelines: PID",
         "source_type": "Guideline",
@@ -591,10 +618,15 @@ STUDY_SEED_ITEMS = [
         "difficulty_target_10": 8,
         "ambiguity_level": 8,
         "threshold_variable": "Complex morphology with papillary projections and free fluid",
+        "threshold_type": "imaging_risk_pattern",
         "conflicting_axes": ["clinical stability vs oncologic sonographic risk", "patient preference for surveillance vs referral threshold"],
         "management_nuance": ["surveillance vs referral", "general gyne surgery vs gyn-onc triage"],
         "near_miss_options": ["B", "C"],
+        "near_correct_trap": "C",
+        "plausible_option_count": 2,
         "clinical_noise": ["pain is mild", "patient prefers repeat imaging first"],
+        "dynamic_progression": ["3 months of bloating and early satiety", "new complex mass identified now"],
+        "template_family": "conflicting_risk_axes",
         "source_id": "study_src_acog_adnexal_mass",
         "source_name": "ACOG Practice Bulletin: Evaluation and Management of Adnexal Masses",
         "source_type": "Guideline",
@@ -630,10 +662,15 @@ STUDY_SEED_ITEMS = [
         "difficulty_target_10": 9,
         "ambiguity_level": 9,
         "threshold_variable": "Endometrial stripe 3 mm after first isolated bleeding episode",
+        "threshold_type": "ultrasound_threshold",
         "conflicting_axes": ["malignancy concern vs reassuring ultrasound threshold", "first episode vs desire for immediate tissue diagnosis"],
         "management_nuance": ["TVUS-first vs biopsy-first", "reassurance with return precautions vs invasive testing"],
         "near_miss_options": ["A", "B"],
+        "near_correct_trap": "B",
+        "plausible_option_count": 2,
         "clinical_noise": ["single light episode", "not using hormone therapy"],
+        "dynamic_progression": ["same-day ultrasound already performed", "this is the first isolated bleeding episode"],
+        "template_family": "borderline_threshold",
         "source_id": "study_src_acog_pmb",
         "source_name": "ACOG: Perimenopausal Bleeding and Bleeding After Menopause",
         "source_type": "Guideline",
@@ -669,10 +706,15 @@ STUDY_SEED_ITEMS = [
         "difficulty_target_10": 8,
         "ambiguity_level": 8,
         "threshold_variable": "Age >=45 with additional endometrial risk factors",
+        "threshold_type": "age_plus_risk_factor_threshold",
         "conflicting_axes": ["visible structural cause vs endometrial cancer risk", "medical management preference vs biopsy threshold"],
         "management_nuance": ["sampling first vs empiric treatment first", "fibroid presence does not end the workup"],
         "near_miss_options": ["A", "B"],
+        "near_correct_trap": "A",
+        "plausible_option_count": 2,
         "clinical_noise": ["hemoglobin 10.8", "3-cm intramural fibroid not distorting the cavity"],
+        "dynamic_progression": ["4 months of heavier irregular bleeding", "existing fibroid already known before this visit"],
+        "template_family": "conflicting_risk_axes",
         "source_id": "study_src_acog_aub",
         "source_name": "ACOG: Abnormal Uterine Bleeding",
         "source_type": "Guideline",
@@ -810,10 +852,15 @@ STUDY_SEED_ITEMS = [
         "difficulty_target_10": 8,
         "ambiguity_level": 8,
         "threshold_variable": "Severe-range blood pressure with headache/visual symptoms postpartum",
+        "threshold_type": "symptom_plus_severity_threshold",
         "conflicting_axes": ["minimal proteinuria vs severe symptoms", "clinically stable appearance vs need for urgent treatment"],
         "management_nuance": ["treat now vs await confirmation", "magnesium threshold in postpartum disease"],
         "near_miss_options": ["A", "C"],
+        "near_correct_trap": "C",
+        "plausible_option_count": 2,
         "clinical_noise": ["trace protein on dipstick", "no hypertension before discharge"],
+        "dynamic_progression": ["symptoms developed 5 days postpartum", "hypertension was not recognized before discharge"],
+        "template_family": "response_over_time",
         "source_id": "study_src_acog_preeclampsia",
         "source_name": "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia",
         "source_type": "Guideline",
@@ -911,10 +958,15 @@ STUDY_SEED_ITEMS = [
         "difficulty_target_10": 9,
         "ambiguity_level": 8,
         "threshold_variable": "Platelets 68,000 and falling",
+        "threshold_type": "lab_trend_threshold",
         "conflicting_axes": ["analgesia request vs neuraxial bleeding risk", "normal coagulation profile vs unsafe platelet threshold"],
         "management_nuance": ["neuraxial decision separate from delivery plan", "platelet trend matters, not just one number"],
         "near_miss_options": ["A", "B"],
+        "near_correct_trap": "B",
+        "plausible_option_count": 2,
         "clinical_noise": ["otherwise normal coagulation profile", "fetal status remains reassuring"],
+        "dynamic_progression": ["platelets fell from 92,000 to 68,000 over 6 hours", "induction remains ongoing despite analgesia dilemma"],
+        "template_family": "borderline_threshold",
         "source_id": "study_src_society_ob_anesthesia",
         "source_name": "SOAP Consensus Statement on Thrombocytopenia and Neuraxial Procedures",
         "source_type": "Consensus statement",
@@ -1255,9 +1307,17 @@ def _normalize_study_item(item):
     normalized["management_nuance"] = [axis for axis in (normalized.get("management_nuance") or []) if axis]
     normalized["near_miss_options"] = [option for option in (normalized.get("near_miss_options") or []) if option]
     normalized["clinical_noise"] = [entry for entry in (normalized.get("clinical_noise") or []) if entry]
+    normalized["dynamic_progression"] = [entry for entry in (normalized.get("dynamic_progression") or []) if entry]
+    normalized["threshold_type"] = normalized.get("threshold_type")
+    normalized["near_correct_trap"] = normalized.get("near_correct_trap")
+    normalized["plausible_option_count"] = int(normalized.get("plausible_option_count") or 0)
     normalized["decision_frame"] = (
         normalized.get("decision_frame")
         or _infer_decision_frame(normalized.get("question_stem"))
+    )
+    normalized["template_family"] = (
+        normalized.get("template_family")
+        or _infer_template_family(normalized)
     )
 
     if normalized.get("item_type") == "mcq":
@@ -1345,6 +1405,19 @@ def _difficulty_engine_rule_for_target(difficulty_target):
     return DIFFICULTY_ENGINE_RULES[-1]
 
 
+def _infer_template_family(item):
+    if item.get("dynamic_progression"):
+        return "response_over_time"
+    if item.get("threshold_variable"):
+        threshold_text = (item.get("threshold_variable") or "").lower()
+        if any(marker in threshold_text for marker in ("week", "+", "gestation")):
+            return "timing_threshold"
+        return "borderline_threshold"
+    if item.get("conflicting_axes"):
+        return "conflicting_risk_axes"
+    return "core_decision"
+
+
 def _stage_b_quality_metadata(item):
     options = item.get("options") or []
     correct_key = (item.get("correct_answer_key") or "").upper()
@@ -1369,6 +1442,10 @@ def _stage_b_quality_metadata(item):
     high_judgment_style = item.get("question_style") in HIGH_JUDGMENT_STYLE_NAMES
     has_decision_frame = item.get("decision_frame") == "best_next_step"
     clinical_noise_count = len(item.get("clinical_noise") or [])
+    dynamic_progression_count = len(item.get("dynamic_progression") or [])
+    plausible_option_count = int(item.get("plausible_option_count") or 0)
+    has_near_correct_trap = bool(item.get("near_correct_trap"))
+    has_template_family = bool(item.get("template_family"))
 
     score = 0
     if has_decision_frame:
@@ -1391,17 +1468,27 @@ def _stage_b_quality_metadata(item):
         score += 1
     if clinical_noise_count >= 1:
         score += 1
+    if dynamic_progression_count >= 1:
+        score += 1
+    if plausible_option_count >= 2:
+        score += 1
+    if has_near_correct_trap:
+        score += 1
 
     checks = {
         "decision_frame": has_decision_frame,
         "near_miss_distractors": high_quality_distractors >= 2,
+        "near_correct_trap": has_near_correct_trap,
+        "plausible_option_count": plausible_option_count >= 2,
         "conflicting_axes": has_conflict,
         "threshold_variable": has_threshold,
+        "dynamic_progression": dynamic_progression_count >= 1,
         "clinical_noise": clinical_noise_count >= 1,
         "no_obvious_wrong_distractors": absolute_option_count == 0 and obvious_wrong_distractor_count == 0,
         "high_ambiguity": ambiguity_level >= 7,
         "management_nuance": management_nuance >= 2,
         "high_judgment_style": high_judgment_style,
+        "template_family": has_template_family,
     }
     rule = _difficulty_engine_rule_for_target(difficulty_target)
     required_failures = [name for name in rule["required"] if not checks.get(name)]
@@ -1441,6 +1528,7 @@ def _default_state(session_id):
         "recent_answer_results": [],
         "recent_answer_levels": [],
         "recent_answer_styles": [],
+        "recent_answer_template_families": [],
         "cards_shown_history": [],
         "cards_clicked_history": [],
         "recent_study_item_history": [],
@@ -1659,7 +1747,9 @@ def _selection_score(
         score += max(0, 34 - (distance * 10))
     if preferred_question_style and item.get("question_style") == preferred_question_style:
         score += 20
-    if item.get("stage_b_ready"):
+    if item.get("difficulty_engine_ready"):
+        score += 24
+    elif item.get("stage_b_ready"):
         score += 18
     score += int(item.get("stage_b_quality_score") or 0) * 3
     score += int(item.get("difficulty_target_10") or 0) * 2
@@ -1688,6 +1778,7 @@ def _selection_score(
         score += 4
 
     recent_topics = state.get("recent_topic_history") or []
+    recent_template_families = state.get("recent_answer_template_families") or []
     if topic in recent_topics[-2:]:
         score -= 8
     if topic in recent_topics[-4:]:
@@ -1715,6 +1806,10 @@ def _selection_score(
     recent_mistakes = state.get("recent_mistake_topics") or []
     if item.get("topic") and item.get("topic") in recent_mistakes[-3:]:
         score += 12
+
+    template_family = item.get("template_family")
+    if template_family and template_family in recent_template_families[-TEMPLATE_FAMILY_HISTORY_WINDOW:]:
+        score -= 10
 
     return score
 
@@ -1955,6 +2050,9 @@ def _practice_candidates_for_policy(mcq_pool, used_ids, target_level, policy):
     ]
     if candidates:
         if policy.get("prefer_stage_b_judgment"):
+            advanced = [item for item in candidates if item.get("difficulty_engine_ready")]
+            if advanced:
+                return advanced
             advanced = [item for item in candidates if item.get("stage_b_ready")]
             if advanced:
                 return advanced
@@ -1964,6 +2062,9 @@ def _practice_candidates_for_policy(mcq_pool, used_ids, target_level, policy):
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= practice_floor
     ]
     if policy.get("prefer_stage_b_judgment"):
+        advanced = [item for item in fallback if item.get("difficulty_engine_ready")]
+        if advanced:
+            return advanced
         advanced = [item for item in fallback if item.get("stage_b_ready")]
         if advanced:
             return advanced
@@ -1978,6 +2079,9 @@ def _advanced_mcq_candidates_for_policy(mcq_pool, used_ids, target_level, policy
     ]
     if candidates:
         if policy.get("prefer_stage_b_judgment"):
+            advanced = [item for item in candidates if item.get("difficulty_engine_ready")]
+            if advanced:
+                return advanced
             advanced = [item for item in candidates if item.get("stage_b_ready")]
             if advanced:
                 return advanced
@@ -1987,6 +2091,9 @@ def _advanced_mcq_candidates_for_policy(mcq_pool, used_ids, target_level, policy
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= target_level
     ]
     if policy.get("prefer_stage_b_judgment"):
+        advanced = [item for item in fallback if item.get("difficulty_engine_ready")]
+        if advanced:
+            return advanced
         advanced = [item for item in fallback if item.get("stage_b_ready")]
         if advanced:
             return advanced
@@ -2218,6 +2325,7 @@ def answer_mcq(session_id, content_item_id, selected_option):
     answer_levels = list(state.get("recent_answer_levels") or [])
     answer_styles = list(state.get("recent_answer_styles") or [])
     answer_topics = list(state.get("recent_answer_topics") or [])
+    answer_template_families = list(state.get("recent_answer_template_families") or [])
 
     if correct:
         correct_counts[topic] = correct_counts.get(topic, 0) + 1
@@ -2229,6 +2337,10 @@ def answer_mcq(session_id, content_item_id, selected_option):
     answer_levels = _trim_history(answer_levels + [item.get("difficulty_level")], LEVEL_HISTORY_WINDOW)
     answer_styles = _trim_history(answer_styles + [item.get("question_style")], STYLE_HISTORY_WINDOW)
     answer_topics = _trim_history(answer_topics + [topic], DEMOTION_WINDOW)
+    answer_template_families = _trim_history(
+        answer_template_families + [item.get("template_family")],
+        TEMPLATE_FAMILY_HISTORY_WINDOW,
+    )
     next_level = _next_difficulty_level_after_answer(state, policy, answer_levels, answer_results)
 
     pending_reinforcement_topic = None
@@ -2260,6 +2372,7 @@ def answer_mcq(session_id, content_item_id, selected_option):
             "recent_answer_levels": answer_levels,
             "recent_answer_styles": answer_styles,
             "recent_answer_topics": answer_topics,
+            "recent_answer_template_families": answer_template_families,
             "last_studied_topic": topic,
             "last_answered_option": (selected_option or "").upper(),
             "last_answer_correct": correct,
