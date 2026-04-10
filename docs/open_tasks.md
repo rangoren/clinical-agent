@@ -3,15 +3,16 @@
 ## Active
 
 1. Stabilize textbook shorthand handling with a long-term resolver
-   - Goal: replace growing manual phrase lists with a reusable clinical shorthand and intent-resolution layer.
-   - Why: short-term aliases now cover cases like `by Gabbe`, `Gabbe on`, `pet`, and `pec`, but this approach will keep expanding unless we centralize it.
+   - Goal: extend the new resolver into a fuller reusable clinical shorthand and intent-resolution layer.
+   - Current status: baseline resolver and normalization layer added for textbook prompts.
    - Desired outcome:
      - normalize shorthand such as `pet`, `pec`, `pph`, `gdm`, `pprom`
      - support telegraphic book prompts such as `pph gabbe` or `amenorrhea speroff`
      - reduce false positives from short tokens
 
 2. Add regression coverage for textbook routing edge cases
-   - Goal: create repeatable tests or scripted smoke checks for textbook intent detection and source selection.
+   - Goal: extend the new smoke script into broader repeatable regression coverage for textbook intent detection and source selection.
+   - Current status: initial smoke script exists for core textbook routing prompts.
    - Priority cases:
      - `When to induce labor in early severe pet by Gabbe`
      - `Gabbe on severe pec`

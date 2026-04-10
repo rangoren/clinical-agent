@@ -2240,8 +2240,18 @@
             const shell = getStudyCardsShell();
             if (!shell) return;
             const hasExistingCards = shell.children.length > 0;
+            const cachedCards = !hasExistingCards ? loadCachedStudyCards() : null;
 
-            if (!force && hasExistingCards) {
+            if (!hasExistingCards && cachedCards && cachedCards.length) {
+                renderStudyCards(cachedCards);
+            }
+
+            if (hasExistingCards || (cachedCards && cachedCards.length)) {
+                shell.classList.add("visible");
+                refreshEntryGuidanceVisibility();
+            }
+
+            if (!force && (hasExistingCards || (cachedCards && cachedCards.length))) {
                 shell.classList.add("visible");
                 refreshEntryGuidanceVisibility();
                 return;

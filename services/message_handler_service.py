@@ -845,6 +845,9 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
     intent = classifier_result["label"]
     confidence = classifier_result["confidence"]
     textbook_request = detect_textbook_request(user_message)
+    if textbook_request and textbook_request.get("supported"):
+        intent = "clinical_consult"
+        confidence = "textbook_forced"
     principles = []
     knowledge_items = []
     protocol_items = []

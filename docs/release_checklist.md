@@ -7,10 +7,15 @@ Use this checklist any time we promote textbook or UI changes from `develop` to 
 
 1. Finish implementation on `develop`.
 2. Run targeted QA on `dev`.
-3. Verify textbook behavior on `dev` for supported books:
+3. Run textbook routing smoke checks:
+
+```bash
+./venv/bin/python scripts/run_textbook_routing_smoke.py
+```
+4. Verify textbook behavior on `dev` for supported books:
    - `Gabbe`
    - `Speroff`
-4. Verify smoke flows on `dev`:
+5. Verify smoke flows on `dev`:
    - textbook question
    - regular chat question
    - `+ -> Open cards`
