@@ -4,7 +4,7 @@ import re
 
 from db import study_content_collection, study_user_state_collection
 from services.logging_service import log_event
-from services.profile_service import get_user_profile
+from services.profile_service import build_effective_user_profile, get_user_profile
 
 
 STAGE_B_AUTHORING_RUBRIC = {
@@ -957,8 +957,7 @@ def _infer_question_style(item):
 
 
 def _residency_year_from_profile(user_profile):
-    if not user_profile:
-        return None
+    user_profile = build_effective_user_profile(user_profile)
     residency_year = (user_profile.get("residency_year") or "").strip().upper()
     if residency_year in DIFFICULTY_LEVEL_DISTRIBUTIONS:
         return residency_year
@@ -969,9 +968,9 @@ def _residency_year_from_profile(user_profile):
 
 
 def _difficulty_policy_for_profile(user_profile):
-    residency_year = _residency_year_from_profile(user_profile) or "R4"
-    distribution = dict(DIFFICULTY_LEVEL_DISTRIBUTIONS.get(residency_year, DIFFICULTY_LEVEL_DISTRIBUTIONS["R4"]))
-    min_level, max_level = DIFFICULTY_LEVEL_BOUNDS.get(residency_year, (3, 5))
+    residency_year = _residency_year_from_profile(user_profile) or "R6"
+    distribution = dict(DIFFICULTY_LEVEL_DISTRIBUTIONS.get(residency_year, DIFFICULTY_LEVEL_DISTRIBUTIONS["R6"]))
+    min_level, max_level = DIFFICULTY_LEVEL_BOUNDS.get(residency_year, (4, 6))
     baseline_level = max(distribution, key=distribution.get)
     return {
         "residency_year": residency_year,
