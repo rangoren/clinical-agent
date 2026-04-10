@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 
 from db import user_profiles_collection
+from services.profile_prompt_resolver import looks_like_profile_update_message
 
 
 TRAINING_STAGE_ALIASES = {
@@ -444,28 +445,7 @@ def extract_profile_updates_from_message(user_message, profile):
 
 
 def is_profile_only_message(user_message, extracted_fields):
-    cleaned = user_message.strip().lower()
-    if not extracted_fields:
-        return False
-    if "?" in cleaned:
-        return False
-
-    non_profile_chat_markers = {
-        "what do you think",
-        "what should i do",
-        "can you help",
-        "patient",
-        "bleeding",
-        "pain",
-        "pregnant",
-        "bp",
-        "blood pressure",
-        "fever",
-    }
-    if any(marker in cleaned for marker in non_profile_chat_markers):
-        return False
-
-    return True
+    return looks_like_profile_update_message(user_message, extracted_fields)
 
 
 def is_general_greeting_message(user_message):

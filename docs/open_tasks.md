@@ -26,6 +26,14 @@
      - one documented bootstrap command or scripted release step
      - fewer chances to deploy code without production cache
 
+4. Extend profile prompt resolver coverage
+   - Goal: keep profile status and profile update routing on a shared resolver path, like the textbook flow.
+   - Current status: baseline resolver added with initial smoke coverage for residency-year/profile-status prompts.
+   - Desired outcome:
+     - support more natural profile phrasings
+     - prevent profile writes from question-like prompts
+     - keep profile-source attribution consistent
+
 ## Deferred
 
 1. Resume alternative extraction path for `Berek`
