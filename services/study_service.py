@@ -37,7 +37,51 @@ STAGE_B_QUESTION_RUBRIC = {
 }
 
 ABSOLUTE_DISTRACTOR_MARKERS = (" never ", " always ", " only ", " immediately ", " solely ")
+OBVIOUS_WRONG_DISTRACTOR_MARKERS = (
+    " immediate hysterectomy",
+    " reassure",
+    " observation only",
+    " no treatment",
+    " do nothing",
+    " wait for culture",
+    " delay all ",
+)
 HIGH_JUDGMENT_STYLE_NAMES = {"trap", "overlap", "diagnosis_refinement"}
+DECISION_FRAME_MARKERS = (
+    "best next step",
+    "best next move",
+    "most appropriate next step",
+    "what is the best next step now",
+    "what is the most appropriate next step",
+)
+
+DIFFICULTY_ENGINE_RULES = (
+    {
+        "min_target": 1,
+        "max_target": 4,
+        "required": (),
+        "recommended": ("decision_frame",),
+    },
+    {
+        "min_target": 5,
+        "max_target": 6,
+        "required": ("decision_frame", "near_miss_distractors"),
+        "recommended": ("conflicting_axes", "clinical_noise"),
+    },
+    {
+        "min_target": 7,
+        "max_target": 10,
+        "required": (
+            "decision_frame",
+            "near_miss_distractors",
+            "conflicting_axes",
+            "threshold_variable",
+            "clinical_noise",
+            "no_obvious_wrong_distractors",
+        ),
+        "recommended": ("high_ambiguity", "management_nuance", "high_judgment_style"),
+    },
+)
 
 DIFFICULTY_LEVEL_DISTRIBUTIONS = {
     "R1": {1: 70, 2: 20, 3: 10},
@@ -165,12 +209,14 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_option": "B",
         "tempting_wrong_reason": "Immediate delivery is a reasonable reflex, but the gestational age and currently stable maternal-fetal picture make expectant inpatient management the better choice for now.",
         "estimated_time_seconds": 85,
+        "decision_frame": "best_next_step",
         "difficulty_target_10": 9,
         "ambiguity_level": 8,
         "threshold_variable": "<34 weeks with stable maternal-fetal status",
         "conflicting_axes": ["prematurity risk vs maternal severe disease", "intermittent severe blood pressure vs reassuring labs/testing"],
         "management_nuance": ["expectant inpatient management", "delivery trigger thresholds", "steroid timing should not dominate the decision"],
         "near_miss_options": ["A", "B"],
+        "clinical_noise": ["completed betamethasone 24 hours ago", "creatinine remains normal"],
         "source_id": "study_src_nice_hypertension",
         "source_name": "NICE Guideline: Hypertension in Pregnancy",
         "source_type": "Guideline",
@@ -387,12 +433,14 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_option": "A",
         "tempting_wrong_reason": "The abscess size alone is not the decisive variable; the failure to improve after 48 hours is what shifts management toward drainage.",
         "estimated_time_seconds": 90,
+        "decision_frame": "best_next_step",
         "difficulty_target_10": 9,
         "ambiguity_level": 9,
         "threshold_variable": "No meaningful clinical improvement after 48 hours of IV therapy",
         "conflicting_axes": ["hemodynamic stability vs persistent infection", "moderate abscess size vs failure of medical therapy"],
         "management_nuance": ["continued IV therapy vs drainage", "size does not override trajectory", "inpatient status alone is not enough"],
         "near_miss_options": ["A", "B"],
+        "clinical_noise": ["abscess remains under 5 cm", "hemodynamically stable on exam"],
         "source_id": "study_src_cdc_pid",
         "source_name": "CDC STI Treatment Guidelines: PID",
         "source_type": "Guideline",
@@ -539,12 +587,14 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_option": "C",
         "tempting_wrong_reason": "Operating without oncologic planning is the near-miss error; the issue is not whether surgery may occur, but who should own the initial escalation.",
         "estimated_time_seconds": 85,
+        "decision_frame": "best_next_step",
         "difficulty_target_10": 8,
         "ambiguity_level": 8,
         "threshold_variable": "Complex morphology with papillary projections and free fluid",
         "conflicting_axes": ["clinical stability vs oncologic sonographic risk", "patient preference for surveillance vs referral threshold"],
         "management_nuance": ["surveillance vs referral", "general gyne surgery vs gyn-onc triage"],
         "near_miss_options": ["B", "C"],
+        "clinical_noise": ["pain is mild", "patient prefers repeat imaging first"],
         "source_id": "study_src_acog_adnexal_mass",
         "source_name": "ACOG Practice Bulletin: Evaluation and Management of Adnexal Masses",
         "source_type": "Guideline",
@@ -576,12 +626,14 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_option": "B",
         "tempting_wrong_reason": "Biopsy is tempting because cancer exclusion is the overall frame, but the thin stripe is the threshold variable that changes the immediate next step.",
         "estimated_time_seconds": 90,
+        "decision_frame": "best_next_step",
         "difficulty_target_10": 9,
         "ambiguity_level": 9,
         "threshold_variable": "Endometrial stripe 3 mm after first isolated bleeding episode",
         "conflicting_axes": ["malignancy concern vs reassuring ultrasound threshold", "first episode vs desire for immediate tissue diagnosis"],
         "management_nuance": ["TVUS-first vs biopsy-first", "reassurance with return precautions vs invasive testing"],
         "near_miss_options": ["A", "B"],
+        "clinical_noise": ["single light episode", "not using hormone therapy"],
         "source_id": "study_src_acog_pmb",
         "source_name": "ACOG: Perimenopausal Bleeding and Bleeding After Menopause",
         "source_type": "Guideline",
@@ -613,12 +665,14 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_option": "A",
         "tempting_wrong_reason": "Medical therapy is reasonable for fibroid-related bleeding, but here it becomes a near-miss because age and endometrial risk factors shift the first step toward sampling.",
         "estimated_time_seconds": 85,
+        "decision_frame": "best_next_step",
         "difficulty_target_10": 8,
         "ambiguity_level": 8,
         "threshold_variable": "Age >=45 with additional endometrial risk factors",
         "conflicting_axes": ["visible structural cause vs endometrial cancer risk", "medical management preference vs biopsy threshold"],
         "management_nuance": ["sampling first vs empiric treatment first", "fibroid presence does not end the workup"],
         "near_miss_options": ["A", "B"],
+        "clinical_noise": ["hemoglobin 10.8", "3-cm intramural fibroid not distorting the cavity"],
         "source_id": "study_src_acog_aub",
         "source_name": "ACOG: Abnormal Uterine Bleeding",
         "source_type": "Guideline",
@@ -752,12 +806,14 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_option": "C",
         "tempting_wrong_reason": "Admission is reasonable, but withholding magnesium is the near-miss error because the severe neurologic presentation already crosses the treatment threshold.",
         "estimated_time_seconds": 85,
+        "decision_frame": "best_next_step",
         "difficulty_target_10": 8,
         "ambiguity_level": 8,
         "threshold_variable": "Severe-range blood pressure with headache/visual symptoms postpartum",
         "conflicting_axes": ["minimal proteinuria vs severe symptoms", "clinically stable appearance vs need for urgent treatment"],
         "management_nuance": ["treat now vs await confirmation", "magnesium threshold in postpartum disease"],
         "near_miss_options": ["A", "C"],
+        "clinical_noise": ["trace protein on dipstick", "no hypertension before discharge"],
         "source_id": "study_src_acog_preeclampsia",
         "source_name": "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia",
         "source_type": "Guideline",
@@ -851,12 +907,14 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_option": "B",
         "tempting_wrong_reason": "Normal coagulation studies and patient preference are not enough to overcome the platelet threshold and downward trend.",
         "estimated_time_seconds": 90,
+        "decision_frame": "best_next_step",
         "difficulty_target_10": 9,
         "ambiguity_level": 8,
         "threshold_variable": "Platelets 68,000 and falling",
         "conflicting_axes": ["analgesia request vs neuraxial bleeding risk", "normal coagulation profile vs unsafe platelet threshold"],
         "management_nuance": ["neuraxial decision separate from delivery plan", "platelet trend matters, not just one number"],
         "near_miss_options": ["A", "B"],
+        "clinical_noise": ["otherwise normal coagulation profile", "fetal status remains reassuring"],
         "source_id": "study_src_society_ob_anesthesia",
         "source_name": "SOAP Consensus Statement on Thrombocytopenia and Neuraxial Procedures",
         "source_type": "Consensus statement",
@@ -1196,6 +1254,11 @@ def _normalize_study_item(item):
     normalized["conflicting_axes"] = [axis for axis in (normalized.get("conflicting_axes") or []) if axis]
     normalized["management_nuance"] = [axis for axis in (normalized.get("management_nuance") or []) if axis]
     normalized["near_miss_options"] = [option for option in (normalized.get("near_miss_options") or []) if option]
+    normalized["clinical_noise"] = [entry for entry in (normalized.get("clinical_noise") or []) if entry]
+    normalized["decision_frame"] = (
+        normalized.get("decision_frame")
+        or _infer_decision_frame(normalized.get("question_stem"))
+    )
 
     if normalized.get("item_type") == "mcq":
         normalized["correct_answer_key"] = (
@@ -1260,11 +1323,42 @@ def _normalize_study_item(item):
     return normalized
 
 
+def _infer_decision_frame(question_stem):
+    stem = " ".join((question_stem or "").strip().lower().split())
+    if not stem:
+        return None
+    if any(marker in stem for marker in DECISION_FRAME_MARKERS):
+        return "best_next_step"
+    if stem.startswith("what is the most likely") or "most likely" in stem:
+        return "most_likely_diagnosis"
+    return "general"
+
+
+def _difficulty_engine_rule_for_target(difficulty_target):
+    try:
+        normalized = int(difficulty_target)
+    except (TypeError, ValueError):
+        normalized = 5
+    for rule in DIFFICULTY_ENGINE_RULES:
+        if rule["min_target"] <= normalized <= rule["max_target"]:
+            return rule
+    return DIFFICULTY_ENGINE_RULES[-1]
+
+
 def _stage_b_quality_metadata(item):
     options = item.get("options") or []
+    correct_key = (item.get("correct_answer_key") or "").upper()
     option_texts = [" " + (option.get("text") or "").strip().lower() + " " for option in options]
+    distractor_texts = [
+        " " + (option.get("text") or "").strip().lower() + " "
+        for option in options
+        if (option.get("key") or "").upper() != correct_key
+    ]
     absolute_option_count = sum(
-        1 for text in option_texts if any(marker in text for marker in ABSOLUTE_DISTRACTOR_MARKERS)
+        1 for text in distractor_texts if any(marker in text for marker in ABSOLUTE_DISTRACTOR_MARKERS)
+    )
+    obvious_wrong_distractor_count = sum(
+        1 for text in distractor_texts if any(marker in text for marker in OBVIOUS_WRONG_DISTRACTOR_MARKERS)
     )
     high_quality_distractors = len(item.get("near_miss_options") or [])
     has_threshold = bool(item.get("threshold_variable"))
@@ -1273,8 +1367,12 @@ def _stage_b_quality_metadata(item):
     management_nuance = len(item.get("management_nuance") or [])
     difficulty_target = int(item.get("difficulty_target_10") or item.get("difficulty_level") or 0)
     high_judgment_style = item.get("question_style") in HIGH_JUDGMENT_STYLE_NAMES
+    has_decision_frame = item.get("decision_frame") == "best_next_step"
+    clinical_noise_count = len(item.get("clinical_noise") or [])
 
     score = 0
+    if has_decision_frame:
+        score += 2
     if ambiguity_level >= 7:
         score += 2
     if high_quality_distractors >= 2:
@@ -1289,13 +1387,36 @@ def _stage_b_quality_metadata(item):
         score += 1
     if difficulty_target >= 7:
         score += 1
-    if absolute_option_count == 0:
+    if absolute_option_count == 0 and obvious_wrong_distractor_count == 0:
         score += 1
+    if clinical_noise_count >= 1:
+        score += 1
+
+    checks = {
+        "decision_frame": has_decision_frame,
+        "near_miss_distractors": high_quality_distractors >= 2,
+        "conflicting_axes": has_conflict,
+        "threshold_variable": has_threshold,
+        "clinical_noise": clinical_noise_count >= 1,
+        "no_obvious_wrong_distractors": absolute_option_count == 0 and obvious_wrong_distractor_count == 0,
+        "high_ambiguity": ambiguity_level >= 7,
+        "management_nuance": management_nuance >= 2,
+        "high_judgment_style": high_judgment_style,
+    }
+    rule = _difficulty_engine_rule_for_target(difficulty_target)
+    required_failures = [name for name in rule["required"] if not checks.get(name)]
+    recommended_gaps = [name for name in rule["recommended"] if not checks.get(name)]
+    difficulty_engine_ready = not required_failures
 
     return {
         "stage_b_quality_score": score,
-        "stage_b_ready": score >= 8,
+        "stage_b_ready": score >= 8 and difficulty_engine_ready,
         "absolute_option_count": absolute_option_count,
+        "obvious_wrong_distractor_count": obvious_wrong_distractor_count,
+        "difficulty_engine_ready": difficulty_engine_ready,
+        "difficulty_engine_required_failures": required_failures,
+        "difficulty_engine_recommended_gaps": recommended_gaps,
+        "difficulty_engine_rule": f"{rule['min_target']}-{rule['max_target']}",
     }
 
 
@@ -1541,6 +1662,7 @@ def _selection_score(
     if item.get("stage_b_ready"):
         score += 18
     score += int(item.get("stage_b_quality_score") or 0) * 3
+    score += int(item.get("difficulty_target_10") or 0) * 2
     if reinforcement:
         if topic == reinforcement.get("topic"):
             score += 26
