@@ -1393,6 +1393,12 @@ def _utc_now():
     return datetime.utcnow()
 
 
+def _json_safe_datetime(value):
+    if isinstance(value, datetime):
+        return value.isoformat() + "Z"
+    return value
+
+
 def _difficulty_band_for_level(level):
     try:
         normalized = int(level)
@@ -2329,7 +2335,8 @@ def _session_meta_payload(state_or_plan, policy=None):
         "current_level": _safe_int(state_or_plan.get("current_difficulty_level"), policy.get("baseline_level")),
         "working_level": _safe_int(state_or_plan.get("study_session_working_level"), _safe_int(state_or_plan.get("current_difficulty_level"), policy.get("baseline_level"))),
         "session_id": state_or_plan.get("study_session_id"),
-        "session_started_at": state_or_plan.get("study_session_started_at"),
+        "session_started_at": _json_safe_datetime(state_or_plan.get("study_session_started_at")),
+        "session_completed_at": _json_safe_datetime(state_or_plan.get("study_session_completed_at")),
         "session_completed": bool(state_or_plan.get("study_session_completed_at")),
         "current_question_number": current_question_number,
         "session_progress": progress,
