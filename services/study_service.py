@@ -48,6 +48,18 @@ OBVIOUS_WRONG_DISTRACTOR_MARKERS = (
 )
 HIGH_JUDGMENT_STYLE_NAMES = {"trap", "overlap", "diagnosis_refinement"}
 TEMPLATE_FAMILY_HISTORY_WINDOW = 8
+SESSION_TARGET_QUESTIONS = {
+    "R1": 5,
+    "R2": 5,
+    "R3": 5,
+    "R4": 6,
+    "R5": 6,
+    "R6": 7,
+}
+SESSION_DIFFICULTY_RULES = {
+    "increase_after_consecutive_correct": 2,
+    "decrease_after_consecutive_incorrect": 1,
+}
 DECISION_FRAME_MARKERS = (
     "best next step",
     "best next move",
@@ -59,15 +71,44 @@ DECISION_FRAME_MARKERS = (
 DIFFICULTY_ENGINE_RULES = (
     {
         "min_target": 1,
-        "max_target": 4,
+        "max_target": 2,
         "required": (),
-        "recommended": ("decision_frame",),
+        "recommended": ("decision_frame", "no_obvious_wrong_distractors"),
+    },
+    {
+        "min_target": 3,
+        "max_target": 4,
+        "required": ("decision_frame", "no_obvious_wrong_distractors"),
+        "recommended": ("near_miss_distractors", "threshold_variable", "conflicting_axes"),
     },
     {
         "min_target": 5,
+        "max_target": 5,
+        "required": (
+            "decision_frame",
+            "near_miss_distractors",
+            "plausible_option_count",
+            "time_progression_or_response",
+            "no_obvious_wrong_distractors",
+        ),
+        "recommended": ("conflicting_axes", "clinical_noise", "tradeoff_axes"),
+    },
+    {
+        "min_target": 6,
         "max_target": 6,
-        "required": ("decision_frame", "near_miss_distractors"),
-        "recommended": ("conflicting_axes", "clinical_noise"),
+        "required": (
+            "decision_frame",
+            "near_miss_distractors",
+            "near_correct_trap",
+            "plausible_option_count",
+            "second_best_strength",
+            "decision_pressure",
+            "conflicting_axes",
+            "time_progression_or_response",
+            "partial_response_or_trend",
+            "no_obvious_wrong_distractors",
+        ),
+        "recommended": ("tradeoff_axes", "clinical_noise", "management_nuance"),
     },
     {
         "min_target": 7,
@@ -77,6 +118,7 @@ DIFFICULTY_ENGINE_RULES = (
             "near_miss_distractors",
             "near_correct_trap",
             "plausible_option_count",
+            "second_best_strength",
             "tradeoff_axes",
             "decision_pressure",
             "conflicting_axes",
@@ -84,6 +126,7 @@ DIFFICULTY_ENGINE_RULES = (
             "dynamic_progression",
             "clinical_noise",
             "no_obvious_wrong_distractors",
+            "deep_conflict",
         ),
         "recommended": ("high_ambiguity", "management_nuance", "high_judgment_style", "template_family"),
     },
@@ -92,19 +135,129 @@ DIFFICULTY_ENGINE_RULES = (
 DIFFICULTY_LEVEL_DISTRIBUTIONS = {
     "R1": {1: 70, 2: 20, 3: 10},
     "R2": {2: 50, 3: 30, 1: 20},
-    "R3": {3: 50, 4: 30, 2: 20},
-    "R4": {4: 50, 5: 30, 3: 20},
-    "R5": {5: 60, 6: 30, 4: 10},
+    "R3": {4: 60, 3: 40},
+    "R4": {5: 45, 4: 35, 6: 20},
+    "R5": {6: 55, 5: 30, 4: 15},
     "R6": {6: 85, 5: 15},
 }
 
 DIFFICULTY_LEVEL_BOUNDS = {
     "R1": (1, 3),
     "R2": (1, 3),
-    "R3": (2, 4),
-    "R4": (3, 5),
-    "R5": (4, 6),
+    "R3": (3, 4),
+    "R4": (4, 6),
+    "R5": (5, 6),
     "R6": (5, 6),
+}
+
+RESIDENCY_YEAR_MAIN_FLOW_RULES = {
+    "R1": {
+        "enforce_main_flow_gate": True,
+        "main_flow_min_target_10": 1,
+        "main_flow_max_target_10": 3,
+        "required_checks": ("no_obvious_wrong_distractors",),
+        "required_any": (("decision_frame", "near_miss_distractors"),),
+        "require_difficulty_engine_ready": False,
+        "block_disguised_recall": False,
+        "blocked_archetypes": (),
+        "blocked_template_families": ("response_over_time", "conflicting_risk_axes", "timing_threshold", "borderline_threshold"),
+        "min_stage_b_quality_score": 2,
+        "min_second_best_strength_score": 0,
+        "min_decision_pressure_score": 0,
+    },
+    "R2": {
+        "enforce_main_flow_gate": True,
+        "main_flow_min_target_10": 2,
+        "main_flow_max_target_10": 4,
+        "required_checks": ("decision_frame", "no_obvious_wrong_distractors"),
+        "required_any": (("near_miss_distractors", "plausible_option_count"),),
+        "require_difficulty_engine_ready": False,
+        "block_disguised_recall": False,
+        "blocked_archetypes": (),
+        "blocked_template_families": ("response_over_time", "conflicting_risk_axes", "timing_threshold"),
+        "min_stage_b_quality_score": 4,
+        "min_second_best_strength_score": 0,
+        "min_decision_pressure_score": 0,
+    },
+    "R3": {
+        "enforce_main_flow_gate": True,
+        "main_flow_min_target_10": 4,
+        "main_flow_max_target_10": 4,
+        "required_checks": ("decision_frame", "near_miss_distractors", "no_obvious_wrong_distractors"),
+        "required_any": (("conflicting_axes", "threshold_variable", "dynamic_progression"),),
+        "require_difficulty_engine_ready": False,
+        "block_disguised_recall": False,
+        "blocked_archetypes": (),
+        "blocked_template_families": (),
+        "min_stage_b_quality_score": 6,
+        "min_second_best_strength_score": 0,
+        "min_decision_pressure_score": 0,
+    },
+    "R4": {
+        "enforce_main_flow_gate": True,
+        "main_flow_min_target_10": 5,
+        "main_flow_max_target_10": 6,
+        "required_checks": ("decision_frame", "near_miss_distractors", "plausible_option_count", "no_obvious_wrong_distractors"),
+        "required_any": (("conflicting_axes", "threshold_variable", "dynamic_progression"),),
+        "require_difficulty_engine_ready": False,
+        "block_disguised_recall": False,
+        "blocked_archetypes": (),
+        "blocked_template_families": (),
+        "min_stage_b_quality_score": 8,
+        "min_second_best_strength_score": 3,
+        "min_decision_pressure_score": 0,
+    },
+    "R5": {
+        "enforce_main_flow_gate": True,
+        "main_flow_min_target_10": 6,
+        "main_flow_max_target_10": 7,
+        "required_checks": (
+            "decision_frame",
+            "near_miss_distractors",
+            "plausible_option_count",
+            "second_best_strength",
+            "conflicting_axes",
+            "time_progression_or_response",
+            "no_obvious_wrong_distractors",
+        ),
+        "required_any": (("threshold_variable", "tradeoff_axes", "decision_pressure"),),
+        "require_difficulty_engine_ready": True,
+        "block_disguised_recall": True,
+        "blocked_archetypes": (),
+        "blocked_template_families": (),
+        "min_stage_b_quality_score": 11,
+        "min_second_best_strength_score": 4,
+        "min_decision_pressure_score": 0,
+    },
+    "R6": {
+        "enforce_main_flow_gate": True,
+        "main_flow_min_target_10": 7,
+        "main_flow_max_target_10": 10,
+        "required_checks": (
+            "decision_frame",
+            "near_miss_distractors",
+            "near_correct_trap",
+            "plausible_option_count",
+            "second_best_strength",
+            "tradeoff_axes",
+            "decision_pressure",
+            "high_decision_pressure",
+            "conflicting_axes",
+            "time_progression_or_response",
+            "partial_response_or_trend",
+            "clinical_noise",
+            "no_obvious_wrong_distractors",
+            "deep_conflict",
+        ),
+        "required_any": (("threshold_variable", "dynamic_progression"),),
+        "require_difficulty_engine_ready": True,
+        "block_disguised_recall": True,
+        "blocked_archetypes": ("contraindication_context",),
+        "blocked_template_families": (),
+        "min_stage_b_quality_score": 14,
+        "min_second_best_strength_score": 5,
+        "min_decision_pressure_score": 6,
+    },
 }
 
 QUESTION_STYLE_DISTRIBUTIONS = {
@@ -169,12 +322,14 @@ SEED_ITEM_METADATA_OVERRIDES = {
     "mcq_adnexal_mass_referral": {"difficulty_level": 6, "question_style": "trap"},
     "mcq_postmenopausal_bleeding_biopsy": {"difficulty_level": 6, "question_style": "trap"},
     "mcq_aub_age45_sampling": {"difficulty_level": 6, "question_style": "trap"},
+    "mcq_aub_sampling_r3": {"difficulty_level": 4, "question_style": "clinical_decision"},
     "pearl_adnexal_mass_referral": {"difficulty_level": 5, "question_style": "pearl"},
     "pearl_postmenopausal_bleeding_workup": {"difficulty_level": 5, "question_style": "pearl"},
     "mcq_uti_nonpregnant_first_line": {"difficulty_level": 5, "question_style": "overlap"},
     "mcq_postpartum_endometritis_antibiotics": {"difficulty_level": 6, "question_style": "clinical_decision"},
     "mcq_postpartum_pe_headache": {"difficulty_level": 6, "question_style": "trap"},
     "mcq_vte_postpartum_estrogen": {"difficulty_level": 6, "question_style": "overlap"},
+    "mcq_vte_postpartum_estrogen_r5": {"difficulty_level": 6, "question_style": "overlap"},
     "mcq_pregnancy_pyelo_admit": {"difficulty_level": 5, "question_style": "overlap"},
     "mcq_platelets_neuraxial_preeclampsia": {"difficulty_level": 6, "question_style": "trap"},
     "mcq_hypoosmolar_hyponatremia_labor": {"difficulty_level": 6, "question_style": "overlap"},
@@ -243,12 +398,12 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "PPH",
         "subtopic": "Initial management",
-        "question_stem": "Immediately after vaginal birth, heavy bleeding is attributed to uterine atony. Which medication is the best first-line uterotonic?",
+        "question_stem": "Immediately after vaginal birth, heavy bleeding is attributed to uterine atony. What is the best next medication step now?",
         "options": [
             {"key": "A", "text": "Oxytocin"},
-            {"key": "B", "text": "Methylergonovine before initial oxytocin"},
-            {"key": "C", "text": "Magnesium sulfate"},
-            {"key": "D", "text": "Tranexamic acid as the only first medication"},
+            {"key": "B", "text": "Methylergonovine if bleeding continues after initial oxytocin and there is no hypertension"},
+            {"key": "C", "text": "Tranexamic acid early as an adjunct while uterotonic treatment is being started"},
+            {"key": "D", "text": "Carboprost if atony persists after first-line therapy and there is no asthma"},
         ],
         "correct_answer_key": "A",
         "explanation": "For uterine atony, the standard first medication is oxytocin, given along with immediate uterine massage and hemorrhage resuscitation.",
@@ -259,6 +414,11 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_option": "B",
         "tempting_wrong_reason": "Methylergonovine can be used later in selected patients, but oxytocin is still the first-line uterotonic for initial atony management.",
         "estimated_time_seconds": 45,
+        "decision_frame": "best_next_step",
+        "difficulty_target_10": 2,
+        "ambiguity_level": 2,
+        "near_miss_options": ["A", "B"],
+        "plausible_option_count": 2,
         "source_id": "study_src_acog_pph",
         "source_name": "ACOG Practice Bulletin: Postpartum Hemorrhage",
         "source_type": "Guideline",
@@ -440,8 +600,8 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_reason": "The rest of the vignette is deliberately reassuring, but aura remains the deciding feature that keeps estrogen off the table.",
         "estimated_time_seconds": 80,
         "decision_frame": "best_next_step",
-        "difficulty_target_10": 7,
-        "ambiguity_level": 7,
+        "difficulty_target_10": 5,
+        "ambiguity_level": 6,
         "threshold_variable": "Migraine with aura despite low overall vascular-risk profile",
         "threshold_type": "contraindication_vs_context",
         "conflicting_axes": ["patient preference for estrogen vs stroke-risk contraindication", "reassuring vascular profile vs persistent aura history"],
@@ -700,8 +860,8 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_reason": "Biopsy is tempting because cancer exclusion is the overall frame, but the thin stripe is the threshold variable that changes the immediate next step.",
         "estimated_time_seconds": 90,
         "decision_frame": "best_next_step",
-        "difficulty_target_10": 9,
-        "ambiguity_level": 9,
+        "difficulty_target_10": 5,
+        "ambiguity_level": 6,
         "threshold_variable": "Endometrial stripe 3 mm after first isolated bleeding episode",
         "threshold_type": "ultrasound_threshold",
         "conflicting_axes": ["malignancy concern vs reassuring ultrasound threshold", "first episode vs desire for immediate tissue diagnosis"],
@@ -717,6 +877,50 @@ STUDY_SEED_ITEMS = [
         "source_type": "Guideline",
         "source_url": "https://www.acog.org/womens-health/faqs/perimenopausal-bleeding-and-bleeding-after-menopause",
         "source_excerpt": "Bleeding after menopause is abnormal and requires evaluation, with tissue diagnosis and ultrasound used to exclude malignant causes.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
+    {
+        "id": "mcq_aub_sampling_r3",
+        "item_type": "mcq",
+        "topic": "General gynecology",
+        "subtopic": "AUB biopsy threshold",
+        "question_stem": "A 45-year-old with new irregular bleeding asks whether a known small fibroid is enough to explain the bleeding without further workup. What is the best next step now?",
+        "options": [
+            {"key": "A", "text": "Perform endometrial sampling as part of the initial evaluation"},
+            {"key": "B", "text": "Treat the fibroid first and defer sampling unless bleeding continues"},
+            {"key": "C", "text": "Repeat ultrasound after the next cycle before deciding on biopsy"},
+            {"key": "D", "text": "Prefer hysteroscopy before office sampling because the bleeding has already become irregular"},
+        ],
+        "correct_answer_key": "A",
+        "explanation": "At age 45 or older, abnormal uterine bleeding lowers the threshold for endometrial sampling even if a plausible structural explanation is present.",
+        "exam_clue": "Age 45 with new abnormal uterine bleeding",
+        "board_takeaway": "In patients aged 45 or older, AUB should prompt sampling rather than assuming a small fibroid explains everything.",
+        "decision_point": "Apply the age-based biopsy rule in abnormal uterine bleeding",
+        "difficulty_band": "standard",
+        "tempting_wrong_option": "B",
+        "tempting_wrong_reason": "Treating the fibroid sounds reasonable, but age 45 changes the rule and pushes biopsy into the initial workup.",
+        "estimated_time_seconds": 55,
+        "decision_frame": "best_next_step",
+        "difficulty_target_10": 4,
+        "ambiguity_level": 4,
+        "threshold_variable": "Age 45 or older with new AUB",
+        "threshold_type": "age_threshold_rule_application",
+        "conflicting_axes": ["visible structural explanation vs age-based biopsy rule"],
+        "management_nuance": ["apply biopsy threshold before empiric treatment"],
+        "near_miss_options": ["A", "B"],
+        "near_correct_trap": "B",
+        "plausible_option_count": 2,
+        "clinical_noise": ["small known fibroid"],
+        "dynamic_progression": ["new irregular bleeding this cycle"],
+        "template_family": "core_decision",
+        "source_id": "study_src_acog_aub",
+        "source_name": "ACOG: Abnormal Uterine Bleeding",
+        "source_type": "Guideline",
+        "source_url": "https://www.acog.org/womens-health/faqs/abnormal-uterine-bleeding",
+        "source_excerpt": "Endometrial evaluation is indicated when age or risk profile raises concern, even when structural causes coexist.",
         "approved_for_stage_b": True,
         "last_reviewed_at": "2025-01-01",
         "review_status": "source_grounded",
@@ -744,8 +948,8 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_reason": "Medical therapy is reasonable for fibroid-related bleeding, but here it becomes a near-miss because age and endometrial risk factors shift the first step toward sampling.",
         "estimated_time_seconds": 85,
         "decision_frame": "best_next_step",
-        "difficulty_target_10": 8,
-        "ambiguity_level": 8,
+        "difficulty_target_10": 5,
+        "ambiguity_level": 6,
         "threshold_variable": "Age >=45 with additional endometrial risk factors",
         "threshold_type": "age_plus_risk_factor_threshold",
         "conflicting_axes": ["visible structural cause vs endometrial cancer risk", "medical management preference vs biopsy threshold"],
@@ -811,12 +1015,12 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "Infectious gynecology",
         "subtopic": "Adjacent medicine overlap",
-        "question_stem": "A 27-year-old nonpregnant patient has dysuria, urinary frequency, no fever, no flank pain, and no vaginal discharge. What is the best first-line treatment approach?",
+        "question_stem": "A 27-year-old nonpregnant patient has dysuria, urinary frequency, no fever, no flank pain, and no vaginal discharge. What is the best next step now?",
         "options": [
             {"key": "A", "text": "Treat as uncomplicated cystitis with a first-line oral regimen guided by local resistance patterns"},
-            {"key": "B", "text": "Use pyelonephritis-level intravenous therapy because any urinary symptoms may ascend quickly"},
-            {"key": "C", "text": "Avoid treatment until urine culture returns because empiric therapy is never appropriate"},
-            {"key": "D", "text": "Start antifungal therapy because dysuria without pregnancy is most likely candidiasis"},
+            {"key": "B", "text": "Send urine testing and hold antibiotics until culture confirms the organism and sensitivities"},
+            {"key": "C", "text": "Treat as pyelonephritis with parenteral therapy because urinary symptoms can represent early upper tract disease"},
+            {"key": "D", "text": "Shift the workup toward vaginitis before treating the urinary symptoms because there is no systemic illness"},
         ],
         "correct_answer_key": "A",
         "explanation": "This is a classic uncomplicated cystitis presentation in a nonpregnant patient, so empiric first-line oral therapy is appropriate, guided by local susceptibility patterns and antibiotic stewardship.",
@@ -825,8 +1029,13 @@ STUDY_SEED_ITEMS = [
         "decision_point": "Distinguish uncomplicated cystitis from pyelonephritis or vaginitis in an OB-GYN overlap scenario",
         "difficulty_band": "standard",
         "tempting_wrong_option": "B",
-        "tempting_wrong_reason": "Escalation to pyelonephritis-level therapy is for systemic illness or upper tract features, not isolated lower urinary symptoms.",
+        "tempting_wrong_reason": "Confirmatory testing sounds careful, but this symptom cluster is still appropriate for empiric uncomplicated cystitis treatment rather than delaying therapy.",
         "estimated_time_seconds": 60,
+        "decision_frame": "best_next_step",
+        "difficulty_target_10": 3,
+        "ambiguity_level": 3,
+        "near_miss_options": ["A", "B"],
+        "plausible_option_count": 2,
         "source_id": "study_src_nice_uti",
         "source_name": "NICE Guideline: Lower UTI (Women)",
         "source_type": "Guideline",
@@ -926,6 +1135,50 @@ STUDY_SEED_ITEMS = [
         "enabled": True,
     },
     {
+        "id": "mcq_vte_postpartum_estrogen_r5",
+        "item_type": "mcq",
+        "topic": "Contraception",
+        "subtopic": "Recent VTE timing nuance",
+        "question_stem": "A 15-week postpartum patient is no longer breastfeeding and finished anticoagulation 8 weeks ago for a pregnancy-associated DVT. She strongly prefers the vaginal ring and asks whether the added time since treatment changes the safest next step now. What is the best next step now?",
+        "options": [
+            {"key": "A", "text": "Continue to avoid estrogen-containing contraception and recommend an effective non-estrogen method instead"},
+            {"key": "B", "text": "Start the vaginal ring now because she is farther from the thrombotic event and no longer breastfeeding"},
+            {"key": "C", "text": "Hold combined hormonal contraception for now and reassess after a formal thrombosis-risk review"},
+            {"key": "D", "text": "Offer a short combined-hormonal trial and stop if leg symptoms recur"},
+        ],
+        "correct_answer_key": "A",
+        "explanation": "The timing shift makes this harder than the basic postpartum VTE rule. More time has passed and treatment is complete, but a recent pregnancy-associated DVT still keeps estrogen off the table, so the safest move remains a non-estrogen method.",
+        "exam_clue": "More remote postpartum timing but still recent pregnancy-associated DVT",
+        "board_takeaway": "R5-style contraception questions should hinge on timing nuance: more reassuring context can make estrogen tempting without actually making it correct.",
+        "decision_point": "Reassess estrogen eligibility after more time has passed from a pregnancy-associated DVT",
+        "difficulty_band": "standard",
+        "tempting_wrong_option": "B",
+        "tempting_wrong_reason": "The longer interval from treatment completion makes estrogen feel more reasonable, but the recent pregnancy-associated thrombotic history still keeps it off the table.",
+        "estimated_time_seconds": 85,
+        "decision_frame": "best_next_step",
+        "difficulty_target_10": 7,
+        "ambiguity_level": 7,
+        "threshold_variable": "15 weeks postpartum and 8 weeks from completing anticoagulation",
+        "threshold_type": "timing_after_recent_vte",
+        "conflicting_axes": ["patient preference for estrogen vs recurrent VTE risk", "greater time distance from event vs still recent thrombosis history"],
+        "management_nuance": ["timing softens the stem without flipping the answer", "offer high-efficacy non-estrogen contraception now"],
+        "near_miss_options": ["A", "B"],
+        "near_correct_trap": "B",
+        "plausible_option_count": 2,
+        "clinical_noise": ["no longer breastfeeding", "asks whether more time changes the answer"],
+        "dynamic_progression": ["now 15 weeks postpartum", "completed anticoagulation 8 weeks ago"],
+        "template_family": "response_over_time",
+        "source_id": "study_src_cdc_usmec",
+        "source_name": "CDC U.S. Medical Eligibility Criteria for Contraceptive Use",
+        "source_type": "Guideline",
+        "source_url": "https://www.cdc.gov/contraception/hcp/usmec/index.html",
+        "source_excerpt": "Recent thrombosis history remains a major reason to avoid estrogen-containing contraceptive methods even when surrounding context becomes more reassuring.",
+        "approved_for_stage_b": True,
+        "last_reviewed_at": "2025-01-01",
+        "review_status": "source_grounded",
+        "enabled": True,
+    },
+    {
         "id": "mcq_vte_postpartum_estrogen",
         "item_type": "mcq",
         "topic": "Contraception",
@@ -947,8 +1200,8 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_reason": "Later postpartum timing and no breastfeeding make estrogen feel more acceptable, but the recent pregnancy-associated DVT still outweighs those reassuring details.",
         "estimated_time_seconds": 80,
         "decision_frame": "best_next_step",
-        "difficulty_target_10": 8,
-        "ambiguity_level": 8,
+        "difficulty_target_10": 5,
+        "ambiguity_level": 7,
         "threshold_variable": "Very recent completed treatment for pregnancy-associated DVT",
         "threshold_type": "recent_vte_vs_postpartum_context",
         "conflicting_axes": ["strong preference for estrogen method vs recurrent VTE risk", "later postpartum timing vs still-recent thrombosis history"],
@@ -974,22 +1227,35 @@ STUDY_SEED_ITEMS = [
         "item_type": "mcq",
         "topic": "Obstetrics",
         "subtopic": "Pregnancy UTI overlap",
-        "question_stem": "A 24-week pregnant patient has fever, flank pain, tachycardia, and CVA tenderness. What is the most appropriate management now?",
+        "question_stem": "A 24-week pregnant patient has had 18 hours of fever, flank pain, tachycardia, and CVA tenderness despite oral hydration and acetaminophen at home. She is still hemodynamically stable and asks whether she can avoid admission if she starts antibiotics now. What is the best next step now?",
         "options": [
             {"key": "A", "text": "Hospitalize for pyelonephritis treatment with parenteral antibiotics and maternal-fetal monitoring"},
             {"key": "B", "text": "Treat as uncomplicated cystitis with outpatient nitrofurantoin"},
-            {"key": "C", "text": "Wait for culture results before starting antibiotics"},
-            {"key": "D", "text": "Manage with oral hydration only if fetal heart rate is normal"},
+            {"key": "C", "text": "Give the first antibiotic dose now and reassess later the same day as an outpatient if symptoms begin to improve"},
+            {"key": "D", "text": "Send urine studies now and reconsider admission once microbiology confirms the diagnosis"},
         ],
         "correct_answer_key": "A",
-        "explanation": "Pregnancy pyelonephritis is a maternal-fetal risk condition and should be managed inpatient with prompt parenteral therapy, not like simple cystitis.",
-        "exam_clue": "Pregnancy plus fever, flank pain, and CVA tenderness",
-        "board_takeaway": "Pyelonephritis in pregnancy is an admit-and-treat problem, not an outpatient cystitis problem.",
-        "decision_point": "Differentiate pyelonephritis from lower UTI in pregnancy and escalate appropriately",
+        "explanation": "This is no longer just recall of 'pyelo equals admit.' The outpatient option becomes tempting because she is still hemodynamically stable, but ongoing systemic symptoms in pregnancy after trying supportive care still make inpatient parenteral therapy the safer next step.",
+        "exam_clue": "Persistent pregnancy pyelonephritis symptoms after attempted home measures",
+        "board_takeaway": "Pregnancy pyelonephritis becomes harder when the patient is stable enough to tempt outpatient management; persistence of systemic symptoms still favors inpatient treatment.",
+        "decision_point": "Choose inpatient pyelonephritis care versus same-day outpatient treatment in pregnancy",
         "difficulty_band": "standard",
-        "tempting_wrong_option": "B",
-        "tempting_wrong_reason": "Systemic features and flank pain move this out of uncomplicated cystitis and into inpatient pyelonephritis management.",
+        "tempting_wrong_option": "C",
+        "tempting_wrong_reason": "Same-day outpatient reassessment sounds efficient because she is stable, but persistent systemic symptoms in pregnancy still favor inpatient parenteral therapy.",
         "estimated_time_seconds": 60,
+        "decision_frame": "best_next_step",
+        "difficulty_target_10": 4,
+        "ambiguity_level": 4,
+        "threshold_variable": "Persistent systemic symptoms after attempted home care",
+        "threshold_type": "response_to_treatment",
+        "conflicting_axes": ["hemodynamic stability vs pregnancy pyelonephritis risk", "desire to avoid admission vs persistent systemic symptoms"],
+        "management_nuance": ["stable appearance does not make this uncomplicated cystitis", "same-day outpatient reassessment is the near-miss"],
+        "near_miss_options": ["A", "C"],
+        "near_correct_trap": "C",
+        "plausible_option_count": 2,
+        "clinical_noise": ["oral hydration and acetaminophen already tried", "asks to avoid admission"],
+        "dynamic_progression": ["18 hours of ongoing fever and flank pain", "symptoms persisted despite home measures"],
+        "template_family": "response_over_time",
         "source_id": "study_src_acog_uti_pregnancy",
         "source_name": "ACOG: Urinary Tract Infections in Pregnancy",
         "source_type": "Guideline",
@@ -1065,6 +1331,9 @@ STUDY_SEED_ITEMS = [
         "tempting_wrong_option": "B",
         "tempting_wrong_reason": "Amniotic fluid embolism presents dramatically with cardiopulmonary collapse, not isolated progressive neurologic symptoms after excess hypotonic fluid exposure.",
         "estimated_time_seconds": 70,
+        "decision_frame": "most_likely_diagnosis",
+        "difficulty_target_10": 4,
+        "ambiguity_level": 4,
         "source_id": "study_src_nhs_hyponatremia_labor",
         "source_name": "NHS Guideline: Hyponatremia in Labour",
         "source_type": "Guideline",
@@ -1136,6 +1405,25 @@ def _difficulty_band_for_level(level):
     return "standard"
 
 
+def _difficulty_level_from_target_10(target_10):
+    try:
+        normalized = int(target_10)
+    except (TypeError, ValueError):
+        normalized = 4
+    normalized = max(1, min(10, normalized))
+    if normalized <= 2:
+        return 1
+    if normalized == 3:
+        return 2
+    if normalized == 4:
+        return 3
+    if normalized == 5:
+        return 4
+    if normalized == 6:
+        return 5
+    return 6
+
+
 def _level_for_legacy_band(band):
     normalized = (band or "").strip().lower()
     if normalized == "warmup":
@@ -1203,17 +1491,17 @@ def _difficulty_policy_for_profile(user_profile):
     distribution = dict(DIFFICULTY_LEVEL_DISTRIBUTIONS.get(residency_year, DIFFICULTY_LEVEL_DISTRIBUTIONS["R6"]))
     min_level, max_level = DIFFICULTY_LEVEL_BOUNDS.get(residency_year, (4, 6))
     baseline_level = max(distribution, key=distribution.get)
+    main_flow_rule = dict(RESIDENCY_YEAR_MAIN_FLOW_RULES.get(residency_year, RESIDENCY_YEAR_MAIN_FLOW_RULES["R6"]))
     return {
         "residency_year": residency_year,
         "distribution": distribution,
         "baseline_level": baseline_level,
         "min_level": min_level,
         "max_level": max_level,
-        "prefer_advanced_mcq_stack": residency_year == "R6",
-        "prefer_stage_b_judgment": residency_year == "R6",
-        "enforce_r6_main_flow_gate": residency_year == "R6",
-        "main_flow_min_target_10": 7 if residency_year == "R6" else 0,
-        "practice_floor": max(min_level, baseline_level - 1) if residency_year == "R6" else min_level,
+        "prefer_advanced_mcq_stack": residency_year in {"R5", "R6"},
+        "prefer_stage_b_judgment": residency_year in {"R4", "R5", "R6"},
+        "practice_floor": max(min_level, baseline_level - 1) if residency_year in {"R5", "R6"} else min_level,
+        **main_flow_rule,
     }
 
 
@@ -1364,13 +1652,20 @@ def _normalize_study_item(item):
     normalized = dict(item)
     normalized.update(SEED_ITEM_METADATA_OVERRIDES.get(normalized.get("id"), {}))
     normalized["review_status"] = normalized.get("review_status") or "source_grounded"
-    normalized["difficulty_level"] = int(
+    legacy_declared_difficulty_level = int(
         normalized.get("difficulty_level")
         or _level_for_legacy_band(normalized.get("difficulty_band"))
     )
+    normalized["difficulty_target_10"] = int(normalized.get("difficulty_target_10") or legacy_declared_difficulty_level)
+    canonical_difficulty_level = _difficulty_level_from_target_10(normalized["difficulty_target_10"])
+    normalized["legacy_declared_difficulty_level"] = legacy_declared_difficulty_level
+    normalized["declared_difficulty_level"] = canonical_difficulty_level
+    normalized["difficulty_level"] = canonical_difficulty_level
+    normalized["difficulty_level_alignment"] = (
+        "aligned" if canonical_difficulty_level == legacy_declared_difficulty_level else "auto_recalculated_from_target"
+    )
     normalized["question_style"] = normalized.get("question_style") or _infer_question_style(normalized)
     normalized["difficulty_band"] = _difficulty_band_for_level(normalized["difficulty_level"])
-    normalized["difficulty_target_10"] = int(normalized.get("difficulty_target_10") or normalized["difficulty_level"])
     normalized["ambiguity_level"] = int(normalized.get("ambiguity_level") or 0)
     normalized["conflicting_axes"] = [axis for axis in (normalized.get("conflicting_axes") or []) if axis]
     normalized["management_nuance"] = [axis for axis in (normalized.get("management_nuance") or []) if axis]
@@ -1512,6 +1807,8 @@ def _infer_decision_archetype(item):
 def _stage_b_quality_metadata(item):
     options = item.get("options") or []
     correct_key = (item.get("correct_answer_key") or "").upper()
+    question_stem = (item.get("question_stem") or "").strip()
+    normalized_stem = question_stem.lower()
     option_texts = [" " + (option.get("text") or "").strip().lower() + " " for option in options]
     distractor_texts = [
         " " + (option.get("text") or "").strip().lower() + " "
@@ -1540,6 +1837,99 @@ def _stage_b_quality_metadata(item):
     has_near_correct_trap = bool(item.get("near_correct_trap"))
     has_template_family = bool(item.get("template_family"))
     decision_archetype = item.get("decision_archetype")
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+    dynamic_text = " ".join(item.get("dynamic_progression") or []).lower()
+    stem_word_count = len(question_stem.split())
+    correct_option_text = (_option_text_by_key(item, correct_key) or "").strip()
+    correct_option_word_count = len(correct_option_text.split())
+    time_progression_or_response = bool(
+        dynamic_progression_count >= 1
+        or threshold_type in {
+            "response_to_treatment",
+            "treatment_response_plus_age",
+            "lab_trend_threshold",
+            "gestational_age_plus_clinical_trajectory",
+            "gestational_age_plus_stability",
+        }
+    )
+    partial_response_or_trend = bool(
+        threshold_type in {"response_to_treatment", "treatment_response_plus_age", "lab_trend_threshold"}
+        or any(
+            marker in dynamic_text
+            for marker in ("improv", "persist", "still", "fell", "declin", "trend", "completed", "despite")
+        )
+    )
+    near_miss_keys = {
+        str(option_key).upper()
+        for option_key in (item.get("near_miss_options") or [])
+        if option_key
+    }
+    tempting_wrong_option = (item.get("tempting_wrong_option") or "").strip().upper()
+    second_best_key = (item.get("near_correct_trap") or tempting_wrong_option or "").strip().upper()
+    second_best_strength_score = 0
+    if second_best_key:
+        second_best_strength_score += 1
+    if second_best_key and second_best_key in near_miss_keys:
+        second_best_strength_score += 1
+    if second_best_key and second_best_key == tempting_wrong_option:
+        second_best_strength_score += 1
+    if plausible_option_count >= 2:
+        second_best_strength_score += 1
+    if ambiguity_level >= 8:
+        second_best_strength_score += 1
+    if has_conflict:
+        second_best_strength_score += 1
+    if tradeoff_axes_count >= 1:
+        second_best_strength_score += 1
+    if decision_pressure_count >= 1:
+        second_best_strength_score += 1
+    if dynamic_progression_count >= 1 or has_threshold:
+        second_best_strength_score += 1
+    decision_pressure_score = 0
+    if decision_pressure_count >= 1:
+        decision_pressure_score += 1
+    if tradeoff_axes_count >= 1:
+        decision_pressure_score += 1
+    if time_progression_or_response:
+        decision_pressure_score += 1
+    if partial_response_or_trend:
+        decision_pressure_score += 1
+    if ambiguity_level >= 8:
+        decision_pressure_score += 1
+    if plausible_option_count >= 2:
+        decision_pressure_score += 1
+    high_decision_pressure = decision_pressure_score >= 5
+    deep_conflict = (
+        plausible_option_count >= 2
+        and has_conflict
+        and tradeoff_axes_count >= 1
+        and decision_pressure_count >= 1
+        and (dynamic_progression_count >= 1 or has_threshold)
+    )
+    clear_decision_point = bool(item.get("decision_point")) and has_decision_frame
+    dominant_clue_present = bool((item.get("exam_clue") or "").strip()) and stem_word_count >= 12
+    plausible_distractors = absolute_option_count == 0 and obvious_wrong_distractor_count == 0 and (high_quality_distractors >= 1 or plausible_option_count >= 2)
+    vague_stem_risk = difficulty_target >= 4 and (stem_word_count < 12 or "best next step" not in normalized_stem)
+    keyword_only_answer_risk = difficulty_target >= 4 and correct_option_word_count <= 2 and not time_progression_or_response and not has_threshold
+    quality_checks = {
+        "clear_decision_point": clear_decision_point,
+        "dominant_clue": dominant_clue_present,
+        "plausible_distractors": plausible_distractors,
+        "not_vague_stem": not vague_stem_risk,
+        "not_keyword_only_answer": not keyword_only_answer_risk,
+    }
+    quality_failures = [name for name, passed in quality_checks.items() if not passed]
+    quality_score_10 = 0
+    if clear_decision_point:
+        quality_score_10 += 2
+    if dominant_clue_present:
+        quality_score_10 += 2
+    if plausible_distractors:
+        quality_score_10 += 2
+    if not vague_stem_risk:
+        quality_score_10 += 2
+    if not keyword_only_answer_risk:
+        quality_score_10 += 2
 
     score = 0
     if has_decision_frame:
@@ -1572,16 +1962,31 @@ def _stage_b_quality_metadata(item):
         score += 1
     if has_near_correct_trap:
         score += 1
+    if second_best_strength_score >= 5:
+        score += 2
+    elif second_best_strength_score >= 3:
+        score += 1
+    if high_decision_pressure:
+        score += 2
+    elif decision_pressure_score >= 3:
+        score += 1
+    if deep_conflict:
+        score += 2
 
     checks = {
         "decision_frame": has_decision_frame,
         "near_miss_distractors": high_quality_distractors >= 2,
         "near_correct_trap": has_near_correct_trap,
         "plausible_option_count": plausible_option_count >= 2,
+        "second_best_strength": second_best_strength_score >= 5,
         "tradeoff_axes": tradeoff_axes_count >= 1,
         "decision_pressure": decision_pressure_count >= 1,
+        "high_decision_pressure": high_decision_pressure,
         "conflicting_axes": has_conflict,
         "threshold_variable": has_threshold,
+        "threshold_or_progression": has_threshold or dynamic_progression_count >= 1,
+        "time_progression_or_response": time_progression_or_response,
+        "partial_response_or_trend": partial_response_or_trend,
         "dynamic_progression": dynamic_progression_count >= 1,
         "clinical_noise": clinical_noise_count >= 1,
         "no_obvious_wrong_distractors": absolute_option_count == 0 and obvious_wrong_distractor_count == 0,
@@ -1589,18 +1994,20 @@ def _stage_b_quality_metadata(item):
         "management_nuance": management_nuance >= 2,
         "high_judgment_style": high_judgment_style,
         "template_family": has_template_family,
+        "deep_conflict": deep_conflict,
+        "question_quality_ready": not quality_failures,
     }
     rule = _difficulty_engine_rule_for_target(difficulty_target)
     required_failures = [name for name in rule["required"] if not checks.get(name)]
     recommended_gaps = [name for name in rule["recommended"] if not checks.get(name)]
-    difficulty_engine_ready = not required_failures
+    difficulty_engine_ready = not required_failures and not quality_failures
     effective_target = difficulty_target
     quality_status = "ready"
     rewrite_actions = []
     if difficulty_target >= 7 and not difficulty_engine_ready:
         effective_target = min(difficulty_target, 6)
         quality_status = "needs_rewrite" if len(required_failures) >= 2 else "downgraded"
-        rewrite_actions = list(required_failures)
+        rewrite_actions = list(required_failures + quality_failures)
 
     disguised_recall_archetype = None
     if difficulty_target >= 7:
@@ -1622,7 +2029,10 @@ def _stage_b_quality_metadata(item):
         "stage_b_ready": score >= 8 and difficulty_engine_ready,
         "absolute_option_count": absolute_option_count,
         "obvious_wrong_distractor_count": obvious_wrong_distractor_count,
+        "second_best_strength_score": second_best_strength_score,
+        "decision_pressure_score": decision_pressure_score,
         "difficulty_engine_ready": difficulty_engine_ready,
+        "difficulty_engine_checks": checks,
         "difficulty_engine_required_failures": required_failures,
         "difficulty_engine_recommended_gaps": recommended_gaps,
         "difficulty_engine_rule": f"{rule['min_target']}-{rule['max_target']}",
@@ -1630,6 +2040,9 @@ def _stage_b_quality_metadata(item):
         "difficulty_engine_status": quality_status,
         "rewrite_actions": rewrite_actions,
         "disguised_recall_archetype": disguised_recall_archetype,
+        "question_quality_score_10": quality_score_10,
+        "question_quality_checks": quality_checks,
+        "question_quality_failures": quality_failures,
     }
 
 
@@ -1648,6 +2061,8 @@ def _default_state(session_id):
         "topics_seen": [],
         "topics_correct_count": {},
         "topics_incorrect_count": {},
+        "template_family_correct_count": {},
+        "template_family_incorrect_count": {},
         "recent_mistake_topics": [],
         "recent_topic_history": [],
         "recent_answer_topics": [],
@@ -1662,6 +2077,23 @@ def _default_state(session_id):
         "pending_reinforcement_topic": None,
         "pending_reinforcement_decision_point": None,
         "pending_reinforcement_remaining": 0,
+        "session_cards_requested": 0,
+        "session_answered_count": 0,
+        "session_correct_count": 0,
+        "session_incorrect_count": 0,
+        "session_focus_topic": None,
+        "session_focus_template_family": None,
+        "session_mode": None,
+        "session_last_recommendation": None,
+        "session_last_outcome": None,
+        "study_session_id": None,
+        "study_session_started_at": None,
+        "study_session_target_questions": 0,
+        "study_session_working_level": None,
+        "study_session_consecutive_correct": 0,
+        "study_session_consecutive_incorrect": 0,
+        "study_session_completed_at": None,
+        "study_session_last_summary": None,
         "created_at": now,
         "updated_at": now,
     }
@@ -1678,6 +2110,230 @@ def _load_state(session_id):
 
 def _trim_history(items, max_items=12):
     return items[-max_items:]
+
+
+def _safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _count_for(mapping, key):
+    if not key:
+        return 0
+    return _safe_int((mapping or {}).get(key), 0)
+
+
+def _accuracy_snapshot(correct_count, incorrect_count):
+    total = correct_count + incorrect_count
+    if total <= 0:
+        return 0.0
+    return correct_count / total
+
+
+def _priority_topics(state, limit=3):
+    topic_keys = set((state.get("topics_correct_count") or {}).keys()) | set((state.get("topics_incorrect_count") or {}).keys())
+    ranked = []
+    for topic in topic_keys:
+        correct_count = _count_for(state.get("topics_correct_count"), topic)
+        incorrect_count = _count_for(state.get("topics_incorrect_count"), topic)
+        if correct_count + incorrect_count <= 0:
+            continue
+        mistake_weight = 1 if topic in (state.get("recent_mistake_topics") or [])[-5:] else 0
+        accuracy = _accuracy_snapshot(correct_count, incorrect_count)
+        ranked.append(((incorrect_count * 3) + mistake_weight - accuracy, incorrect_count, -correct_count, topic))
+    ranked.sort(reverse=True)
+    return [topic for *_ignored, topic in ranked[:limit]]
+
+
+def _priority_template_families(state, limit=2):
+    family_keys = set((state.get("template_family_correct_count") or {}).keys()) | set((state.get("template_family_incorrect_count") or {}).keys())
+    ranked = []
+    for family in family_keys:
+        correct_count = _count_for(state.get("template_family_correct_count"), family)
+        incorrect_count = _count_for(state.get("template_family_incorrect_count"), family)
+        if correct_count + incorrect_count <= 0:
+            continue
+        accuracy = _accuracy_snapshot(correct_count, incorrect_count)
+        ranked.append(((incorrect_count * 3) - accuracy, incorrect_count, -correct_count, family))
+    ranked.sort(reverse=True)
+    return [family for *_ignored, family in ranked[:limit]]
+
+
+def _session_progress_summary(state):
+    answered = _safe_int(state.get("session_answered_count"))
+    correct = _safe_int(state.get("session_correct_count"))
+    incorrect = _safe_int(state.get("session_incorrect_count"))
+    target = _safe_int(state.get("study_session_target_questions"))
+    remaining = max(0, target - answered) if target else 0
+    progress_percent = int(round((answered / target) * 100)) if target else 0
+    return {
+        "answered": answered,
+        "correct": correct,
+        "incorrect": incorrect,
+        "target": target,
+        "remaining": remaining,
+        "progress_percent": progress_percent,
+    }
+
+
+def _build_session_plan(state, policy, mcq_pool):
+    reinforcement = _pending_reinforcement(state)
+    weak_topics = _priority_topics(state)
+    weak_template_families = _priority_template_families(state)
+    target_level = _safe_int(state.get("study_session_working_level"), 0) or _current_difficulty_level(state, policy)
+    available_topics = {item.get("topic") for item in mcq_pool if item.get("topic")}
+    available_template_families = {item.get("template_family") for item in mcq_pool if item.get("template_family")}
+
+    focus_topic = None
+    focus_template_family = None
+    mode = "build"
+    goal = "Keep breadth while staying close to your current level."
+
+    if reinforcement and reinforcement.get("topic") in available_topics:
+        focus_topic = reinforcement.get("topic")
+        mode = "reinforce"
+        goal = "Revisit the topic you just missed before moving on."
+    elif weak_topics:
+        focus_topic = next((topic for topic in weak_topics if topic in available_topics), None)
+        if focus_topic:
+            mode = "reinforce"
+            goal = "Bias the next cards toward weaker topics until performance stabilizes."
+
+    if weak_template_families:
+        focus_template_family = next(
+            (family for family in weak_template_families if family in available_template_families),
+            focus_template_family,
+        )
+
+    if mode != "reinforce" and policy.get("residency_year") in {"R5", "R6"}:
+        mode = "advance"
+        goal = "Prefer higher-pressure decision questions while preserving topic spread."
+
+    return {
+        "mode": mode,
+        "goal": goal,
+        "focus_topic": focus_topic,
+        "focus_template_family": focus_template_family,
+        "target_level": target_level,
+    }
+
+
+def _session_target_questions_for_policy(policy):
+    return _safe_int(SESSION_TARGET_QUESTIONS.get(policy.get("residency_year")), 5)
+
+
+def _desired_decision_pressure_for_session(state, policy):
+    residency_year = policy.get("residency_year") or "R6"
+    baseline = {
+        "R1": 1,
+        "R2": 2,
+        "R3": 3,
+        "R4": 4,
+        "R5": 5,
+        "R6": 6,
+    }.get(residency_year, 4)
+    progress = _session_progress_summary(state)
+    answered = progress["answered"]
+    target = progress["target"] or _session_target_questions_for_policy(policy)
+    completion_ratio = (answered / target) if target else 0
+    if completion_ratio < 0.34:
+        return max(1, baseline - 1)
+    if completion_ratio < 0.67:
+        return baseline
+    return min(6, baseline + 1)
+
+
+def _session_is_active(state):
+    target = _safe_int(state.get("study_session_target_questions"))
+    answered = _safe_int(state.get("session_answered_count"))
+    return bool(state.get("study_session_id")) and not state.get("study_session_completed_at") and target > 0 and answered < target
+
+
+def _start_new_study_session(state, policy):
+    target_questions = _session_target_questions_for_policy(policy)
+    return {
+        "study_session_id": f"study-{_utc_now().strftime('%Y%m%d%H%M%S%f')}",
+        "study_session_started_at": _utc_now(),
+        "study_session_target_questions": target_questions,
+        "study_session_working_level": _current_difficulty_level(state, policy),
+        "study_session_consecutive_correct": 0,
+        "study_session_consecutive_incorrect": 0,
+        "study_session_completed_at": None,
+        "study_session_last_summary": None,
+        "session_answered_count": 0,
+        "session_correct_count": 0,
+        "session_incorrect_count": 0,
+        "session_mode": "build",
+        "session_last_outcome": None,
+    }
+
+
+def _session_summary_payload(state, policy):
+    progress = _session_progress_summary(state)
+    weak_topics = _priority_topics(state, limit=2)
+    takeaway_topic = state.get("last_studied_topic") or "this session"
+    takeaway_text = f"Clinical pearl: keep your eyes on the key management hinge in {takeaway_topic}."
+    next_action = "continue_progression"
+    next_action_label = "Continue with another question"
+    if weak_topics:
+        next_action = "repeat_weak_topic"
+    return {
+        "session_id": state.get("study_session_id"),
+        "accuracy_percent": int(round(_accuracy_snapshot(progress["correct"], progress["incorrect"]) * 100)) if progress["answered"] else 0,
+        "weak_topics": weak_topics,
+        "takeaway": takeaway_text,
+        "next_action": next_action,
+        "next_action_label": next_action_label,
+        "questions_completed": progress["answered"],
+        "questions_target": progress["target"],
+        "residency_year": policy.get("residency_year"),
+    }
+
+
+def _next_session_level_after_answer(state, policy, correct):
+    working_level = _safe_int(state.get("study_session_working_level"), _current_difficulty_level(state, policy))
+    consecutive_correct = _safe_int(state.get("study_session_consecutive_correct"))
+    consecutive_incorrect = _safe_int(state.get("study_session_consecutive_incorrect"))
+    if correct:
+        consecutive_correct += 1
+        consecutive_incorrect = 0
+        if consecutive_correct >= SESSION_DIFFICULTY_RULES["increase_after_consecutive_correct"]:
+            working_level = min(policy["max_level"], working_level + 1)
+            consecutive_correct = 0
+    else:
+        consecutive_incorrect += 1
+        consecutive_correct = 0
+        if consecutive_incorrect >= SESSION_DIFFICULTY_RULES["decrease_after_consecutive_incorrect"]:
+            working_level = max(policy["min_level"], working_level - 1)
+            consecutive_incorrect = 0
+    return {
+        "working_level": working_level,
+        "consecutive_correct": consecutive_correct,
+        "consecutive_incorrect": consecutive_incorrect,
+    }
+
+
+def _session_meta_payload(state_or_plan, policy=None):
+    if policy is None:
+        return state_or_plan
+    progress = _session_progress_summary(state_or_plan)
+    current_question_number = min(progress["answered"] + (0 if state_or_plan.get("session_completed") or state_or_plan.get("study_session_completed_at") else 1), progress["target"]) if progress["target"] else 0
+    return {
+        "mode": state_or_plan.get("session_mode"),
+        "goal": state_or_plan.get("session_last_recommendation"),
+        "focus_topic": state_or_plan.get("session_focus_topic"),
+        "focus_template_family": state_or_plan.get("session_focus_template_family"),
+        "residency_year": policy.get("residency_year"),
+        "current_level": _safe_int(state_or_plan.get("current_difficulty_level"), policy.get("baseline_level")),
+        "working_level": _safe_int(state_or_plan.get("study_session_working_level"), _safe_int(state_or_plan.get("current_difficulty_level"), policy.get("baseline_level"))),
+        "session_id": state_or_plan.get("study_session_id"),
+        "session_started_at": state_or_plan.get("study_session_started_at"),
+        "session_completed": bool(state_or_plan.get("study_session_completed_at")),
+        "current_question_number": current_question_number,
+        "session_progress": progress,
+    }
 
 
 def _save_state(session_id, updates):
@@ -1855,6 +2511,8 @@ def _selection_score(
     item,
     state,
     preferred_topic=None,
+    preferred_template_family=None,
+    preferred_decision_pressure=None,
     preferred_item_type=None,
     preferred_difficulty_level=None,
     preferred_question_style=None,
@@ -1867,17 +2525,26 @@ def _selection_score(
         score += 30
     if preferred_topic and item.get("topic") == preferred_topic:
         score += 28
+    if preferred_template_family and item.get("template_family") == preferred_template_family:
+        score += 18
     if preferred_difficulty_level is not None:
         item_level = int(item.get("difficulty_level") or 0)
         distance = abs(item_level - int(preferred_difficulty_level))
         score += max(0, 34 - (distance * 10))
     if preferred_question_style and item.get("question_style") == preferred_question_style:
         score += 20
+    if preferred_decision_pressure is not None:
+        pressure_gap = abs(int(item.get("decision_pressure_score") or 0) - int(preferred_decision_pressure))
+        score += max(0, 18 - (pressure_gap * 6))
     if item.get("difficulty_engine_ready"):
         score += 24
     elif item.get("stage_b_ready"):
         score += 18
     score += int(item.get("stage_b_quality_score") or 0) * 3
+    score += int(item.get("question_quality_score_10") or 0) * 3
+    score += int(item.get("second_best_strength_score") or 0) * 4
+    if item.get("difficulty_engine_checks", {}).get("deep_conflict"):
+        score += 8
     score += int(item.get("difficulty_target_10") or 0) * 2
     if reinforcement:
         if topic == reinforcement.get("topic"):
@@ -1943,14 +2610,36 @@ def _selection_score(
 def _eligible_for_main_flow(item, policy):
     if not item:
         return False
-    if not policy.get("enforce_r6_main_flow_gate"):
+    if not policy.get("enforce_main_flow_gate"):
         return True
     target_10 = int(item.get("effective_difficulty_target_10") or item.get("difficulty_target_10") or 0)
     if target_10 < int(policy.get("main_flow_min_target_10") or 0):
         return False
-    if item.get("disguised_recall_archetype"):
+    if target_10 > int(policy.get("main_flow_max_target_10") or 10):
         return False
-    return bool(item.get("difficulty_engine_ready"))
+    if policy.get("block_disguised_recall") and item.get("disguised_recall_archetype"):
+        return False
+    if item.get("decision_archetype") in set(policy.get("blocked_archetypes") or ()):
+        return False
+    if item.get("template_family") in set(policy.get("blocked_template_families") or ()):
+        return False
+
+    checks = item.get("difficulty_engine_checks") or {}
+    for check_name in policy.get("required_checks") or ():
+        if not checks.get(check_name):
+            return False
+    for group in policy.get("required_any") or ():
+        if not any(checks.get(check_name) for check_name in group):
+            return False
+    if int(item.get("stage_b_quality_score") or 0) < int(policy.get("min_stage_b_quality_score") or 0):
+        return False
+    if int(item.get("second_best_strength_score") or 0) < int(policy.get("min_second_best_strength_score") or 0):
+        return False
+    if int(item.get("decision_pressure_score") or 0) < int(policy.get("min_decision_pressure_score") or 0):
+        return False
+    if policy.get("require_difficulty_engine_ready") and not item.get("difficulty_engine_ready"):
+        return False
+    return True
 
 
 def _pick_best_item(
@@ -1959,6 +2648,8 @@ def _pick_best_item(
     salt,
     state,
     preferred_topic=None,
+    preferred_template_family=None,
+    preferred_decision_pressure=None,
     preferred_item_type=None,
     preferred_difficulty_level=None,
     preferred_question_style=None,
@@ -1972,6 +2663,8 @@ def _pick_best_item(
             item,
             state,
             preferred_topic=preferred_topic,
+            preferred_template_family=preferred_template_family,
+            preferred_decision_pressure=preferred_decision_pressure,
             preferred_item_type=preferred_item_type,
             preferred_difficulty_level=preferred_difficulty_level,
             preferred_question_style=preferred_question_style,
@@ -2161,6 +2854,8 @@ def _pick_targeted_item(
     salt,
     preferred_item_type=None,
     preferred_topic=None,
+    preferred_template_family=None,
+    preferred_decision_pressure=None,
     preferred_difficulty_level=None,
     preferred_question_style=None,
     reinforcement=None,
@@ -2173,6 +2868,8 @@ def _pick_targeted_item(
         salt,
         state,
         preferred_topic=preferred_topic,
+        preferred_template_family=preferred_template_family,
+        preferred_decision_pressure=preferred_decision_pressure,
         preferred_item_type=preferred_item_type,
         preferred_difficulty_level=preferred_difficulty_level,
         preferred_question_style=preferred_question_style,
@@ -2188,7 +2885,7 @@ def _practice_candidates_for_policy(mcq_pool, used_ids, target_level, policy):
         and practice_floor <= item.get("difficulty_level", 0) <= target_level
     ]
     if candidates:
-        if policy.get("enforce_r6_main_flow_gate"):
+        if policy.get("enforce_main_flow_gate"):
             strict = [item for item in candidates if _eligible_for_main_flow(item, policy)]
             if strict:
                 return strict
@@ -2204,7 +2901,7 @@ def _practice_candidates_for_policy(mcq_pool, used_ids, target_level, policy):
         item for item in mcq_pool
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= practice_floor
     ]
-    if policy.get("enforce_r6_main_flow_gate"):
+    if policy.get("enforce_main_flow_gate"):
         strict = [item for item in fallback if _eligible_for_main_flow(item, policy)]
         if strict:
             return strict
@@ -2226,7 +2923,7 @@ def _advanced_mcq_candidates_for_policy(mcq_pool, used_ids, target_level, policy
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= challenge_floor
     ]
     if candidates:
-        if policy.get("enforce_r6_main_flow_gate"):
+        if policy.get("enforce_main_flow_gate"):
             strict = [item for item in candidates if _eligible_for_main_flow(item, policy)]
             if strict:
                 return strict
@@ -2242,7 +2939,7 @@ def _advanced_mcq_candidates_for_policy(mcq_pool, used_ids, target_level, policy
         item for item in mcq_pool
         if item["id"] not in used_ids and item.get("difficulty_level", 0) >= target_level
     ]
-    if policy.get("enforce_r6_main_flow_gate"):
+    if policy.get("enforce_main_flow_gate"):
         strict = [item for item in fallback if _eligible_for_main_flow(item, policy)]
         if strict:
             return strict
@@ -2270,14 +2967,17 @@ def get_idle_study_cards(session_id):
     recent_topics = state.get("recent_topic_history") or []
     recent_exclude_ids = _recent_study_exclude_ids(state)
     reinforcement = _pending_reinforcement(state)
-    preferred_topic = (reinforcement or {}).get("topic") or (recent_topics[-1] if recent_topics else None)
 
     used_ids = set()
     cards = []
 
     mcq_pool = _get_items(item_type="mcq", exclude_ids=recent_exclude_ids) or _get_items(item_type="mcq")
+    session_plan = _build_session_plan(state, policy, mcq_pool)
+    preferred_topic = session_plan.get("focus_topic") or (reinforcement or {}).get("topic") or (recent_topics[-1] if recent_topics else None)
+    preferred_template_family = session_plan.get("focus_template_family")
+    preferred_decision_pressure = _desired_decision_pressure_for_session(state, policy)
     available_levels = sorted({item.get("difficulty_level") for item in mcq_pool if item.get("difficulty_level")})
-    target_level = _target_difficulty_level(state, policy, available_levels)
+    target_level = session_plan.get("target_level") or _target_difficulty_level(state, policy, available_levels)
     available_styles = {item.get("question_style") for item in mcq_pool if item.get("question_style")}
     style_distribution = _prune_distribution(_distribution_for_level(target_level), available_styles)
     target_style = _target_question_style(state, target_level, style_distribution.keys())
@@ -2290,6 +2990,8 @@ def get_idle_study_cards(session_id):
         "practice",
         preferred_item_type="mcq",
         preferred_topic=preferred_topic,
+        preferred_template_family=preferred_template_family,
+        preferred_decision_pressure=max(1, preferred_decision_pressure - 1),
         preferred_difficulty_level=target_level,
         preferred_question_style=target_style,
         reinforcement=reinforcement,
@@ -2311,6 +3013,8 @@ def get_idle_study_cards(session_id):
         "challenge",
         preferred_item_type="mcq",
         preferred_topic=preferred_topic,
+        preferred_template_family=preferred_template_family,
+        preferred_decision_pressure=preferred_decision_pressure,
         preferred_difficulty_level=challenge_level,
         preferred_question_style=challenge_style,
     )
@@ -2327,6 +3031,8 @@ def get_idle_study_cards(session_id):
             "advanced",
             preferred_item_type="mcq",
             preferred_topic=preferred_topic,
+            preferred_template_family=preferred_template_family,
+            preferred_decision_pressure=min(6, preferred_decision_pressure + 1),
             preferred_difficulty_level=policy["max_level"],
             preferred_question_style=challenge_style or target_style,
             reinforcement=reinforcement,
@@ -2345,6 +3051,8 @@ def get_idle_study_cards(session_id):
             "pearl",
             preferred_item_type="pearl",
             preferred_topic=preferred_topic,
+            preferred_template_family=preferred_template_family,
+            preferred_decision_pressure=preferred_decision_pressure,
             preferred_difficulty_level=min(target_level, policy["max_level"]),
             preferred_question_style="pearl",
         )
@@ -2354,11 +3062,18 @@ def get_idle_study_cards(session_id):
 
     if len(cards) < 3:
         fallback_pool = _get_items(exclude_ids=used_ids | recent_exclude_ids) or _get_items(exclude_ids=used_ids)
-        if policy.get("enforce_r6_main_flow_gate"):
+        if policy.get("enforce_main_flow_gate"):
             fallback_pool = [item for item in fallback_pool if _eligible_for_main_flow(item, policy)]
         scored_fallback = sorted(
             fallback_pool,
-            key=lambda item: _selection_score(item, state, preferred_difficulty_level=target_level),
+            key=lambda item: _selection_score(
+                item,
+                state,
+                preferred_topic=preferred_topic,
+                preferred_template_family=preferred_template_family,
+                preferred_decision_pressure=preferred_decision_pressure,
+                preferred_difficulty_level=target_level,
+            ),
             reverse=True,
         )
         for item in scored_fallback:
@@ -2386,10 +3101,26 @@ def get_idle_study_cards(session_id):
             "cards_shown_history": shown_history,
             "idle_cards_cache": cards[:3],
             "idle_cards_cache_generated_at": _utc_now(),
+            "session_cards_requested": _safe_int(state.get("session_cards_requested")) + len(cards[:3]),
+            "session_focus_topic": session_plan.get("focus_topic"),
+            "session_focus_template_family": session_plan.get("focus_template_family"),
+            "session_mode": session_plan.get("mode"),
+            "session_last_recommendation": session_plan.get("goal"),
         },
     )
     log_event("study_cards_impression", session_id, {"card_ids": [card["content_item_id"] for card in cards]})
-    return {"cards": cards[:3]}
+    session_state = dict(state)
+    session_state.update(
+        {
+            "session_cards_requested": _safe_int(state.get("session_cards_requested")) + len(cards[:3]),
+            "session_focus_topic": session_plan.get("focus_topic"),
+            "session_focus_template_family": session_plan.get("focus_template_family"),
+            "session_mode": session_plan.get("mode"),
+            "session_last_recommendation": session_plan.get("goal"),
+            "current_difficulty_level": target_level,
+        }
+    )
+    return {"cards": cards[:3], "session_meta": _session_meta_payload(session_state, policy)}
 
 
 def _build_study_item_payload(item):
@@ -2406,6 +3137,8 @@ def _build_study_item_payload(item):
                 "estimated_time_seconds": item.get("estimated_time_seconds", 60),
                 "difficulty_band": item.get("difficulty_band"),
                 "difficulty_level": item.get("difficulty_level"),
+                "difficulty_target_10": item.get("difficulty_target_10"),
+                "question_quality_score_10": item.get("question_quality_score_10"),
                 "question_style": item.get("question_style"),
                 "decision_point": item.get("decision_point"),
             }
@@ -2439,9 +3172,37 @@ def open_study_card(session_id, content_item_id, card_type):
         return {"reply": "I don’t have an approved study item for that yet."}
 
     state = _load_state(session_id)
+    user_profile = get_user_profile(session_id)
+    policy = _difficulty_policy_for_profile(user_profile)
+    session_updates = {}
+    if item["item_type"] == "mcq" and not _session_is_active(state):
+        previous_target = _safe_int(state.get("study_session_target_questions"))
+        previous_answered = _safe_int(state.get("session_answered_count"))
+        if state.get("study_session_id") and previous_target > 0 and 0 < previous_answered < previous_target:
+            log_event(
+                "study_session_abandoned",
+                session_id,
+                {
+                    "study_session_id": state.get("study_session_id"),
+                    "drop_off_question_index": previous_answered,
+                    "questions_target": previous_target,
+                },
+            )
+        session_updates.update(_start_new_study_session(state, policy))
+        log_event(
+            "study_session_started",
+            session_id,
+            {
+                "study_session_id": session_updates.get("study_session_id"),
+                "questions_target": session_updates.get("study_session_target_questions"),
+                "residency_year": policy.get("residency_year"),
+                "starting_level": session_updates.get("study_session_working_level"),
+            },
+        )
     _save_state(
         session_id,
         {
+            **session_updates,
             "last_card_clicked": card_type,
             "last_interaction_type": item["item_type"],
             "last_incomplete_item_id": item["id"],
@@ -2463,8 +3224,54 @@ def open_study_card(session_id, content_item_id, card_type):
     if item["item_type"] == "pearl":
         log_event("pearl_opened", session_id, {"content_item_id": item["id"], "topic": item["topic"]})
     else:
-        log_event("mcq_started", session_id, {"content_item_id": item["id"], "topic": item["topic"]})
-    return {"reply": intro, "study_item": _build_study_item_payload(item)}
+        log_event(
+            "mcq_started",
+            session_id,
+            {
+                "content_item_id": item["id"],
+                "topic": item["topic"],
+                "study_session_id": session_updates.get("study_session_id") or state.get("study_session_id"),
+                "question_index": _safe_int(state.get("session_answered_count")) + 1,
+                "session_target": _safe_int(session_updates.get("study_session_target_questions"), _safe_int(state.get("study_session_target_questions"))),
+            },
+        )
+    session_state = dict(state)
+    session_state.update(
+        {
+            **session_updates,
+            "last_studied_topic": item["topic"],
+            "last_active_item_id": item["id"],
+            "last_active_item_type": item["item_type"],
+        }
+    )
+    return {
+        "reply": intro,
+        "study_item": _build_study_item_payload(item),
+        "session_meta": _session_meta_payload(session_state, policy),
+    }
+
+
+def _recommendation_after_answer(correct, item, next_level, policy):
+    topic = item.get("topic")
+    if not correct:
+        return {
+            "mode": "reinforce",
+            "message": f"Stay on {topic} for one more pass and compare the near-miss choice.",
+        }
+    if next_level > _safe_int(item.get("difficulty_level"), next_level):
+        return {
+            "mode": "advance",
+            "message": "You cleared this one cleanly. The next session can push a little harder.",
+        }
+    if policy.get("residency_year") in {"R5", "R6"}:
+        return {
+            "mode": "advance",
+            "message": "Keep the pressure high and rotate to another decision-heavy topic.",
+        }
+    return {
+        "mode": "build",
+        "message": "Keep building with a nearby topic at the same level before stepping up.",
+    }
 
 
 def answer_mcq(session_id, content_item_id, selected_option):
@@ -2485,12 +3292,19 @@ def answer_mcq(session_id, content_item_id, selected_option):
     answer_styles = list(state.get("recent_answer_styles") or [])
     answer_topics = list(state.get("recent_answer_topics") or [])
     answer_template_families = list(state.get("recent_answer_template_families") or [])
+    template_family_correct_count = dict(state.get("template_family_correct_count") or {})
+    template_family_incorrect_count = dict(state.get("template_family_incorrect_count") or {})
+    template_family = item.get("template_family")
 
     if correct:
         correct_counts[topic] = correct_counts.get(topic, 0) + 1
+        if template_family:
+            template_family_correct_count[template_family] = template_family_correct_count.get(template_family, 0) + 1
     else:
         incorrect_counts[topic] = incorrect_counts.get(topic, 0) + 1
         recent_mistakes.append(topic)
+        if template_family:
+            template_family_incorrect_count[template_family] = template_family_incorrect_count.get(template_family, 0) + 1
 
     answer_results = _trim_history(answer_results + [correct], DEMOTION_WINDOW)
     answer_levels = _trim_history(answer_levels + [item.get("difficulty_level")], LEVEL_HISTORY_WINDOW)
@@ -2501,6 +3315,8 @@ def answer_mcq(session_id, content_item_id, selected_option):
         TEMPLATE_FAMILY_HISTORY_WINDOW,
     )
     next_level = _next_difficulty_level_after_answer(state, policy, answer_levels, answer_results)
+    session_level_state = _next_session_level_after_answer(state, policy, correct)
+    recommendation = _recommendation_after_answer(correct, item, session_level_state["working_level"], policy)
 
     pending_reinforcement_topic = None
     pending_reinforcement_decision_point = None
@@ -2515,32 +3331,77 @@ def answer_mcq(session_id, content_item_id, selected_option):
             pending_reinforcement_topic = state.get("pending_reinforcement_topic")
             pending_reinforcement_decision_point = state.get("pending_reinforcement_decision_point")
 
-    _save_state(
-        session_id,
-        {
-            "last_interaction_type": "mcq_feedback",
-            "last_incomplete_item_id": None,
-            "last_incomplete_item_type": None,
-            "last_active_item_id": item["id"],
-            "last_active_item_type": item["item_type"],
-            "topics_seen": _trim_history((state.get("topics_seen") or []) + [topic], 30),
-            "topics_correct_count": correct_counts,
-            "topics_incorrect_count": incorrect_counts,
-            "recent_mistake_topics": _trim_history(recent_mistakes, 8),
-            "recent_answer_results": answer_results,
-            "recent_answer_levels": answer_levels,
-            "recent_answer_styles": answer_styles,
-            "recent_answer_topics": answer_topics,
-            "recent_answer_template_families": answer_template_families,
-            "last_studied_topic": topic,
-            "last_answered_option": (selected_option or "").upper(),
-            "last_answer_correct": correct,
-            "current_difficulty_level": next_level,
-            "pending_reinforcement_topic": pending_reinforcement_topic,
-            "pending_reinforcement_decision_point": pending_reinforcement_decision_point,
-            "pending_reinforcement_remaining": pending_reinforcement_remaining,
-        },
-    )
+    answered_count = _safe_int(state.get("session_answered_count")) + 1
+    updated_fields = {
+        "last_interaction_type": "mcq_feedback",
+        "last_incomplete_item_id": None,
+        "last_incomplete_item_type": None,
+        "last_active_item_id": item["id"],
+        "last_active_item_type": item["item_type"],
+        "topics_seen": _trim_history((state.get("topics_seen") or []) + [topic], 30),
+        "topics_correct_count": correct_counts,
+        "topics_incorrect_count": incorrect_counts,
+        "template_family_correct_count": template_family_correct_count,
+        "template_family_incorrect_count": template_family_incorrect_count,
+        "recent_mistake_topics": _trim_history(recent_mistakes, 8),
+        "recent_answer_results": answer_results,
+        "recent_answer_levels": answer_levels,
+        "recent_answer_styles": answer_styles,
+        "recent_answer_topics": answer_topics,
+        "recent_answer_template_families": answer_template_families,
+        "last_studied_topic": topic,
+        "last_answered_option": (selected_option or "").upper(),
+        "last_answer_correct": correct,
+        "current_difficulty_level": next_level,
+        "pending_reinforcement_topic": pending_reinforcement_topic,
+        "pending_reinforcement_decision_point": pending_reinforcement_decision_point,
+        "pending_reinforcement_remaining": pending_reinforcement_remaining,
+        "session_answered_count": answered_count,
+        "session_correct_count": _safe_int(state.get("session_correct_count")) + (1 if correct else 0),
+        "session_incorrect_count": _safe_int(state.get("session_incorrect_count")) + (0 if correct else 1),
+        "session_focus_topic": pending_reinforcement_topic if pending_reinforcement_topic else state.get("session_focus_topic"),
+        "session_focus_template_family": template_family if not correct else state.get("session_focus_template_family"),
+        "session_mode": recommendation.get("mode"),
+        "session_last_recommendation": recommendation.get("message"),
+        "session_last_outcome": "correct" if correct else "incorrect",
+        "study_session_working_level": session_level_state["working_level"],
+        "study_session_consecutive_correct": session_level_state["consecutive_correct"],
+        "study_session_consecutive_incorrect": session_level_state["consecutive_incorrect"],
+    }
+
+    updated_state = dict(state)
+    updated_state.update(updated_fields)
+    session_target = _safe_int(updated_state.get("study_session_target_questions"))
+    session_complete = bool(session_target and answered_count >= session_target)
+    next_session_item = None
+    session_summary = None
+    if session_complete:
+        updated_fields["study_session_completed_at"] = _utc_now()
+        updated_state["study_session_completed_at"] = updated_fields["study_session_completed_at"]
+        session_summary = _session_summary_payload(updated_state, policy)
+        updated_fields["study_session_last_summary"] = session_summary
+        updated_state["study_session_last_summary"] = session_summary
+    else:
+        next_session_item = _pick_next_session_item(session_id, updated_state, policy, anchor_topic=topic)
+        if next_session_item:
+            updated_fields["last_incomplete_item_id"] = next_session_item["id"]
+            updated_fields["last_incomplete_item_type"] = next_session_item["item_type"]
+            updated_fields["last_active_item_id"] = next_session_item["id"]
+            updated_fields["last_active_item_type"] = next_session_item["item_type"]
+            updated_fields["last_studied_topic"] = next_session_item["topic"]
+            updated_fields["recent_study_item_history"] = _record_studied_item(updated_state, next_session_item["id"])
+            updated_state.update(
+                {
+                    "last_incomplete_item_id": next_session_item["id"],
+                    "last_incomplete_item_type": next_session_item["item_type"],
+                    "last_active_item_id": next_session_item["id"],
+                    "last_active_item_type": next_session_item["item_type"],
+                    "last_studied_topic": next_session_item["topic"],
+                    "recent_study_item_history": updated_fields["recent_study_item_history"],
+                }
+            )
+
+    _save_state(session_id, updated_fields)
     log_event(
         "mcq_answered",
         session_id,
@@ -2551,22 +3412,72 @@ def answer_mcq(session_id, content_item_id, selected_option):
             "correct": correct,
             "difficulty_level": item.get("difficulty_level"),
             "next_difficulty_level": next_level,
+            "next_session_working_level": session_level_state["working_level"],
             "question_style": item.get("question_style"),
         },
     )
     log_event("mcq_correct" if correct else "mcq_incorrect", session_id, {"content_item_id": item["id"], "topic": topic})
+    log_event(
+        "study_session_progress",
+        session_id,
+        {
+            "study_session_id": updated_state.get("study_session_id"),
+            "question_index": answered_count,
+            "questions_target": session_target,
+            "correct": correct,
+            "working_level": session_level_state["working_level"],
+            "accuracy_percent": int(round(_accuracy_snapshot(updated_state.get("session_correct_count"), updated_state.get("session_incorrect_count")) * 100)),
+        },
+    )
+    if session_complete and session_summary:
+        log_event("study_session_completed", session_id, session_summary)
+    elif next_session_item:
+        log_event(
+            "study_session_question_presented",
+            session_id,
+            {
+                "study_session_id": updated_state.get("study_session_id"),
+                "content_item_id": next_session_item["id"],
+                "question_index": answered_count + 1,
+                "questions_target": session_target,
+                "difficulty_level": next_session_item.get("difficulty_level"),
+                "question_quality_score_10": next_session_item.get("question_quality_score_10"),
+            },
+        )
 
     reply = _build_mcq_feedback_reply(item, correct, (selected_option or "").upper())
-    return {
-        "reply": reply,
+    response = {
+        "reply": f"{reply}\n\nNext: {recommendation.get('message')}",
         "study_context_item_id": item["id"],
-        "study_followups": [
+        "study_feedback": {
+            "result": "correct" if correct else "incorrect",
+            "recommended_mode": recommendation.get("mode"),
+            "recommended_next_step": recommendation.get("message"),
+            "next_difficulty_level": next_level,
+            "next_session_working_level": session_level_state["working_level"],
+            "topic": topic,
+            "template_family": template_family,
+        },
+        "session_meta": _session_meta_payload(updated_state, policy),
+    }
+    if session_complete and session_summary:
+        response["session_summary"] = session_summary
+        response["study_followups"] = [
+            {"action": session_summary.get("next_action", "another_question"), "label": session_summary.get("next_action_label", "Continue")},
+            {"action": "another_question", "label": "Continue progression"},
+            {"action": "quick_recap", "label": "Give me the rule"},
+            {"action": "show_source", "label": "Show source"},
+        ]
+    elif next_session_item:
+        response["study_item"] = _build_study_item_payload(next_session_item)
+    else:
+        response["study_followups"] = [
             {"action": "another_question", "label": "Another question"},
             {"action": "explain_why", "label": "Explain why"},
             {"action": "show_source", "label": "Show source"},
             {"action": "quick_recap", "label": "Give me the rule"},
-        ],
-    }
+        ]
+    return response
 
 
 def _pick_related_item(session_id, item, item_type, exclude_self=False):
@@ -2581,16 +3492,59 @@ def _pick_related_item(session_id, item, item_type, exclude_self=False):
         fallback_exclude_ids = {item["id"]} if exclude_self else None
         candidates = _get_items(item_type=item_type, topic=item["topic"], exclude_ids=fallback_exclude_ids) or _get_items(item_type=item_type, exclude_ids=fallback_exclude_ids)
     target_level = _current_difficulty_level(state, policy)
+    session_plan = _build_session_plan(state, policy, [candidate for candidate in candidates if candidate.get("item_type") == "mcq"] or candidates)
     return _pick_best_item(
         session_id,
         candidates,
         f"{item['id']}:{item_type}",
         state,
         preferred_topic=item.get("topic"),
+        preferred_template_family=session_plan.get("focus_template_family"),
+        preferred_decision_pressure=_desired_decision_pressure_for_session(state, policy),
         preferred_item_type=item_type,
         preferred_difficulty_level=target_level if item_type == "mcq" else item.get("difficulty_level"),
         preferred_question_style=item.get("question_style") if item_type == "mcq" else "pearl",
         reinforcement=_pending_reinforcement(state) if item_type == "mcq" else None,
+    )
+
+
+def _pick_next_session_item(session_id, state, policy, anchor_topic=None):
+    recent_exclude_ids = _recent_study_exclude_ids(state)
+    active_item_id = state.get("last_active_item_id")
+    if active_item_id:
+        recent_exclude_ids.add(active_item_id)
+    mcq_pool = _get_items(item_type="mcq", exclude_ids=recent_exclude_ids) or _get_items(item_type="mcq", exclude_ids={active_item_id} if active_item_id else None)
+    if not mcq_pool:
+        return None
+
+    session_plan = _build_session_plan(state, policy, mcq_pool)
+    preferred_topic = session_plan.get("focus_topic") or anchor_topic or state.get("last_studied_topic")
+    preferred_template_family = session_plan.get("focus_template_family")
+    preferred_decision_pressure = _desired_decision_pressure_for_session(state, policy)
+    target_level = session_plan.get("target_level") or _safe_int(state.get("study_session_working_level"), _current_difficulty_level(state, policy))
+    available_styles = {item.get("question_style") for item in mcq_pool if item.get("question_style")}
+    style_distribution = _prune_distribution(_distribution_for_level(target_level), available_styles)
+    target_style = _target_question_style(state, target_level, style_distribution.keys())
+
+    candidate_pool = [
+        item for item in mcq_pool
+        if abs(_safe_int(item.get("difficulty_level"), target_level) - target_level) <= 1
+    ] or mcq_pool
+    if policy.get("enforce_main_flow_gate"):
+        candidate_pool = [item for item in candidate_pool if _eligible_for_main_flow(item, policy)] or candidate_pool
+
+    return _pick_targeted_item(
+        session_id,
+        state,
+        candidate_pool,
+        "session-next",
+        preferred_item_type="mcq",
+        preferred_topic=preferred_topic,
+        preferred_template_family=preferred_template_family,
+        preferred_decision_pressure=preferred_decision_pressure,
+        preferred_difficulty_level=target_level,
+        preferred_question_style=target_style,
+        reinforcement=_pending_reinforcement(state),
     )
 
 
@@ -2599,6 +3553,8 @@ def handle_study_action(session_id, content_item_id, action):
     if not item:
         return {"reply": "I couldn’t find that study item anymore."}
     state = _load_state(session_id)
+    user_profile = get_user_profile(session_id)
+    policy = _difficulty_policy_for_profile(user_profile)
 
     log_event("mcq_followup_clicked" if item["item_type"] == "mcq" else "pearl_followup_clicked", session_id, {"content_item_id": item["id"], "action": action})
 
@@ -2607,6 +3563,30 @@ def handle_study_action(session_id, content_item_id, action):
         return {
             "reply": None,
             "sources": _source_payload(item),
+        }
+
+    if action == "repeat_weak_topic":
+        weak_topics = ((state.get("study_session_last_summary") or {}).get("weak_topics") or [])
+        weak_topic = weak_topics[0] if weak_topics else state.get("session_focus_topic") or item.get("topic")
+        target_item = _pick_next_session_item(session_id, state, policy, anchor_topic=weak_topic)
+        if not target_item:
+            return {"reply": "I don’t have a good next question on that weaker topic yet."}
+        _save_state(
+            session_id,
+            {
+                "last_incomplete_item_id": target_item["id"],
+                "last_incomplete_item_type": target_item["item_type"],
+                "last_active_item_id": target_item["id"],
+                "last_active_item_type": target_item["item_type"],
+                "last_studied_topic": target_item["topic"],
+                "recent_study_item_history": _record_studied_item(state, target_item["id"]),
+                "session_focus_topic": weak_topic,
+            },
+        )
+        return {
+            "reply": f"Let’s reinforce {weak_topic}.",
+            "study_item": _build_study_item_payload(target_item),
+            "session_meta": _session_meta_payload(state, policy),
         }
 
     if action == "explain_why":
@@ -2635,6 +3615,7 @@ def handle_study_action(session_id, content_item_id, action):
         return {
             "reply": f"Another quick question on {next_item['topic']}.",
             "study_item": _build_study_item_payload(next_item),
+            "session_meta": _session_meta_payload(state, policy),
         }
 
     if action == "quiz_me":
@@ -2655,6 +3636,7 @@ def handle_study_action(session_id, content_item_id, action):
         return {
             "reply": f"Quick question on {next_item['topic']}.",
             "study_item": _build_study_item_payload(next_item),
+            "session_meta": _session_meta_payload(state, policy),
         }
 
     if action == "another_pearl":
@@ -2675,6 +3657,7 @@ def handle_study_action(session_id, content_item_id, action):
         return {
             "reply": f"Another quick pearl on {next_item['topic']}.",
             "study_item": _build_study_item_payload(next_item),
+            "session_meta": _session_meta_payload(state, policy),
         }
 
     return {"reply": "I can keep going on this topic, but I don’t have that action wired yet."}
