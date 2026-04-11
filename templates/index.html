@@ -2981,7 +2981,7 @@
                 });
                 const data = await response.json();
                 setThinkingState(false);
-                if (data.reply) {
+                if (data.reply && !data.study_item) {
                     appendAssistantMessage(data.reply, "system");
                 }
                 hideSessionBanner();
@@ -3017,7 +3017,7 @@
                     })
                 });
                 const data = await response.json();
-                if (data.reply) {
+                if (data.reply && !data.study_item) {
                     appendAssistantMessage(data.reply);
                 }
                 hideSessionBanner();
@@ -3046,7 +3046,7 @@
                     })
                 });
                 const data = await response.json();
-                if (data.reply) {
+                if (data.reply && !data.study_item) {
                     appendAssistantMessage(data.reply);
                 }
                 hideSessionBanner();

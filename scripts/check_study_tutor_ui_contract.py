@@ -40,6 +40,8 @@ def main():
     )
     if "renderStudySessionBanner(" in open_block:
         raise AssertionError("Tutor UI regression: openStudyCard still renders session metadata.")
+    if "if (data.reply && !data.study_item)" not in open_block:
+        raise AssertionError("Tutor UI regression: openStudyCard still allows intro reply text before questions.")
 
     action_block = _extract_block_between(
         template_source,
@@ -48,6 +50,8 @@ def main():
     )
     if "renderStudySessionBanner(" in action_block:
         raise AssertionError("Tutor UI regression: handleStudyAction still renders session metadata.")
+    if "if (data.reply && !data.study_item)" not in action_block:
+        raise AssertionError("Tutor UI regression: handleStudyAction still allows intro reply text before next questions.")
 
     if "Question ${" in template_source or "Focus:" in template_source or "Session complete ·" in template_source:
         raise AssertionError("Tutor UI regression: internal session labels leaked into the template.")

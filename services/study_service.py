@@ -3542,7 +3542,7 @@ def handle_study_action(session_id, content_item_id, action):
             },
         )
         return {
-            "reply": f"Let’s reinforce {weak_topic}.",
+            "reply": None,
             "study_item": _build_study_item_payload(target_item),
             "session_meta": _session_meta_payload(state, policy),
         }
