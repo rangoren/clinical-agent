@@ -2325,9 +2325,7 @@
                     hideStudyCards();
                     return;
                 }
-                if (data.session_meta) {
-                    renderStudySessionBanner(data.session_meta);
-                }
+                hideSessionBanner();
                 renderStudyCards(data.cards || []);
             } catch (_error) {
                 if (requestToken !== studyCardsRequestToken) {
@@ -2986,9 +2984,7 @@
                 if (data.reply) {
                     appendAssistantMessage(data.reply, "system");
                 }
-                if (data.session_meta) {
-                    renderStudySessionBanner(data.session_meta);
-                }
+                hideSessionBanner();
                 if (data.study_item) {
                     appendStudyInteractionCard(data.study_item);
                 }
@@ -3024,19 +3020,8 @@
                 if (data.reply) {
                     appendAssistantMessage(data.reply);
                 }
-                if (data.session_meta) {
-                    renderStudySessionBanner(data.session_meta, data.session_summary || null);
-                }
-                if (data.study_item) {
-                    appendStudyInteractionCard(data.study_item);
-                }
-                if (data.session_summary && !data.study_item) {
-                    appendAssistantMessage(
-                        `Session complete.\nAccuracy: ${data.session_summary.accuracy_percent || 0}%\nWeak topics: ${(data.session_summary.weak_topics || []).join(", ") || "None detected"}\n${data.session_summary.takeaway || ""}`,
-                        "system"
-                    );
-                }
-                if (data.study_followups && !data.study_item) {
+                hideSessionBanner();
+                if (data.study_followups) {
                     appendStudyFollowupCard(contentItemId, data.study_followups);
                 }
                 if (data.sources && data.sources.length) {
@@ -3064,9 +3049,7 @@
                 if (data.reply) {
                     appendAssistantMessage(data.reply);
                 }
-                if (data.session_meta) {
-                    renderStudySessionBanner(data.session_meta, data.session_summary || null);
-                }
+                hideSessionBanner();
                 if (data.study_item) {
                     appendStudyInteractionCard(data.study_item);
                 }
@@ -3096,52 +3079,8 @@
             document.getElementById("session-banner").style.display = "block";
         }
 
-        function renderStudySessionBanner(sessionMeta, sessionSummary = null) {
-            if (!sessionMeta || !sessionMeta.session_id) {
-                hideSessionBanner();
-                return;
-            }
-
-            const progress = sessionMeta.session_progress || {};
-            const answered = Number(progress.answered || 0);
-            const target = Number(progress.target || 0);
-            const percent = Math.max(0, Math.min(100, Number(progress.progress_percent || 0)));
-            const questionNumber = Number(sessionMeta.current_question_number || 0);
-            const mode = String(sessionMeta.mode || "build").replace(/_/g, " ");
-            const level = sessionMeta.working_level || sessionMeta.current_level || "";
-            const focusTopic = sessionMeta.focus_topic || "";
-
-            const title = sessionSummary
-                ? `Session complete · ${sessionSummary.accuracy_percent || 0}% correct`
-                : `Question ${questionNumber || answered || 1} of ${target || "?"} · Level ${escapeHtml(String(level))}`;
-
-            const chips = [];
-            if (mode) {
-                chips.push(`<span class="session-banner-chip">${escapeHtml(mode)}</span>`);
-            }
-            if (focusTopic) {
-                chips.push(`<span class="session-banner-chip">Focus: ${escapeHtml(focusTopic)}</span>`);
-            }
-            if (sessionSummary && Array.isArray(sessionSummary.weak_topics) && sessionSummary.weak_topics.length) {
-                chips.push(`<span class="session-banner-chip">Weak: ${escapeHtml(sessionSummary.weak_topics.join(", "))}</span>`);
-            }
-
-            const summaryLine = sessionSummary
-                ? `<p>${escapeHtml(sessionSummary.takeaway || "Good work. Keep the next session focused.")}</p>`
-                : `<p>${escapeHtml(sessionMeta.goal || "Stay in the loop and keep moving.")}</p>`;
-
-            showSessionBanner(
-                title,
-                `
-                    <div class="session-banner-meta">
-                        <div class="session-progress-track">
-                            <div class="session-progress-fill" style="width: ${percent}%"></div>
-                        </div>
-                        <div class="session-banner-chips">${chips.join("")}</div>
-                        ${summaryLine}
-                    </div>
-                `
-            );
+        function renderStudySessionBanner() {
+            hideSessionBanner();
         }
 
         async function saveSuggestedItem(message, card) {

@@ -3380,7 +3380,6 @@ def answer_mcq(session_id, content_item_id, selected_option):
     updated_state.update(updated_fields)
     session_target = _safe_int(updated_state.get("study_session_target_questions"))
     session_complete = bool(session_target and answered_count >= session_target)
-    next_session_item = None
     session_summary = None
     if session_complete:
         updated_fields["study_session_completed_at"] = _utc_now()
@@ -3388,25 +3387,6 @@ def answer_mcq(session_id, content_item_id, selected_option):
         session_summary = _session_summary_payload(updated_state, policy)
         updated_fields["study_session_last_summary"] = session_summary
         updated_state["study_session_last_summary"] = session_summary
-    else:
-        next_session_item = _pick_next_session_item(session_id, updated_state, policy, anchor_topic=topic)
-        if next_session_item:
-            updated_fields["last_incomplete_item_id"] = next_session_item["id"]
-            updated_fields["last_incomplete_item_type"] = next_session_item["item_type"]
-            updated_fields["last_active_item_id"] = next_session_item["id"]
-            updated_fields["last_active_item_type"] = next_session_item["item_type"]
-            updated_fields["last_studied_topic"] = next_session_item["topic"]
-            updated_fields["recent_study_item_history"] = _record_studied_item(updated_state, next_session_item["id"])
-            updated_state.update(
-                {
-                    "last_incomplete_item_id": next_session_item["id"],
-                    "last_incomplete_item_type": next_session_item["item_type"],
-                    "last_active_item_id": next_session_item["id"],
-                    "last_active_item_type": next_session_item["item_type"],
-                    "last_studied_topic": next_session_item["topic"],
-                    "recent_study_item_history": updated_fields["recent_study_item_history"],
-                }
-            )
 
     _save_state(session_id, updated_fields)
     log_event(
@@ -3438,23 +3418,10 @@ def answer_mcq(session_id, content_item_id, selected_option):
     )
     if session_complete and session_summary:
         log_event("study_session_completed", session_id, session_summary)
-    elif next_session_item:
-        log_event(
-            "study_session_question_presented",
-            session_id,
-            {
-                "study_session_id": updated_state.get("study_session_id"),
-                "content_item_id": next_session_item["id"],
-                "question_index": answered_count + 1,
-                "questions_target": session_target,
-                "difficulty_level": next_session_item.get("difficulty_level"),
-                "question_quality_score_10": next_session_item.get("question_quality_score_10"),
-            },
-        )
 
     reply = _build_mcq_feedback_reply(item, correct, (selected_option or "").upper())
     response = {
-        "reply": f"{reply}\n\nNext: {recommendation.get('message')}",
+        "reply": reply,
         "study_context_item_id": item["id"],
         "study_feedback": {
             "result": "correct" if correct else "incorrect",
@@ -3467,23 +3434,12 @@ def answer_mcq(session_id, content_item_id, selected_option):
         },
         "session_meta": _session_meta_payload(updated_state, policy),
     }
-    if session_complete and session_summary:
-        response["session_summary"] = session_summary
-        response["study_followups"] = [
-            {"action": session_summary.get("next_action", "another_question"), "label": session_summary.get("next_action_label", "Continue")},
-            {"action": "another_question", "label": "Continue progression"},
-            {"action": "quick_recap", "label": "Give me the rule"},
-            {"action": "show_source", "label": "Show source"},
-        ]
-    elif next_session_item:
-        response["study_item"] = _build_study_item_payload(next_session_item)
-    else:
-        response["study_followups"] = [
-            {"action": "another_question", "label": "Another question"},
-            {"action": "explain_why", "label": "Explain why"},
-            {"action": "show_source", "label": "Show source"},
-            {"action": "quick_recap", "label": "Give me the rule"},
-        ]
+    response["study_followups"] = [
+        {"action": "quick_recap", "label": "give me a rule"},
+        {"action": "another_question", "label": "another question"},
+        {"action": "explain_why", "label": "explain why"},
+        {"action": "show_source", "label": "מקור"},
+    ]
     return response
 
 
@@ -3605,7 +3561,7 @@ def handle_study_action(session_id, content_item_id, action):
         return {"reply": "Board rule: " + _board_rule_text(item)}
 
     if action == "another_question":
-        next_item = _pick_related_item(session_id, item, "mcq", exclude_self=True)
+        next_item = _pick_next_session_item(session_id, state, policy, anchor_topic=item.get("topic")) or _pick_related_item(session_id, item, "mcq", exclude_self=True)
         if not next_item:
             return {"reply": "I don’t have another approved question ready on that yet."}
         _save_state(
