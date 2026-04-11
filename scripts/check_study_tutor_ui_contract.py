@@ -60,14 +60,25 @@ def main():
         raise AssertionError("Tutor UI regression: answer_mcq still injects the next question automatically.")
 
     required_labels = [
-        '{"action": "quick_recap", "label": "give me a rule"}',
-        '{"action": "another_question", "label": "another question"}',
-        '{"action": "explain_why", "label": "explain why"}',
-        '{"action": "show_source", "label": "מקור"}',
+        '{"action": "another_question", "label": "Another question"}',
+        '{"action": "explain_why", "label": "Explain why"}',
+        '{"action": "show_source", "label": "Show source"}',
+        '{"action": "quick_recap", "label": "Give me the rule"}',
     ]
     for label in required_labels:
         if label not in answer_block:
             raise AssertionError(f"Missing tutor follow-up action: {label}")
+
+    blocked_intro_markers = (
+        "Here’s a quick question on",
+        "Here’s a quick pearl on",
+        "Another quick question on",
+        "Quick question on",
+        "Another quick pearl on",
+    )
+    for marker in blocked_intro_markers:
+        if marker in service_source:
+            raise AssertionError(f"Tutor UI regression: intro copy leaked back in: {marker}")
 
     print("Study tutor UI contract passed.")
 

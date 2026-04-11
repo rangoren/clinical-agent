@@ -3223,11 +3223,6 @@ def open_study_card(session_id, content_item_id, card_type):
         },
     )
     log_event("study_card_clicked", session_id, {"card_type": card_type, "content_item_id": item["id"], "topic": item["topic"]})
-    intro = (
-        f"Here’s a quick question on {item['topic']}."
-        if item["item_type"] == "mcq"
-        else f"Here’s a quick pearl on {item['topic']}."
-    )
     if item["item_type"] == "pearl":
         log_event("pearl_opened", session_id, {"content_item_id": item["id"], "topic": item["topic"]})
     else:
@@ -3252,7 +3247,7 @@ def open_study_card(session_id, content_item_id, card_type):
         }
     )
     return {
-        "reply": intro,
+        "reply": None,
         "study_item": _build_study_item_payload(item),
         "session_meta": _session_meta_payload(session_state, policy),
     }
@@ -3435,10 +3430,10 @@ def answer_mcq(session_id, content_item_id, selected_option):
         "session_meta": _session_meta_payload(updated_state, policy),
     }
     response["study_followups"] = [
-        {"action": "quick_recap", "label": "give me a rule"},
-        {"action": "another_question", "label": "another question"},
-        {"action": "explain_why", "label": "explain why"},
-        {"action": "show_source", "label": "מקור"},
+        {"action": "another_question", "label": "Another question"},
+        {"action": "explain_why", "label": "Explain why"},
+        {"action": "show_source", "label": "Show source"},
+        {"action": "quick_recap", "label": "Give me the rule"},
     ]
     return response
 
@@ -3576,7 +3571,7 @@ def handle_study_action(session_id, content_item_id, action):
             },
         )
         return {
-            "reply": f"Another quick question on {next_item['topic']}.",
+            "reply": None,
             "study_item": _build_study_item_payload(next_item),
             "session_meta": _session_meta_payload(state, policy),
         }
@@ -3597,7 +3592,7 @@ def handle_study_action(session_id, content_item_id, action):
             },
         )
         return {
-            "reply": f"Quick question on {next_item['topic']}.",
+            "reply": None,
             "study_item": _build_study_item_payload(next_item),
             "session_meta": _session_meta_payload(state, policy),
         }
@@ -3618,7 +3613,7 @@ def handle_study_action(session_id, content_item_id, action):
             },
         )
         return {
-            "reply": f"Another quick pearl on {next_item['topic']}.",
+            "reply": None,
             "study_item": _build_study_item_payload(next_item),
             "session_meta": _session_meta_payload(state, policy),
         }
