@@ -31,6 +31,7 @@ from services.profile_service import (
     update_user_profile,
     build_soft_onboarding_followup,
 )
+from services.profile_prompt_resolver import detect_profile_status_intent
 from services.prompt_service import (
     build_basic_clinical_system_prompt,
     build_clinical_system_prompt,
@@ -50,36 +51,6 @@ from services.trusted_source_registry import get_domain_tier, get_source_domain,
 from services.undo_service import clear_last_saved, record_last_saved
 import re
 import time
-
-
-PROFILE_STATUS_PATTERNS = (
-    "what residency year do you have saved",
-    "what residency year is saved",
-    "what do you have saved for me",
-    "what you have saved on me",
-    "what do you have saved on me",
-    "what have you saved on me",
-    "what have you saved for me",
-    "what do you know about my training",
-    "what do you know about me",
-    "what is saved in my profile",
-    "what's saved in my profile",
-    "what training level do you have",
-    "what training stage do you have",
-)
-
-RESIDENCY_YEAR_STATUS_PATTERNS = (
-    "what residency year do you have saved",
-    "what residency year is saved",
-    "which residency year do you have",
-    "which residency year is saved",
-)
-
-TRAINING_STAGE_STATUS_PATTERNS = (
-    "what training level do you have",
-    "what training stage do you have",
-    "what do you know about my training",
-)
 
 
 def _build_textbook_llm_user_message(user_message):
@@ -652,16 +623,20 @@ def _normalize_plain_text(text):
 
 
 def _looks_like_profile_status_question(user_message):
-    normalized = _normalize_plain_text(user_message)
-    if not normalized or "?" not in normalized:
-        return False
-    if any(pattern in normalized for pattern in PROFILE_STATUS_PATTERNS):
-        return True
-    if "saved" in normalized and any(token in normalized for token in (" me", "profile", "training", "residency")):
-        return True
-    if "what do you know" in normalized and any(token in normalized for token in ("me", "training", "profile")):
-        return True
-    return False
+    return bool(detect_profile_status_intent(user_message))
+
+
+def _build_profile_source(source_id="PF1", detail="Saved user profile"):
+    return [
+        {
+            "source_id": source_id,
+            "title": "Saved user profile",
+            "url": None,
+            "source_type": "Internal source",
+            "source_detail": detail,
+            "is_internal": True,
+        }
+    ]
 
 
 def _build_profile_status_reply(user_profile):
@@ -729,10 +704,10 @@ def _build_training_stage_status_reply(user_profile):
 
 
 def _handle_profile_status_message(session_id, user_profile, user_message):
-    normalized = _normalize_plain_text(user_message)
-    if any(pattern in normalized for pattern in RESIDENCY_YEAR_STATUS_PATTERNS):
+    status_intent = detect_profile_status_intent(user_message)
+    if status_intent == "residency_year":
         reply = _build_residency_year_status_reply(user_profile)
-    elif any(pattern in normalized for pattern in TRAINING_STAGE_STATUS_PATTERNS):
+    elif status_intent == "training_stage":
         reply = _build_training_stage_status_reply(user_profile)
     else:
         reply = _build_profile_status_reply(user_profile)
@@ -750,6 +725,8 @@ def _handle_profile_status_message(session_id, user_profile, user_message):
 
 
 def _handle_profile_update_message(session_id, user_profile, user_message, save_user_message=True):
+    if _looks_like_profile_status_question(user_message):
+        return None
     extracted_updates, extracted_fields = extract_profile_updates_from_message(user_message, user_profile or {})
     if not extracted_updates or not is_profile_only_message(user_message, extracted_fields):
         return None

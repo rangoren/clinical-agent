@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 
 from db import user_profiles_collection
+from services.profile_prompt_resolver import looks_like_profile_update_message
 
 
 TRAINING_STAGE_ALIASES = {
@@ -141,9 +142,24 @@ SUBSPECIALTY_ALIASES = {
     "ultrasound": "Obstetric and Gynecologic Ultrasound",
 }
 
+DEFAULT_EFFECTIVE_PROFILE = {
+    "training_stage": "resident",
+    "residency_year": "R6",
+    "subspecialty": "General OB-GYN",
+    "answer_style": "balanced",
+}
+
 
 def get_user_profile(session_id):
     return user_profiles_collection.find_one({"session_id": session_id})
+
+
+def build_effective_user_profile(profile):
+    effective = dict(profile or {})
+    for key, value in DEFAULT_EFFECTIVE_PROFILE.items():
+        if not effective.get(key):
+            effective[key] = value
+    return effective
 
 
 def create_user_profile(session_id, profile_data):
@@ -444,28 +460,7 @@ def extract_profile_updates_from_message(user_message, profile):
 
 
 def is_profile_only_message(user_message, extracted_fields):
-    cleaned = user_message.strip().lower()
-    if not extracted_fields:
-        return False
-    if "?" in cleaned:
-        return False
-
-    non_profile_chat_markers = {
-        "what do you think",
-        "what should i do",
-        "can you help",
-        "patient",
-        "bleeding",
-        "pain",
-        "pregnant",
-        "bp",
-        "blood pressure",
-        "fever",
-    }
-    if any(marker in cleaned for marker in non_profile_chat_markers):
-        return False
-
-    return True
+    return looks_like_profile_update_message(user_message, extracted_fields)
 
 
 def is_general_greeting_message(user_message):
@@ -648,16 +643,15 @@ def handle_onboarding_step(session_id, profile, user_message):
 
 
 def build_user_profile_context(profile):
-    if not profile:
-        return "- No user profile available"
+    profile = build_effective_user_profile(profile)
 
     country = profile.get("country") or "Not provided"
-    training_stage = profile.get("training_stage") or "Not provided"
+    training_stage = profile.get("training_stage") or "resident"
     if profile.get("training_stage") in {"specialist", "fellowship"}:
         residency_year = "Not applicable"
     else:
-        residency_year = profile.get("residency_year") or "Not saved"
-    subspecialty = profile.get("subspecialty") or "Not provided"
+        residency_year = profile.get("residency_year") or "R6"
+    subspecialty = profile.get("subspecialty") or "General OB-GYN"
     answer_style = profile.get("answer_style") or "balanced"
 
     return "\n".join(
