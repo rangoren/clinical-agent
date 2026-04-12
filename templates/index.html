@@ -318,6 +318,12 @@
             min-width: 0;
         }
 
+        .calendar-subcopy {
+            color: var(--muted);
+            font-size: 0.74rem;
+            line-height: 1.4;
+        }
+
         .calendar-action {
             border: none;
             border-radius: 12px;
@@ -329,6 +335,11 @@
             font-weight: 700;
             cursor: pointer;
             width: 100%;
+        }
+
+        .calendar-action.secondary {
+            background: rgba(16, 24, 40, 0.06);
+            color: var(--text);
         }
 
         .content {
@@ -1744,6 +1755,15 @@
                                     </div>
                                 </div>
                                 <button id="calendar-action" class="calendar-action" onclick="toggleGoogleCalendarConnection()">Connect Google</button>
+                                <div class="settings-section">
+                                    <span class="settings-label">Duty Sync</span>
+                                    <div class="calendar-copy">
+                                        <span id="duty-sync-label" class="calendar-label">Duty schedule: Not connected</span>
+                                        <span id="duty-sync-details" class="calendar-subcopy">Connect the test duty sheet once from Settings.</span>
+                                    </div>
+                                </div>
+                                <button id="duty-sync-action" class="calendar-action" onclick="handleDutySyncPrimaryAction()">Connect Sheet</button>
+                                <button id="duty-sync-secondary-action" class="calendar-action secondary" onclick="disconnectDutySync()" hidden>Disconnect Sheet</button>
                             </div>
                         </div>
                     </div>
@@ -2378,6 +2398,9 @@
             updateComposerState();
         }
 
+        let dutySyncConnected = false;
+        let dutySyncNeedsReconnect = false;
+
         function updateCalendarUi(status) {
             const label = document.getElementById("calendar-label");
             const action = document.getElementById("calendar-action");
@@ -2404,6 +2427,57 @@
             }
         }
 
+        function formatDutySyncTimestamp(rawValue) {
+            if (!rawValue) return "";
+            const parsed = new Date(rawValue);
+            if (Number.isNaN(parsed.getTime())) return "";
+            return parsed.toLocaleString();
+        }
+
+        function updateDutySyncUi(status) {
+            const label = document.getElementById("duty-sync-label");
+            const details = document.getElementById("duty-sync-details");
+            const action = document.getElementById("duty-sync-action");
+            const secondaryAction = document.getElementById("duty-sync-secondary-action");
+            if (appMode !== "scheduling") return;
+
+            dutySyncConnected = !!(status && status.connected);
+            dutySyncNeedsReconnect = !!(status && status.requires_google_reconnect);
+
+            if (!status || status.available === false) {
+                label.textContent = "Duty schedule: Not available";
+                details.textContent = "Duty Sync is not configured in this environment.";
+                action.textContent = "Connect Sheet";
+                action.disabled = true;
+                secondaryAction.hidden = true;
+                return;
+            }
+
+            action.disabled = false;
+            if (dutySyncNeedsReconnect) {
+                label.textContent = "Duty schedule: Google reconnect required";
+                details.textContent = status.details || "Reconnect Google once to allow Duty Sync to read the test sheet.";
+                action.textContent = "Reconnect Google";
+                secondaryAction.hidden = true;
+                return;
+            }
+
+            if (!dutySyncConnected) {
+                label.textContent = status.label || "Duty schedule: Not connected";
+                details.textContent = status.details || "Connect the test duty sheet once from Settings.";
+                action.textContent = "Connect Sheet";
+                secondaryAction.hidden = true;
+                return;
+            }
+
+            label.textContent = status.label || "Duty schedule connected";
+            const lastChecked = formatDutySyncTimestamp(status.last_checked_at);
+            const detailText = status.details || "Duty schedule connected.";
+            details.textContent = lastChecked ? `${detailText} Last checked: ${lastChecked}` : detailText;
+            action.textContent = "Check now";
+            secondaryAction.hidden = false;
+        }
+
         async function refreshCalendarStatus() {
             if (appMode !== "scheduling") return;
             try {
@@ -2421,6 +2495,25 @@
                 updateCalendarUi(data);
             } catch (_error) {
                 updateCalendarUi({ connected: false, available: false });
+            }
+        }
+
+        async function refreshDutySyncStatus() {
+            if (appMode !== "scheduling") return;
+            try {
+                const response = await fetch("/calendar/duty-sync/status", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+                const data = await response.json();
+                updateDutySyncUi(data);
+            } catch (_error) {
+                updateDutySyncUi({ available: false, connected: false });
             }
         }
 
@@ -2450,6 +2543,7 @@
                     appendAssistantMessage(data.reply || "Google Calendar disconnected.", "system");
                     closeSettingsMenu();
                     await refreshCalendarStatus();
+                    await refreshDutySyncStatus();
                 } catch (error) {
                     appendAssistantMessage("Error: " + error, "error");
                 }
@@ -2473,6 +2567,64 @@
                     return;
                 }
                 appendAssistantMessage(data.reply || "Google Calendar is not configured yet.", "system");
+                await refreshDutySyncStatus();
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function handleDutySyncPrimaryAction() {
+            if (appMode !== "scheduling") return;
+            if (dutySyncConnected && !dutySyncNeedsReconnect) {
+                await connectDutySync(true);
+                return;
+            }
+            await connectDutySync(false);
+        }
+
+        async function connectDutySync(isRefreshOnly) {
+            try {
+                const response = await fetch("/calendar/duty-sync/connect", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+                const data = await response.json();
+                if (data.auth_url) {
+                    closeSettingsMenu();
+                    window.location.href = data.auth_url;
+                    return;
+                }
+                if (data.reply) {
+                    appendAssistantMessage(data.reply, data.status === "error" ? "error" : "system");
+                } else if (isRefreshOnly) {
+                    appendAssistantMessage("Duty Sync checked the latest test sheet.", "system");
+                }
+                await refreshDutySyncStatus();
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function disconnectDutySync() {
+            if (appMode !== "scheduling") return;
+            try {
+                const response = await fetch("/calendar/duty-sync/disconnect", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+                const data = await response.json();
+                appendAssistantMessage(data.reply || "Duty Sync disconnected.", "system");
+                await refreshDutySyncStatus();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
@@ -3181,6 +3333,7 @@
                     appendAssistantMessage(data.reply);
                 }
                 await refreshCalendarStatus();
+                await refreshDutySyncStatus();
                 setComposerEnabled(true);
                 if (!data.reply) {
                     scheduleDeferredStudyCardsLoad(true);

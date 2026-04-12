@@ -8,6 +8,11 @@ from services.google_calendar_service import (
     disconnect_google_calendar,
     get_google_calendar_status,
 )
+from services.duty_sync_service import (
+    connect_duty_sheet,
+    disconnect_duty_sheet,
+    get_duty_sync_status,
+)
 from services.logging_service import log_event
 
 
@@ -69,4 +74,39 @@ async def handle_google_calendar_disconnect(request: Request):
         return JSONResponse(disconnect_google_calendar(session_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/disconnect/google", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/status")
+async def handle_duty_sync_status(request: Request):
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        return JSONResponse(get_duty_sync_status(session_id))
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/status", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/connect")
+async def handle_duty_sync_connect(request: Request):
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        sheet_url = data.get("sheet_url")
+        full_name = data.get("full_name")
+        return JSONResponse(connect_duty_sheet(session_id, sheet_url=sheet_url, full_name=full_name))
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/connect", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/disconnect")
+async def handle_duty_sync_disconnect(request: Request):
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        return JSONResponse(disconnect_duty_sheet(session_id))
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/disconnect", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})

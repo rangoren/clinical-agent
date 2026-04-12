@@ -24,7 +24,10 @@ GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_CALENDAR_LIST_URL = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
 GOOGLE_EVENTS_URL_TEMPLATE = "https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
-GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar"
+GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar"
+GOOGLE_SHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
+GOOGLE_SCOPES = [GOOGLE_CALENDAR_SCOPE, GOOGLE_SHEETS_READONLY_SCOPE]
+GOOGLE_SCOPE = " ".join(GOOGLE_SCOPES)
 GOOGLE_HTTP_TIMEOUT_SECONDS = 8
 APP_ZONEINFO = ZoneInfo(APP_TIMEZONE)
 
@@ -78,6 +81,13 @@ def _auth_headers(access_token):
     return {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
 
 
+def _scope_set(scope_value):
+    raw = (scope_value or "").strip()
+    if not raw:
+        return set()
+    return {item.strip() for item in raw.split() if item.strip()}
+
+
 def _refresh_google_access_token(session_id, connection):
     refresh_token = (connection or {}).get("refresh_token")
     if not refresh_token:
@@ -105,6 +115,7 @@ def _refresh_google_access_token(session_id, connection):
         {
             "$set": {
                 "access_token": new_access_token,
+                "scope": token_payload.get("scope") or connection.get("scope"),
                 "expires_at": expires_at,
                 "updated_at": _utcnow(),
             }
@@ -265,6 +276,18 @@ def has_google_calendar_connection(session_id):
             {"session_id": session_id, "provider": "google", "is_active": True}
         )
     )
+
+
+def get_google_connection(session_id):
+    return _get_connection(session_id)
+
+
+def google_connection_has_scopes(session_id, required_scopes):
+    connection = _get_connection(session_id)
+    if not connection:
+        return False
+    available_scopes = _scope_set(connection.get("scope"))
+    return all(scope in available_scopes for scope in (required_scopes or []))
 
 
 def get_google_calendar_name(session_id, provider_calendar_id):
