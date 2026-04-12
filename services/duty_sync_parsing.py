@@ -43,7 +43,10 @@ ROLE_TITLE_MAP = {
 
 
 class DutySyncStructuralError(Exception):
-    pass
+    def __init__(self, detail=None, context=None):
+        super().__init__(STRUCTURAL_CHANGE_MESSAGE)
+        self.detail = detail or "Structural parsing check failed."
+        self.context = context or {}
 
 
 @dataclass
@@ -77,13 +80,13 @@ def normalize_text(value):
 def normalize_sheet_id(sheet_url_or_id):
     raw = normalize_text(sheet_url_or_id)
     if not raw:
-        raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+        raise DutySyncStructuralError("Duty sheet URL was empty.")
     parsed = urlparse(raw)
     if not parsed.scheme:
         return raw
     match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", raw)
     if not match:
-        raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+        raise DutySyncStructuralError("Could not extract a Google Sheet ID from the provided URL.", {"sheet_url": raw})
     return match.group(1)
 
 
@@ -129,7 +132,10 @@ def detect_header_row(values):
                 "row_index": index,
                 "columns": {expected[key]: row_map[key] for key in expected},
             }
-    raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+    raise DutySyncStructuralError(
+        "Could not detect a header row with all expected duty columns.",
+        {"expected_headers": EXPECTED_HEADERS},
+    )
 
 
 def build_duty_datetimes(duty_date, role):
@@ -163,7 +169,10 @@ def analyze_candidate_tab(tab_name, values, full_name, session_id):
             continue
 
         if duty_date is None:
-            raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+            raise DutySyncStructuralError(
+                "Found a non-empty duty row with an unreadable date value.",
+                {"tab_name": tab_name, "row_index": row_index + 1, "raw_date": date_cell},
+            )
         latest_date = max(latest_date, duty_date) if latest_date else duty_date
 
         matched_roles = []
@@ -171,7 +180,10 @@ def analyze_candidate_tab(tab_name, values, full_name, session_id):
             if not cell_value:
                 continue
             if normalized_full_name in cell_value and cell_value != normalized_full_name:
-                raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+                raise DutySyncStructuralError(
+                    "Found a duty cell that mentions the user name but is not an exact full-name match.",
+                    {"tab_name": tab_name, "row_index": row_index + 1, "role": role, "raw_cell_value": cell_value},
+                )
             if cell_value != normalized_full_name:
                 continue
             matched_roles.append(role)
@@ -192,10 +204,16 @@ def analyze_candidate_tab(tab_name, values, full_name, session_id):
                 )
             )
         if len(matched_roles) > 1:
-            raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+            raise DutySyncStructuralError(
+                "The user appeared in more than one relevant duty role on the same row.",
+                {"tab_name": tab_name, "row_index": row_index + 1, "roles": matched_roles},
+            )
 
     if latest_date is None:
-        raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+        raise DutySyncStructuralError(
+            "No readable duty dates were found in the candidate duty tab.",
+            {"tab_name": tab_name},
+        )
 
     return {
         "tab_name": tab_name,
@@ -213,9 +231,20 @@ def select_relevant_tab_from_values_map(tab_values, full_name, session_id):
             continue
         analyses.append(analyze_candidate_tab(normalized_tab_name, values, full_name, session_id))
     if not analyses:
-        raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+        raise DutySyncStructuralError(
+            "No tab name containing the required token was found.",
+            {"required_tab_token": RELEVANT_TAB_TOKEN},
+        )
     analyses.sort(key=lambda item: item["latest_date"], reverse=True)
     best = analyses[0]
     if len(analyses) > 1 and analyses[1]["latest_date"] == best["latest_date"]:
-        raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+        raise DutySyncStructuralError(
+            "Two duty tabs shared the same latest detected date, so the latest roster could not be selected deterministically.",
+            {
+                "top_tabs": [
+                    {"tab_name": analyses[0]["tab_name"], "latest_date": analyses[0]["latest_date"].isoformat()},
+                    {"tab_name": analyses[1]["tab_name"], "latest_date": analyses[1]["latest_date"].isoformat()},
+                ]
+            },
+        )
     return best

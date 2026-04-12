@@ -2456,7 +2456,7 @@
             action.disabled = false;
             if (dutySyncNeedsReconnect) {
                 label.textContent = "Duty schedule: Google reconnect required";
-                details.textContent = status.details || "Reconnect Google once to allow Duty Sync to read the test sheet.";
+                details.textContent = buildDutySyncDetails(status, status.details || "Reconnect Google once to allow Duty Sync to read the test sheet.");
                 action.textContent = "Reconnect Google";
                 secondaryAction.hidden = true;
                 return;
@@ -2464,7 +2464,7 @@
 
             if (!dutySyncConnected) {
                 label.textContent = status.label || "Duty schedule: Not connected";
-                details.textContent = status.details || "Connect the test duty sheet once from Settings.";
+                details.textContent = buildDutySyncDetails(status, status.details || "Connect the test duty sheet once from Settings.");
                 action.textContent = "Connect Sheet";
                 secondaryAction.hidden = true;
                 return;
@@ -2473,9 +2473,18 @@
             label.textContent = status.label || "Duty schedule connected";
             const lastChecked = formatDutySyncTimestamp(status.last_checked_at);
             const detailText = status.details || "Duty schedule connected.";
-            details.textContent = lastChecked ? `${detailText} Last checked: ${lastChecked}` : detailText;
+            const baseText = lastChecked ? `${detailText} Last checked: ${lastChecked}` : detailText;
+            details.textContent = buildDutySyncDetails(status, baseText);
             action.textContent = "Check now";
             secondaryAction.hidden = false;
+        }
+
+        function buildDutySyncDetails(status, baseText) {
+            const parts = [baseText];
+            if ("{{ app_env }}" !== "production" && status && status.debug_reason) {
+                parts.push(`Debug: ${status.debug_reason}`);
+            }
+            return parts.filter(Boolean).join(" ");
         }
 
         async function refreshCalendarStatus() {

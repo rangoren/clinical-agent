@@ -25,6 +25,7 @@ from services.google_calendar_service import (
     has_google_calendar_connection,
 )
 from services.logging_service import log_event
+from settings import APP_ENV
 
 
 NO_DUTIES_MESSAGE_HE = "לא שובצת החודש בלוח התורנויות"
@@ -34,6 +35,21 @@ DEFAULT_TEST_DUTY_SHEET_URL = (
 DEFAULT_TEST_DUTY_USER_FULL_NAME = "גורן"
 GOOGLE_SHEETS_METADATA_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
 GOOGLE_SHEETS_VALUES_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{sheet_range}"
+
+
+def _is_debug_env():
+    return APP_ENV != "production"
+
+
+def _debug_payload(exc):
+    if not _is_debug_env():
+        return {}
+    payload = {}
+    if getattr(exc, "detail", None):
+        payload["debug_reason"] = exc.detail
+    if getattr(exc, "context", None):
+        payload["debug_context"] = exc.context
+    return payload
 
 
 def _utcnow():
@@ -147,7 +163,7 @@ def get_duty_sync_status(session_id):
     current_status = doc.get("current_status", "not_connected")
     last_checked_at = as_iso(doc.get("last_checked_at"))
     if not access_state.get("ok"):
-        return {
+        result = {
             "available": google_calendar_enabled(),
             "connected": bool(doc.get("is_connected")),
             "google_connected": has_google_calendar_connection(session_id),
@@ -157,6 +173,9 @@ def get_duty_sync_status(session_id):
             "details": access_state.get("reply"),
             "last_checked_at": last_checked_at,
         }
+        if _is_debug_env():
+            result["debug_reason"] = access_state.get("debug_reason")
+        return result
 
     if not doc.get("is_connected"):
         return {
@@ -178,7 +197,7 @@ def get_duty_sync_status(session_id):
     if current_status == "connected" and doc.get("duty_count") is not None:
         details = f"Detected {doc.get('duty_count', 0)} duties in {doc.get('source_tab_name', 'the latest roster')}."
 
-    return {
+    result = {
         "available": True,
         "connected": True,
         "google_connected": True,
@@ -189,6 +208,12 @@ def get_duty_sync_status(session_id):
         "last_checked_at": last_checked_at,
         "last_successful_parse_at": as_iso(doc.get("last_successful_parse_at")),
     }
+    if _is_debug_env():
+        if doc.get("last_debug_reason"):
+            result["debug_reason"] = doc.get("last_debug_reason")
+        if doc.get("last_debug_context"):
+            result["debug_context"] = doc.get("last_debug_context")
+    return result
 
 
 def connect_duty_sheet(session_id, sheet_url=None, full_name=None):
@@ -245,6 +270,7 @@ def connect_duty_sheet(session_id, sheet_url=None, full_name=None):
             "source_tab_name": selected_tab["tab_name"],
         }
     except DutySyncStructuralError as exc:
+        debug_payload = _debug_payload(exc)
         _upsert_connection_state(
             session_id,
             {
@@ -258,15 +284,17 @@ def connect_duty_sheet(session_id, sheet_url=None, full_name=None):
                 "duty_count": 0,
                 "latest_detected_duties": [],
                 "last_error_message": str(exc) or STRUCTURAL_CHANGE_MESSAGE,
+                "last_debug_reason": debug_payload.get("debug_reason"),
+                "last_debug_context": debug_payload.get("debug_context"),
             },
         )
         log_event(
             "duty_sync_parse_failed",
             session_id=session_id,
-            payload={"sheet_id": sheet_id, "error": str(exc)},
+            payload={"sheet_id": sheet_id, "error": str(exc), **debug_payload},
             level="error",
         )
-        return {"status": "error", "reply": str(exc) or STRUCTURAL_CHANGE_MESSAGE}
+        return {"status": "error", "reply": str(exc) or STRUCTURAL_CHANGE_MESSAGE, **debug_payload}
     except requests.RequestException as exc:
         log_event(
             "duty_sync_request_failed",
