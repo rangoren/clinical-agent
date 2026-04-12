@@ -40,6 +40,7 @@ ROLE_TITLE_MAP = {
     "תורן ד": "תורנות/תורן ד",
     "מחלקות": "תורנות/מחלקות",
 }
+FRIDAY_MORNING_TOKENS = ("שישי", "בוקר")
 
 
 class DutySyncStructuralError(Exception):
@@ -147,6 +148,13 @@ def build_duty_datetimes(duty_date, role):
     return start_dt, end_dt
 
 
+def is_friday_morning_section_marker(row):
+    row_text = " ".join(normalize_text(cell) for cell in (row or []) if normalize_text(cell))
+    if not row_text:
+        return False
+    return all(token in row_text for token in FRIDAY_MORNING_TOKENS)
+
+
 def analyze_candidate_tab(tab_name, values, full_name, session_id):
     header_info = detect_header_row(values)
     columns = header_info["columns"]
@@ -169,6 +177,8 @@ def analyze_candidate_tab(tab_name, values, full_name, session_id):
             continue
 
         if duty_date is None:
+            if is_friday_morning_section_marker(row):
+                break
             raise DutySyncStructuralError(
                 "Found a non-empty duty row with an unreadable date value.",
                 {"tab_name": tab_name, "row_index": row_index + 1, "raw_date": date_cell},

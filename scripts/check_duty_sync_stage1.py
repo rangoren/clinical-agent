@@ -44,6 +44,16 @@ def _run():
     else:
         raise AssertionError("Ambiguous duty cell should fail closed.")
 
+    friday_morning_values = [
+        ["תאריך", "יום", "חדר לידה", "קבלה", "מיון", "ב", "תורן חצי", "תורן ד", "מחלקות"],
+        ["10/04/2026", "ו", "", "גורן", "", "", "", "", ""],
+        ["שישי בוקר", "", "", "", "", "", "", "", ""],
+        ["", "", "", "שם אחר", "", "", "", "", ""],
+    ]
+    friday = analyze_candidate_tab("תורנויות אפריל", friday_morning_values, "גורן", "session-1")
+    assert len(friday["duties"]) == 1
+    assert friday["duties"][0].title == "תורנות/קבלה"
+
     print("Duty Sync Stage 1 parser checks passed.")
 
 
