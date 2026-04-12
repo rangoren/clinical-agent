@@ -2724,6 +2724,46 @@
             }
         }
 
+        const dutyDateFormatter = new Intl.DateTimeFormat("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            timeZone: "Asia/Jerusalem"
+        });
+
+        const dutyTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            timeZone: "Asia/Jerusalem"
+        });
+
+        function parseDutyDateTime(rawValue) {
+            if (!rawValue) return null;
+            const parsed = new Date(rawValue);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        }
+
+        function formatDutyDate(rawValue) {
+            const parsed = parseDutyDateTime(rawValue || "");
+            if (!parsed) return rawValue || "";
+            return dutyDateFormatter.format(parsed);
+        }
+
+        function formatDutyTimeRange(duty) {
+            const start = parseDutyDateTime((duty || {}).start_datetime);
+            const end = parseDutyDateTime((duty || {}).end_datetime);
+            if (!start || !end) return "";
+            return `${dutyTimeFormatter.format(start)}-${dutyTimeFormatter.format(end)}`;
+        }
+
+        function formatDutyLabel(duty) {
+            if (!duty) return "";
+            const title = duty.title || duty.role || "";
+            const timeRange = formatDutyTimeRange(duty);
+            return timeRange ? `${title} · ${timeRange}` : title;
+        }
+
         function formatDutyChangeTitle(change) {
             const typeLabel = change.change_type === "added"
                 ? "Added duty"
@@ -2731,17 +2771,17 @@
                 ? "Removed duty"
                 : "Changed duty";
             const duty = change.new_duty || change.old_duty || {};
-            return `${typeLabel} · ${duty.date || change.date || ""}`;
+            return `${typeLabel} · ${formatDutyDate(duty.start_datetime || duty.date || change.date || "")}`;
         }
 
         function formatDutyChangeMeta(change) {
             if (change.change_type === "changed") {
                 const oldDuty = change.old_duty || {};
                 const newDuty = change.new_duty || {};
-                return `From ${oldDuty.title || oldDuty.role || ""} to ${newDuty.title || newDuty.role || ""}`;
+                return `From ${formatDutyLabel(oldDuty)} to ${formatDutyLabel(newDuty)}`;
             }
             const duty = change.new_duty || change.old_duty || {};
-            return `${duty.title || duty.role || ""}${duty.start_datetime ? ` · ${duty.start_datetime}` : ""}`;
+            return formatDutyLabel(duty);
         }
 
         function removeExistingDutyReviewCard(reviewId) {
@@ -2869,9 +2909,15 @@
                     })
                 });
                 const data = await response.json();
-                if (card) card.remove();
-                activeDutyReview = null;
-                appendAssistantMessage(data.reply || "Duty review approved.", data.status === "not_found" ? "error" : "system");
+                const isApproved = data.status === "approved";
+                if (isApproved && card) card.remove();
+                if (isApproved) {
+                    activeDutyReview = null;
+                }
+                appendAssistantMessage(
+                    data.reply || "Duty review approved.",
+                    isApproved ? "system" : "error"
+                );
                 await refreshDutySyncStatus();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");

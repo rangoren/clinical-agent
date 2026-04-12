@@ -6,6 +6,7 @@ import requests
 
 from db import (
     duty_sync_connections_collection,
+    duty_sync_managed_events_collection,
     duty_sync_pending_reviews_collection,
     duty_sync_snapshots_collection,
 )
@@ -27,7 +28,11 @@ from services.google_calendar_service import (
     get_google_connection,
     google_calendar_enabled,
     google_connection_has_scopes,
+    google_calendar_write_enabled,
     has_google_calendar_connection,
+    sync_google_create_event,
+    sync_google_delete_event,
+    sync_google_update_event,
 )
 from services.logging_service import log_event
 from settings import APP_ENV
@@ -40,6 +45,8 @@ DEFAULT_TEST_DUTY_SHEET_URL = (
 DEFAULT_TEST_DUTY_USER_FULL_NAME = "גורן"
 GOOGLE_SHEETS_METADATA_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
 GOOGLE_SHEETS_VALUES_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{sheet_range}"
+DUTY_SYNC_CALENDAR_TYPE = "personal"
+DUTY_SYNC_WRITE_DISABLED_MESSAGE = "Duty Sync review is ready, but Google Calendar writes are disabled in this environment."
 
 
 def _is_debug_env():
@@ -59,6 +66,214 @@ def _debug_payload(exc):
 
 def _utcnow():
     return datetime.utcnow()
+
+
+def _parse_iso_datetime(raw_value):
+    if not raw_value:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw_value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _managed_event_doc(session_id, duty_key):
+    if not duty_key:
+        return None
+    return duty_sync_managed_events_collection.find_one({"session_id": session_id, "duty_key": duty_key})
+
+
+def _build_managed_event_payload(session_id, duty):
+    start_at = _parse_iso_datetime(duty.get("start_datetime"))
+    end_at = _parse_iso_datetime(duty.get("end_datetime"))
+    if not start_at or not end_at:
+        raise DutySyncStructuralError(
+            "A detected duty could not be converted into calendar event times.",
+            {
+                "duty_key": duty.get("duty_key"),
+                "start_datetime": duty.get("start_datetime"),
+                "end_datetime": duty.get("end_datetime"),
+            },
+        )
+    return {
+        "session_id": session_id,
+        "title": duty.get("title") or duty.get("role"),
+        "calendar_type": DUTY_SYNC_CALENDAR_TYPE,
+        "start_at": start_at,
+        "end_at": end_at,
+        "location": None,
+    }
+
+
+def _touch_managed_event_record(session_id, duty, sync_result, existing_doc=None, status="active"):
+    now = _utcnow()
+    duty_key = duty.get("duty_key")
+    update_payload = {
+        "session_id": session_id,
+        "user_id": session_id,
+        "duty_key": duty_key,
+        "date": duty.get("date"),
+        "role": duty.get("role"),
+        "title": duty.get("title"),
+        "start_datetime": duty.get("start_datetime"),
+        "end_datetime": duty.get("end_datetime"),
+        "provider": "google",
+        "provider_event_id": sync_result.get("provider_event_id") or (existing_doc or {}).get("provider_event_id"),
+        "provider_calendar_id": sync_result.get("provider_calendar_id") or (existing_doc or {}).get("provider_calendar_id"),
+        "provider_html_link": sync_result.get("html_link") or (existing_doc or {}).get("provider_html_link"),
+        "status": status,
+        "last_synced_at": now,
+        "updated_at": now,
+    }
+    duty_sync_managed_events_collection.update_one(
+        {"session_id": session_id, "duty_key": duty_key},
+        {"$set": update_payload, "$setOnInsert": {"created_at": now}},
+        upsert=True,
+    )
+
+
+def _mark_managed_event_deleted(session_id, duty_key):
+    if not duty_key:
+        return
+    duty_sync_managed_events_collection.update_one(
+        {"session_id": session_id, "duty_key": duty_key},
+        {"$set": {"status": "deleted", "deleted_at": _utcnow(), "updated_at": _utcnow()}},
+    )
+
+
+def _sync_added_duty(session_id, duty):
+    managed_doc = _managed_event_doc(session_id, duty.get("duty_key"))
+    event_payload = _build_managed_event_payload(session_id, duty)
+    if managed_doc and managed_doc.get("status") == "active" and managed_doc.get("provider_event_id"):
+        sync_result = sync_google_update_event(
+            session_id,
+            managed_doc.get("provider_event_id"),
+            event_payload,
+            preferred_calendar_id=managed_doc.get("provider_calendar_id"),
+        )
+    else:
+        sync_result = sync_google_create_event(session_id, event_payload)
+    if sync_result.get("status") != "synced":
+        return sync_result
+    _touch_managed_event_record(session_id, duty, sync_result, existing_doc=managed_doc, status="active")
+    return sync_result
+
+
+def _sync_removed_duty(session_id, duty):
+    managed_doc = _managed_event_doc(session_id, duty.get("duty_key"))
+    if not managed_doc or not managed_doc.get("provider_event_id"):
+        _mark_managed_event_deleted(session_id, duty.get("duty_key"))
+        return {"status": "synced"}
+    event_payload = _build_managed_event_payload(session_id, duty)
+    sync_result = sync_google_delete_event(
+        session_id,
+        managed_doc.get("provider_event_id"),
+        DUTY_SYNC_CALENDAR_TYPE,
+        preferred_calendar_id=managed_doc.get("provider_calendar_id"),
+        provider_calendar_id=managed_doc.get("provider_calendar_id"),
+        event_doc=event_payload,
+    )
+    if sync_result.get("status") != "synced":
+        return sync_result
+    _mark_managed_event_deleted(session_id, duty.get("duty_key"))
+    return sync_result
+
+
+def _sync_changed_duty(session_id, old_duty, new_duty):
+    old_key = (old_duty or {}).get("duty_key")
+    managed_doc = _managed_event_doc(session_id, old_key)
+    event_payload = _build_managed_event_payload(session_id, new_duty)
+    if managed_doc and managed_doc.get("status") == "active" and managed_doc.get("provider_event_id"):
+        sync_result = sync_google_update_event(
+            session_id,
+            managed_doc.get("provider_event_id"),
+            event_payload,
+            preferred_calendar_id=managed_doc.get("provider_calendar_id"),
+        )
+        if sync_result.get("status") != "synced":
+            return sync_result
+        now = _utcnow()
+        duty_sync_managed_events_collection.delete_many(
+            {
+                "session_id": session_id,
+                "duty_key": new_duty.get("duty_key"),
+                "_id": {"$ne": managed_doc.get("_id")},
+            }
+        )
+        duty_sync_managed_events_collection.update_one(
+            {"_id": managed_doc["_id"]},
+            {
+                "$set": {
+                    "duty_key": new_duty.get("duty_key"),
+                    "date": new_duty.get("date"),
+                    "role": new_duty.get("role"),
+                    "title": new_duty.get("title"),
+                    "start_datetime": new_duty.get("start_datetime"),
+                    "end_datetime": new_duty.get("end_datetime"),
+                    "status": "active",
+                    "updated_at": now,
+                    "last_synced_at": now,
+                }
+            },
+        )
+        return sync_result
+    return _sync_added_duty(session_id, new_duty)
+
+
+def _apply_review_to_calendar(session_id, review_doc):
+    if not google_calendar_write_enabled():
+        log_event(
+            "duty_sync_calendar_write_blocked",
+            session_id=session_id,
+            payload={"review_id": review_doc.get("review_id")},
+            level="warning",
+        )
+        return {
+            "status": "blocked",
+            "reply": DUTY_SYNC_WRITE_DISABLED_MESSAGE,
+        }
+
+    applied = {"added": 0, "removed": 0, "changed": 0}
+    for change in review_doc.get("detected_changes_json") or []:
+        if not change.get("included", True):
+            continue
+        change_type = change.get("change_type")
+        old_duty = change.get("old_duty") or {}
+        new_duty = change.get("new_duty") or {}
+        if change_type == "added":
+            sync_result = _sync_added_duty(session_id, new_duty)
+        elif change_type == "removed":
+            sync_result = _sync_removed_duty(session_id, old_duty)
+        elif change_type == "changed":
+            sync_result = _sync_changed_duty(session_id, old_duty, new_duty)
+        else:
+            continue
+        if sync_result.get("status") != "synced":
+            log_event(
+                "duty_sync_calendar_sync_failed",
+                session_id=session_id,
+                payload={
+                    "review_id": review_doc.get("review_id"),
+                    "change_key": change.get("change_key"),
+                    "change_type": change_type,
+                    "sync_status": sync_result.get("status"),
+                },
+                level="error",
+            )
+            return {
+                "status": "failed",
+                "reply": "Duty Sync could not apply the approved updates to Google Calendar right now.",
+                "failed_change_key": change.get("change_key"),
+                "failed_change_type": change_type,
+            }
+        if change_type in applied:
+            applied[change_type] += 1
+    log_event(
+        "duty_sync_calendar_sync_applied",
+        session_id=session_id,
+        payload={"review_id": review_doc.get("review_id"), "applied": applied},
+    )
+    return {"status": "synced", "applied": applied}
 
 
 def _required_google_sheet_access(session_id):
@@ -606,11 +821,18 @@ def approve_pending_duty_review(session_id, review_id):
     )
     if not review_doc:
         return {"status": "not_found", "reply": "No pending duty review was found."}
+    calendar_sync_result = _apply_review_to_calendar(session_id, review_doc)
+    if calendar_sync_result.get("status") != "synced":
+        return calendar_sync_result
     duties_json = _apply_review_to_snapshot(session_id, review_doc)
     included_count = sum(1 for item in (review_doc.get("detected_changes_json") or []) if item.get("included", True))
+    applied = calendar_sync_result.get("applied") or {}
     return {
         "status": "approved",
-        "reply": f"Duty review approved. Saved {included_count} updates for future sync checks.",
+        "reply": (
+            f"Duty review approved. Applied {included_count} updates to Google Calendar "
+            f"({applied.get('added', 0)} added, {applied.get('changed', 0)} updated, {applied.get('removed', 0)} removed)."
+        ),
         "approved_duty_count": len(duties_json),
     }
 
