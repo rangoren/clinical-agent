@@ -85,7 +85,7 @@ def _required_google_sheet_access(session_id):
 def _google_get(session_id, url, params=None):
     connection = get_google_connection(session_id)
     if not connection:
-        raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+        raise DutySyncStructuralError("No active Google connection was found for the current session.")
     response = requests.get(
         url,
         headers=_auth_headers(connection["access_token"]),
@@ -122,7 +122,15 @@ def _select_relevant_tab(session_id, sheet_id, full_name):
         if RELEVANT_TAB_TOKEN in normalize_text((sheet.get("properties") or {}).get("title"))
     ]
     if not tab_names:
-        raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+        available_tabs = [
+            normalize_text((sheet.get("properties") or {}).get("title"))
+            for sheet in metadata.get("sheets") or []
+            if normalize_text((sheet.get("properties") or {}).get("title"))
+        ]
+        raise DutySyncStructuralError(
+            "No tab containing the required Hebrew token was found in the spreadsheet.",
+            {"required_tab_token": RELEVANT_TAB_TOKEN, "available_tabs": available_tabs},
+        )
 
     analyses = []
     for tab_name in tab_names:
@@ -132,7 +140,15 @@ def _select_relevant_tab(session_id, sheet_id, full_name):
     analyses.sort(key=lambda item: item["latest_date"], reverse=True)
     best = analyses[0]
     if len(analyses) > 1 and analyses[1]["latest_date"] == best["latest_date"]:
-        raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
+        raise DutySyncStructuralError(
+            "Two candidate duty tabs shared the same latest detected date, so the active roster could not be selected deterministically.",
+            {
+                "top_tabs": [
+                    {"tab_name": analyses[0]["tab_name"], "latest_date": analyses[0]["latest_date"].isoformat()},
+                    {"tab_name": analyses[1]["tab_name"], "latest_date": analyses[1]["latest_date"].isoformat()},
+                ]
+            },
+        )
     return best
 
 

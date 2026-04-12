@@ -2483,6 +2483,13 @@
             const parts = [baseText];
             if ("{{ app_env }}" !== "production" && status && status.debug_reason) {
                 parts.push(`Debug: ${status.debug_reason}`);
+                if (status.debug_context) {
+                    try {
+                        parts.push(`Context: ${JSON.stringify(status.debug_context)}`);
+                    } catch (_error) {
+                        // Keep debug rendering resilient in dev.
+                    }
+                }
             }
             return parts.filter(Boolean).join(" ");
         }
