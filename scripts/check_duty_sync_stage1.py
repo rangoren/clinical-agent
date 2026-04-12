@@ -54,6 +54,19 @@ def _run():
     assert len(friday["duties"]) == 1
     assert friday["duties"][0].title == "תורנות/קבלה"
 
+    malformed_mid_table_values = [
+        ["תאריך", "יום", "חדר לידה", "קבלה", "מיון", "ב", "תורן חצי", "תורן ד", "מחלקות"],
+        ["10/04/2026", "ו", "", "גורן", "", "", "", "", ""],
+        ["", "", "", "שם אחר", "", "", "", "", ""],
+        ["12/04/2026", "א", "", "", "", "", "גורן", "", ""],
+    ]
+    try:
+        analyze_candidate_tab("תורנויות אפריל", malformed_mid_table_values, "גורן", "session-1")
+    except Exception as exc:
+        assert str(exc) == STRUCTURAL_CHANGE_MESSAGE
+    else:
+        raise AssertionError("Unreadable date rows inside the active schedule must still fail closed.")
+
     print("Duty Sync Stage 1 parser checks passed.")
 
 

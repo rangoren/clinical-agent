@@ -155,6 +155,14 @@ def is_friday_morning_section_marker(row):
     return all(token in row_text for token in FRIDAY_MORNING_TOKENS)
 
 
+def has_readable_date_ahead(values, start_row_index, date_column_index):
+    for future_row in values[start_row_index + 1 :]:
+        future_date_raw = future_row[date_column_index] if date_column_index < len(future_row) else ""
+        if parse_sheet_date(future_date_raw):
+            return True
+    return False
+
+
 def analyze_candidate_tab(tab_name, values, full_name, session_id):
     header_info = detect_header_row(values)
     columns = header_info["columns"]
@@ -177,7 +185,9 @@ def analyze_candidate_tab(tab_name, values, full_name, session_id):
             continue
 
         if duty_date is None:
-            if is_friday_morning_section_marker(row):
+            if is_friday_morning_section_marker(row) or (
+                latest_date is not None and not has_readable_date_ahead(values, row_index, columns[DATE_HEADER])
+            ):
                 break
             raise DutySyncStructuralError(
                 "Found a non-empty duty row with an unreadable date value.",
