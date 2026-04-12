@@ -234,7 +234,7 @@ def get_duty_sync_status(session_id):
         "last_checked_at": last_checked_at,
         "last_successful_parse_at": as_iso(doc.get("last_successful_parse_at")),
     }
-    if _is_debug_env():
+    if _is_debug_env() and current_status == "error":
         if doc.get("last_debug_reason"):
             result["debug_reason"] = doc.get("last_debug_reason")
         if doc.get("last_debug_context"):
@@ -277,6 +277,8 @@ def connect_duty_sheet(session_id, sheet_url=None, full_name=None):
                 "duty_count": len(duties),
                 "latest_detected_duties": duties,
                 "last_error_message": None,
+                "last_debug_reason": None,
+                "last_debug_context": None,
             },
         )
         log_event(
