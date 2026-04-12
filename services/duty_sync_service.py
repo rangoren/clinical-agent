@@ -101,9 +101,9 @@ def _fetch_sheet_values(session_id, sheet_id, tab_name):
 def _select_relevant_tab(session_id, sheet_id, full_name):
     metadata = _fetch_sheet_metadata(session_id, sheet_id)
     tab_names = [
-        _normalize_text((sheet.get("properties") or {}).get("title"))
+        normalize_text((sheet.get("properties") or {}).get("title"))
         for sheet in metadata.get("sheets") or []
-        if RELEVANT_TAB_TOKEN in _normalize_text((sheet.get("properties") or {}).get("title"))
+        if RELEVANT_TAB_TOKEN in normalize_text((sheet.get("properties") or {}).get("title"))
     ]
     if not tab_names:
         raise DutySyncStructuralError(STRUCTURAL_CHANGE_MESSAGE)
@@ -145,7 +145,7 @@ def get_duty_sync_status(session_id):
     access_state = _required_google_sheet_access(session_id)
     doc = _connection_doc(session_id) or {}
     current_status = doc.get("current_status", "not_connected")
-    last_checked_at = _as_iso(doc.get("last_checked_at"))
+    last_checked_at = as_iso(doc.get("last_checked_at"))
     if not access_state.get("ok"):
         return {
             "available": google_calendar_enabled(),
@@ -187,7 +187,7 @@ def get_duty_sync_status(session_id):
         "label": "Duty schedule: Error" if current_status == "error" else "Duty schedule connected",
         "details": details,
         "last_checked_at": last_checked_at,
-        "last_successful_parse_at": _as_iso(doc.get("last_successful_parse_at")),
+        "last_successful_parse_at": as_iso(doc.get("last_successful_parse_at")),
     }
 
 
