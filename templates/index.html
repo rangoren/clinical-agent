@@ -902,6 +902,75 @@
             animation: riseIn 180ms ease-out;
         }
 
+        .duty-review-card {
+            align-self: flex-start;
+            max-width: min(100%, 760px);
+            border-radius: 16px;
+            padding: 14px;
+            border: 1px solid rgba(15, 118, 110, 0.14);
+            background: rgba(248, 250, 252, 0.96);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            animation: riseIn 180ms ease-out;
+        }
+
+        .duty-review-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            color: var(--muted);
+            font-size: 0.84rem;
+        }
+
+        .duty-review-chip {
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(15, 118, 110, 0.08);
+            color: var(--brand-strong);
+            font-weight: 700;
+        }
+
+        .duty-review-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .duty-review-item {
+            border: 1px solid rgba(15, 118, 110, 0.1);
+            border-radius: 14px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.84);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .duty-review-item.excluded {
+            opacity: 0.65;
+            border-style: dashed;
+        }
+
+        .duty-review-item-title {
+            margin: 0;
+            color: var(--text);
+            font-size: 0.92rem;
+            font-weight: 700;
+        }
+
+        .duty-review-item-meta {
+            color: var(--muted);
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+
+        .duty-review-item-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
         .draft-title {
             margin: 0;
             font-size: 0.98rem;
@@ -2400,6 +2469,7 @@
 
         let dutySyncConnected = false;
         let dutySyncNeedsReconnect = false;
+        let activeDutyReview = null;
 
         function updateCalendarUi(status) {
             const label = document.getElementById("calendar-label");
@@ -2443,6 +2513,7 @@
 
             dutySyncConnected = !!(status && status.connected);
             dutySyncNeedsReconnect = !!(status && status.requires_google_reconnect);
+            activeDutyReview = status && status.pending_review ? status.pending_review : null;
 
             if (!status || status.available === false) {
                 label.textContent = "Duty schedule: Not available";
@@ -2475,7 +2546,7 @@
             const detailText = status.details || "Duty schedule connected.";
             const baseText = lastChecked ? `${detailText} Last checked: ${lastChecked}` : detailText;
             details.textContent = buildDutySyncDetails(status, baseText);
-            action.textContent = "Check now";
+            action.textContent = status.current_status === "pending_review" ? "Review updates" : "Check now";
             secondaryAction.hidden = false;
         }
 
@@ -2591,6 +2662,10 @@
 
         async function handleDutySyncPrimaryAction() {
             if (appMode !== "scheduling") return;
+            if (activeDutyReview) {
+                appendDutyReviewCard(activeDutyReview);
+                return;
+            }
             if (dutySyncConnected && !dutySyncNeedsReconnect) {
                 await connectDutySync(true);
                 return;
@@ -2620,6 +2695,9 @@
                 } else if (isRefreshOnly) {
                     appendAssistantMessage("Duty Sync checked the latest test sheet.", "system");
                 }
+                if (data.pending_review) {
+                    appendDutyReviewCard(data.pending_review);
+                }
                 await refreshDutySyncStatus();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
@@ -2640,6 +2718,180 @@
                 });
                 const data = await response.json();
                 appendAssistantMessage(data.reply || "Duty Sync disconnected.", "system");
+                await refreshDutySyncStatus();
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        function formatDutyChangeTitle(change) {
+            const typeLabel = change.change_type === "added"
+                ? "Added duty"
+                : change.change_type === "removed"
+                ? "Removed duty"
+                : "Changed duty";
+            const duty = change.new_duty || change.old_duty || {};
+            return `${typeLabel} · ${duty.date || change.date || ""}`;
+        }
+
+        function formatDutyChangeMeta(change) {
+            if (change.change_type === "changed") {
+                const oldDuty = change.old_duty || {};
+                const newDuty = change.new_duty || {};
+                return `From ${oldDuty.title || oldDuty.role || ""} to ${newDuty.title || newDuty.role || ""}`;
+            }
+            const duty = change.new_duty || change.old_duty || {};
+            return `${duty.title || duty.role || ""}${duty.start_datetime ? ` · ${duty.start_datetime}` : ""}`;
+        }
+
+        function removeExistingDutyReviewCard(reviewId) {
+            const existing = document.getElementById(`duty-review-${reviewId}`);
+            if (existing) {
+                existing.remove();
+            }
+        }
+
+        function appendDutyReviewCard(review) {
+            if (!review || !review.review_id) return;
+            activeDutyReview = review;
+            removeExistingDutyReviewCard(review.review_id);
+
+            const chat = document.getElementById("chat");
+            const card = document.createElement("div");
+            card.className = "duty-review-card";
+            card.id = `duty-review-${review.review_id}`;
+
+            const title = document.createElement("p");
+            title.className = "draft-title";
+            title.textContent = `Duty review · ${review.source_month || "latest roster"}`;
+            card.appendChild(title);
+
+            const summary = document.createElement("div");
+            summary.className = "duty-review-summary";
+            const summaryValues = review.summary || {};
+            [
+                `Added: ${summaryValues.added || 0}`,
+                `Changed: ${summaryValues.changed || 0}`,
+                `Removed: ${summaryValues.removed || 0}`,
+                `Included now: ${review.included_count || 0}`
+            ].forEach((text) => {
+                const chip = document.createElement("span");
+                chip.className = "duty-review-chip";
+                chip.textContent = text;
+                summary.appendChild(chip);
+            });
+            card.appendChild(summary);
+
+            const list = document.createElement("div");
+            list.className = "duty-review-list";
+            (review.changes || []).forEach((change) => {
+                const item = document.createElement("div");
+                item.className = `duty-review-item${change.included === false ? " excluded" : ""}`;
+
+                const itemTitle = document.createElement("p");
+                itemTitle.className = "duty-review-item-title";
+                itemTitle.textContent = formatDutyChangeTitle(change);
+
+                const itemMeta = document.createElement("div");
+                itemMeta.className = "duty-review-item-meta";
+                itemMeta.textContent = formatDutyChangeMeta(change);
+
+                const actions = document.createElement("div");
+                actions.className = "duty-review-item-actions";
+
+                const toggleButton = document.createElement("button");
+                toggleButton.className = change.included === false ? "secondary-button" : "ghost-button";
+                toggleButton.textContent = change.included === false ? "Include item" : "Exclude item";
+                toggleButton.addEventListener("click", () => toggleDutyReviewItem(review.review_id, change.change_key, card));
+
+                actions.appendChild(toggleButton);
+                item.appendChild(itemTitle);
+                item.appendChild(itemMeta);
+                item.appendChild(actions);
+                list.appendChild(item);
+            });
+            card.appendChild(list);
+
+            const footerActions = document.createElement("div");
+            footerActions.className = "draft-actions";
+
+            const approveButton = document.createElement("button");
+            approveButton.className = "secondary-button";
+            approveButton.textContent = "Approve all";
+            approveButton.addEventListener("click", () => approveDutyReview(review.review_id, card));
+
+            const ignoreButton = document.createElement("button");
+            ignoreButton.className = "ghost-button";
+            ignoreButton.textContent = "Ignore for now";
+            ignoreButton.addEventListener("click", () => ignoreDutyReview(review.review_id, card));
+
+            footerActions.appendChild(approveButton);
+            footerActions.appendChild(ignoreButton);
+            card.appendChild(footerActions);
+
+            chat.appendChild(card);
+            scrollChatToBottom();
+        }
+
+        async function toggleDutyReviewItem(reviewId, changeKey, card) {
+            try {
+                const response = await fetch("/calendar/duty-sync/review/toggle-item", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        review_id: reviewId,
+                        change_key: changeKey
+                    })
+                });
+                const data = await response.json();
+                if (data.reply) {
+                    appendAssistantMessage(data.reply, data.status === "not_found" ? "error" : "system");
+                }
+                if (data.pending_review) {
+                    if (card) card.remove();
+                    appendDutyReviewCard(data.pending_review);
+                    await refreshDutySyncStatus();
+                }
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function approveDutyReview(reviewId, card) {
+            try {
+                const response = await fetch("/calendar/duty-sync/review/approve", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        review_id: reviewId
+                    })
+                });
+                const data = await response.json();
+                if (card) card.remove();
+                activeDutyReview = null;
+                appendAssistantMessage(data.reply || "Duty review approved.", data.status === "not_found" ? "error" : "system");
+                await refreshDutySyncStatus();
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function ignoreDutyReview(reviewId, card) {
+            try {
+                const response = await fetch("/calendar/duty-sync/review/ignore", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        review_id: reviewId
+                    })
+                });
+                const data = await response.json();
+                if (card) card.remove();
+                activeDutyReview = null;
+                appendAssistantMessage(data.reply || "Duty review ignored for now.", data.status === "not_found" ? "error" : "system");
                 await refreshDutySyncStatus();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");

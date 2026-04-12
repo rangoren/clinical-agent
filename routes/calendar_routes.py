@@ -9,9 +9,12 @@ from services.google_calendar_service import (
     get_google_calendar_status,
 )
 from services.duty_sync_service import (
+    approve_pending_duty_review,
     connect_duty_sheet,
     disconnect_duty_sheet,
     get_duty_sync_status,
+    ignore_pending_duty_review,
+    toggle_pending_review_change,
 )
 from services.logging_service import log_event
 
@@ -109,4 +112,50 @@ async def handle_duty_sync_disconnect(request: Request):
         return JSONResponse(disconnect_duty_sheet(session_id))
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/disconnect", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/review/approve")
+async def handle_duty_sync_review_approve(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            approve_pending_duty_review(
+                session_id=data.get("session_id"),
+                review_id=data.get("review_id"),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/review/approve", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/review/ignore")
+async def handle_duty_sync_review_ignore(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            ignore_pending_duty_review(
+                session_id=data.get("session_id"),
+                review_id=data.get("review_id"),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/review/ignore", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/review/toggle-item")
+async def handle_duty_sync_review_toggle_item(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            toggle_pending_review_change(
+                session_id=data.get("session_id"),
+                review_id=data.get("review_id"),
+                change_key=data.get("change_key"),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/review/toggle-item", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
