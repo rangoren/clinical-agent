@@ -17,6 +17,7 @@ from services.duty_sync_parsing import (
 from services.google_calendar_service import (
     GOOGLE_HTTP_TIMEOUT_SECONDS,
     GOOGLE_SHEETS_READONLY_SCOPE,
+    _refresh_google_access_token,
     _auth_headers,
     begin_google_calendar_connect,
     get_google_connection,
@@ -93,7 +94,16 @@ def _google_get(session_id, url, params=None):
         timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
     )
     if response.status_code == 401:
-        raise DutySyncStructuralError("Google authorization expired. Reconnect Google and try again.")
+        refreshed_access_token = _refresh_google_access_token(session_id, connection)
+        if refreshed_access_token:
+            response = requests.get(
+                url,
+                headers=_auth_headers(refreshed_access_token),
+                params=params or {},
+                timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+            )
+        if response.status_code == 401:
+            raise DutySyncStructuralError("Google authorization expired. Reconnect Google and try again.")
     response.raise_for_status()
     return response.json()
 
