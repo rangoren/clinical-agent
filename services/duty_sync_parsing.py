@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 import re
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 
 STRUCTURAL_CHANGE_MESSAGE = (
@@ -31,6 +32,7 @@ RELEVANT_ROLE_HEADERS = [
     "מחלקות",
 ]
 SHORT_DUTY_ROLES = {"תורן חצי", "מחלקות"}
+OVERNIGHT_DUTY_ROLES = {"חדר לידה", "קבלה", "מיון", "ב", "תורן ד"}
 ROLE_TITLE_MAP = {
     "חדר לידה": "תורנות/חדר לידה",
     "קבלה": "תורנות/קבלה",
@@ -41,6 +43,7 @@ ROLE_TITLE_MAP = {
     "מחלקות": "תורנות/מחלקות",
 }
 FRIDAY_MORNING_TOKENS = ("שישי", "בוקר")
+LOCAL_DUTY_TIMEZONE = ZoneInfo("Asia/Jerusalem")
 
 
 class DutySyncStructuralError(Exception):
@@ -70,7 +73,7 @@ def as_iso(dt_value):
     if isinstance(dt_value, str):
         return dt_value
     if dt_value.tzinfo is None:
-        dt_value = dt_value.replace(tzinfo=timezone.utc)
+        dt_value = dt_value.replace(tzinfo=LOCAL_DUTY_TIMEZONE)
     return dt_value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
@@ -140,12 +143,20 @@ def detect_header_row(values):
 
 
 def build_duty_datetimes(duty_date, role):
-    start_dt = datetime.combine(duty_date, time(hour=15, minute=0))
     if role in SHORT_DUTY_ROLES:
-        end_dt = datetime.combine(duty_date, time(hour=23, minute=0))
-    else:
-        end_dt = datetime.combine(duty_date + timedelta(days=1), time(hour=8, minute=0))
-    return start_dt, end_dt
+        start_dt = datetime.combine(duty_date, time(hour=15, minute=0), tzinfo=LOCAL_DUTY_TIMEZONE)
+        end_dt = datetime.combine(duty_date, time(hour=23, minute=0), tzinfo=LOCAL_DUTY_TIMEZONE)
+        return start_dt, end_dt
+
+    if role in OVERNIGHT_DUTY_ROLES:
+        start_dt = datetime.combine(duty_date, time(hour=8, minute=0), tzinfo=LOCAL_DUTY_TIMEZONE)
+        end_dt = datetime.combine(duty_date + timedelta(days=1), time(hour=9, minute=0), tzinfo=LOCAL_DUTY_TIMEZONE)
+        return start_dt, end_dt
+
+    raise DutySyncStructuralError(
+        "Detected a duty role that does not have a defined time range.",
+        {"role": role},
+    )
 
 
 def is_friday_morning_section_marker(row):

@@ -22,6 +22,10 @@ def _run():
     assert len(april["duties"]) == 2
     assert april["duties"][0].title == "תורנות/קבלה"
     assert april["duties"][1].title == "תורנות/תורן חצי"
+    assert april["duties"][0].start_datetime == "2026-04-10T05:00:00Z"
+    assert april["duties"][0].end_datetime == "2026-04-11T06:00:00Z"
+    assert april["duties"][1].start_datetime == "2026-04-12T12:00:00Z"
+    assert april["duties"][1].end_datetime == "2026-04-12T20:00:00Z"
 
     selected = select_relevant_tab_from_values_map(
         {
@@ -53,6 +57,8 @@ def _run():
     friday = analyze_candidate_tab("תורנויות אפריל", friday_morning_values, "גורן", "session-1")
     assert len(friday["duties"]) == 1
     assert friday["duties"][0].title == "תורנות/קבלה"
+    assert friday["duties"][0].start_datetime == "2026-04-10T05:00:00Z"
+    assert friday["duties"][0].end_datetime == "2026-04-11T06:00:00Z"
 
     malformed_mid_table_values = [
         ["תאריך", "יום", "חדר לידה", "קבלה", "מיון", "ב", "תורן חצי", "תורן ד", "מחלקות"],
