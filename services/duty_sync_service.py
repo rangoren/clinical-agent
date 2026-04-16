@@ -47,6 +47,7 @@ GOOGLE_SHEETS_METADATA_URL = "https://sheets.googleapis.com/v4/spreadsheets/{she
 GOOGLE_SHEETS_VALUES_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{sheet_range}"
 DUTY_SYNC_CALENDAR_TYPE = "personal"
 DUTY_SYNC_WRITE_DISABLED_MESSAGE = "Duty Sync review is ready, but Google Calendar writes are disabled in this environment."
+DEFAULT_DUTY_SYNC_POLLING_MINUTES = 45
 
 
 def _is_debug_env():
@@ -631,6 +632,149 @@ def _upsert_connection_state(session_id, payload):
     )
 
 
+def _resolve_duty_sync_identity(session_id, sheet_url=None, full_name=None):
+    existing = _connection_doc(session_id) or {}
+    normalized_sheet_url = normalize_text(sheet_url) or normalize_text(existing.get("sheet_url")) or DEFAULT_TEST_DUTY_SHEET_URL
+    normalized_full_name = normalize_text(full_name) or normalize_text(existing.get("full_name")) or DEFAULT_TEST_DUTY_USER_FULL_NAME
+    sheet_id = normalize_sheet_id(normalized_sheet_url)
+    return normalized_sheet_url, normalized_full_name, sheet_id, existing
+
+
+def _build_sync_reply(current_status, duty_count, source_tab_name, review_payload=None, is_connect=False, is_poll=False):
+    if review_payload:
+        included_count = review_payload.get("included_count", 0)
+        if is_poll:
+            return f"Duty Sync found {included_count} updates that need review."
+        return f"Duty Sync found {included_count} updates pending review."
+    if current_status == "no_duties":
+        return NO_DUTIES_MESSAGE_HE
+    if is_connect:
+        return f"Duty Sync connected. Found {duty_count} duties in the latest roster."
+    if is_poll:
+        return "Duty Sync checked the latest roster. No personal changes were found."
+    return f"Duty Sync checked the latest roster. Found {duty_count} duties with no new personal changes."
+
+
+def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=False, is_poll=False):
+    access_state = _required_google_sheet_access(session_id)
+    if not access_state.get("ok"):
+        return access_state
+
+    normalized_sheet_url, normalized_full_name, sheet_id, existing = _resolve_duty_sync_identity(
+        session_id,
+        sheet_url=sheet_url,
+        full_name=full_name,
+    )
+    now = _utcnow()
+    had_pending_before = bool(_active_pending_review(session_id))
+
+    try:
+        selected_tab = _select_relevant_tab(session_id, sheet_id, normalized_full_name)
+        duties = [asdict(item) for item in selected_tab["duties"]]
+        current_status = "connected" if duties else "no_duties"
+        connected_at = existing.get("connected_at") or now
+        _upsert_connection_state(
+            session_id,
+            {
+                "sheet_url": normalized_sheet_url,
+                "sheet_id": sheet_id,
+                "full_name": normalized_full_name,
+                "is_connected": True,
+                "connected_at": connected_at,
+                "last_checked_at": now,
+                "last_successful_parse_at": now,
+                "current_status": current_status,
+                "source_tab_name": selected_tab["tab_name"],
+                "source_month": selected_tab["source_month"],
+                "duty_count": len(duties),
+                "latest_detected_duties": duties,
+                "last_error_message": None,
+                "last_debug_reason": None,
+                "last_debug_context": None,
+                "last_poll_checked_at": now if is_poll else existing.get("last_poll_checked_at"),
+            },
+        )
+        review_payload = _build_review_payload(
+            session_id,
+            selected_tab["tab_name"],
+            selected_tab["source_month"],
+            duties,
+        )
+        if review_payload:
+            duty_sync_connections_collection.update_one(
+                {"session_id": session_id},
+                {"$set": {"current_status": "pending_review"}},
+            )
+        reply = _build_sync_reply(
+            current_status,
+            len(duties),
+            selected_tab["tab_name"],
+            review_payload=review_payload,
+            is_connect=is_connect,
+            is_poll=is_poll,
+        )
+        log_event(
+            "duty_sync_sheet_checked",
+            session_id=session_id,
+            payload={
+                "sheet_id": sheet_id,
+                "source_tab_name": selected_tab["tab_name"],
+                "duty_count": len(duties),
+                "current_status": "pending_review" if review_payload else current_status,
+                "is_connect": is_connect,
+                "is_poll": is_poll,
+            },
+        )
+        result = {
+            "status": "pending_review" if review_payload else current_status,
+            "reply": reply,
+            "duty_count": len(duties),
+            "source_tab_name": selected_tab["tab_name"],
+            "pending_review": review_payload,
+        }
+        if is_poll:
+            has_new_pending = bool(review_payload) and not had_pending_before
+            result["polling_minutes"] = DEFAULT_DUTY_SYNC_POLLING_MINUTES
+            result["has_new_pending_review"] = has_new_pending
+            result["deep_link_path"] = "/?app_mode=scheduling&duty_sync_review=1"
+        return result
+    except DutySyncStructuralError as exc:
+        debug_payload = _debug_payload(exc)
+        _upsert_connection_state(
+            session_id,
+            {
+                "sheet_url": normalized_sheet_url,
+                "sheet_id": sheet_id,
+                "full_name": normalized_full_name,
+                "is_connected": True,
+                "connected_at": existing.get("connected_at") or now,
+                "last_checked_at": now,
+                "current_status": "error",
+                "duty_count": 0,
+                "latest_detected_duties": [],
+                "last_error_message": str(exc) or STRUCTURAL_CHANGE_MESSAGE,
+                "last_debug_reason": debug_payload.get("debug_reason"),
+                "last_debug_context": debug_payload.get("debug_context"),
+                "last_poll_checked_at": now if is_poll else existing.get("last_poll_checked_at"),
+            },
+        )
+        log_event(
+            "duty_sync_parse_failed",
+            session_id=session_id,
+            payload={"sheet_id": sheet_id, "error": str(exc), "is_poll": is_poll, **debug_payload},
+            level="error",
+        )
+        return {"status": "error", "reply": str(exc) or STRUCTURAL_CHANGE_MESSAGE, **debug_payload}
+    except requests.RequestException as exc:
+        log_event(
+            "duty_sync_request_failed",
+            session_id=session_id,
+            payload={"sheet_id": sheet_id, "error": str(exc), "is_poll": is_poll},
+            level="error",
+        )
+        return {"status": "failed", "reply": "Duty Sync could not read the test sheet right now."}
+
+
 def get_duty_sync_status(session_id):
     access_state = _required_google_sheet_access(session_id)
     doc = _connection_doc(session_id) or {}
@@ -707,106 +851,15 @@ def get_duty_sync_status(session_id):
 
 
 def connect_duty_sheet(session_id, sheet_url=None, full_name=None):
-    access_state = _required_google_sheet_access(session_id)
-    if not access_state.get("ok"):
-        return access_state
+    return _sync_duty_sheet(session_id, sheet_url=sheet_url, full_name=full_name, is_connect=True, is_poll=False)
 
-    normalized_sheet_url = normalize_text(sheet_url) or DEFAULT_TEST_DUTY_SHEET_URL
-    normalized_full_name = normalize_text(full_name) or DEFAULT_TEST_DUTY_USER_FULL_NAME
-    sheet_id = normalize_sheet_id(normalized_sheet_url)
-    now = _utcnow()
 
-    try:
-        selected_tab = _select_relevant_tab(session_id, sheet_id, normalized_full_name)
-        duties = [asdict(item) for item in selected_tab["duties"]]
-        current_status = "connected" if duties else "no_duties"
-        reply = (
-            f"Duty Sync connected. Found {len(duties)} duties in the latest roster."
-            if duties
-            else NO_DUTIES_MESSAGE_HE
-        )
-        _upsert_connection_state(
-            session_id,
-            {
-                "sheet_url": normalized_sheet_url,
-                "sheet_id": sheet_id,
-                "full_name": normalized_full_name,
-                "is_connected": True,
-                "connected_at": now,
-                "last_checked_at": now,
-                "last_successful_parse_at": now,
-                "current_status": current_status,
-                "source_tab_name": selected_tab["tab_name"],
-                "source_month": selected_tab["source_month"],
-                "duty_count": len(duties),
-                "latest_detected_duties": duties,
-                "last_error_message": None,
-                "last_debug_reason": None,
-                "last_debug_context": None,
-            },
-        )
-        review_payload = _build_review_payload(
-            session_id,
-            selected_tab["tab_name"],
-            selected_tab["source_month"],
-            duties,
-        )
-        if review_payload:
-            duty_sync_connections_collection.update_one(
-                {"session_id": session_id},
-                {"$set": {"current_status": "pending_review"}},
-            )
-        log_event(
-            "duty_sync_connected",
-            session_id=session_id,
-            payload={
-                "sheet_id": sheet_id,
-                "source_tab_name": selected_tab["tab_name"],
-                "duty_count": len(duties),
-                "current_status": current_status,
-            },
-        )
-        return {
-            "status": "pending_review" if review_payload else current_status,
-            "reply": reply,
-            "duty_count": len(duties),
-            "source_tab_name": selected_tab["tab_name"],
-            "pending_review": review_payload,
-        }
-    except DutySyncStructuralError as exc:
-        debug_payload = _debug_payload(exc)
-        _upsert_connection_state(
-            session_id,
-            {
-                "sheet_url": normalized_sheet_url,
-                "sheet_id": sheet_id,
-                "full_name": normalized_full_name,
-                "is_connected": True,
-                "connected_at": now,
-                "last_checked_at": now,
-                "current_status": "error",
-                "duty_count": 0,
-                "latest_detected_duties": [],
-                "last_error_message": str(exc) or STRUCTURAL_CHANGE_MESSAGE,
-                "last_debug_reason": debug_payload.get("debug_reason"),
-                "last_debug_context": debug_payload.get("debug_context"),
-            },
-        )
-        log_event(
-            "duty_sync_parse_failed",
-            session_id=session_id,
-            payload={"sheet_id": sheet_id, "error": str(exc), **debug_payload},
-            level="error",
-        )
-        return {"status": "error", "reply": str(exc) or STRUCTURAL_CHANGE_MESSAGE, **debug_payload}
-    except requests.RequestException as exc:
-        log_event(
-            "duty_sync_request_failed",
-            session_id=session_id,
-            payload={"sheet_id": sheet_id, "error": str(exc)},
-            level="error",
-        )
-        return {"status": "failed", "reply": "Duty Sync could not read the test sheet right now."}
+def check_duty_sheet(session_id):
+    return _sync_duty_sheet(session_id, is_connect=False, is_poll=False)
+
+
+def poll_duty_sheet(session_id):
+    return _sync_duty_sheet(session_id, is_connect=False, is_poll=True)
 
 
 def disconnect_duty_sheet(session_id):

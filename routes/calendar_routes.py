@@ -10,10 +10,12 @@ from services.google_calendar_service import (
 )
 from services.duty_sync_service import (
     approve_pending_duty_review,
+    check_duty_sheet,
     connect_duty_sheet,
     disconnect_duty_sheet,
     get_duty_sync_status,
     ignore_pending_duty_review,
+    poll_duty_sheet,
     toggle_pending_review_change,
 )
 from services.logging_service import log_event
@@ -101,6 +103,28 @@ async def handle_duty_sync_connect(request: Request):
         return JSONResponse(connect_duty_sheet(session_id, sheet_url=sheet_url, full_name=full_name))
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/connect", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/check")
+async def handle_duty_sync_check(request: Request):
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        return JSONResponse(check_duty_sheet(session_id))
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/check", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/poll")
+async def handle_duty_sync_poll(request: Request):
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        return JSONResponse(poll_duty_sheet(session_id))
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/poll", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
 
 

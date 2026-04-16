@@ -1923,9 +1923,12 @@
         let pullDistance = 0;
         let pullTracking = false;
         let pendingStudyCardsTimer = null;
+        let dutySyncPollTimer = null;
+        let pendingDutySyncReviewDeepLink = false;
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
         const studyCardsCacheKey = "entry_study_cards_v1";
+        const dutySyncPollingIntervalMs = 45 * 60 * 1000;
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -2504,6 +2507,58 @@
             return parsed.toLocaleString();
         }
 
+        function scheduleDutySyncPolling() {
+            if (dutySyncPollTimer) {
+                clearInterval(dutySyncPollTimer);
+                dutySyncPollTimer = null;
+            }
+            if (appMode !== "scheduling" || !dutySyncConnected || dutySyncNeedsReconnect) {
+                return;
+            }
+            dutySyncPollTimer = setInterval(() => {
+                pollDutySyncSilently();
+            }, dutySyncPollingIntervalMs);
+        }
+
+        function buildDutySyncDeepLinkPath() {
+            return "/?app_mode=scheduling&duty_sync_review=1";
+        }
+
+        function openDutySyncReviewContext(review) {
+            if (appMode !== "scheduling") {
+                appMode = "scheduling";
+                renderModeState();
+            }
+            if (review) {
+                appendDutyReviewCard(review);
+            }
+        }
+
+        function maybeShowDutySyncBrowserNotification(review, replyText) {
+            if (!review || !document.hidden || !("Notification" in window) || Notification.permission !== "granted") {
+                return;
+            }
+            const notification = new Notification("Duty Sync update", {
+                body: replyText || "Duty Sync found updates that need review.",
+                tag: review.review_id || "duty-sync-review"
+            });
+            notification.onclick = () => {
+                window.focus();
+                window.location.href = buildDutySyncDeepLinkPath();
+                notification.close();
+            };
+        }
+
+        function handleInitialDutySyncDeepLink() {
+            const params = new URLSearchParams(window.location.search);
+            const requestedMode = params.get("app_mode");
+            const reviewDeepLink = params.get("duty_sync_review");
+            if (requestedMode === "scheduling") {
+                appMode = "scheduling";
+            }
+            pendingDutySyncReviewDeepLink = reviewDeepLink === "1";
+        }
+
         function updateDutySyncUi(status) {
             const label = document.getElementById("duty-sync-label");
             const details = document.getElementById("duty-sync-details");
@@ -2521,6 +2576,7 @@
                 action.textContent = "Connect Sheet";
                 action.disabled = true;
                 secondaryAction.hidden = true;
+                scheduleDutySyncPolling();
                 return;
             }
 
@@ -2530,6 +2586,7 @@
                 details.textContent = buildDutySyncDetails(status, status.details || "Reconnect Google once to allow Duty Sync to read the test sheet.");
                 action.textContent = "Reconnect Google";
                 secondaryAction.hidden = true;
+                scheduleDutySyncPolling();
                 return;
             }
 
@@ -2538,6 +2595,7 @@
                 details.textContent = buildDutySyncDetails(status, status.details || "Connect the test duty sheet once from Settings.");
                 action.textContent = "Connect Sheet";
                 secondaryAction.hidden = true;
+                scheduleDutySyncPolling();
                 return;
             }
 
@@ -2548,6 +2606,17 @@
             details.textContent = buildDutySyncDetails(status, baseText);
             action.textContent = status.current_status === "pending_review" ? "Review updates" : "Check now";
             secondaryAction.hidden = false;
+            scheduleDutySyncPolling();
+
+            if (pendingDutySyncReviewDeepLink && status.pending_review) {
+                pendingDutySyncReviewDeepLink = false;
+                appendDutyReviewCard(status.pending_review);
+                const params = new URLSearchParams(window.location.search);
+                params.delete("duty_sync_review");
+                const nextQuery = params.toString();
+                const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
+                window.history.replaceState({}, document.title, nextUrl);
+            }
         }
 
         function buildDutySyncDetails(status, baseText) {
@@ -2667,7 +2736,7 @@
                 return;
             }
             if (dutySyncConnected && !dutySyncNeedsReconnect) {
-                await connectDutySync(true);
+                await checkDutySync(false);
                 return;
             }
             await connectDutySync(false);
@@ -2702,6 +2771,50 @@
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
+        }
+
+        async function checkDutySync(isBackground) {
+            try {
+                const response = await fetch(isBackground ? "/calendar/duty-sync/poll" : "/calendar/duty-sync/check", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+                const data = await response.json();
+                if (data.auth_url) {
+                    if (!isBackground) {
+                        closeSettingsMenu();
+                        window.location.href = data.auth_url;
+                    }
+                    return;
+                }
+                if (data.pending_review) {
+                    activeDutyReview = data.pending_review;
+                    if (isBackground && data.has_new_pending_review) {
+                        appendAssistantMessage(data.reply || "Duty Sync found updates that need review.", "system");
+                        appendDutyReviewCard(data.pending_review);
+                        maybeShowDutySyncBrowserNotification(data.pending_review, data.reply);
+                    }
+                } else if (!isBackground && data.reply) {
+                    appendAssistantMessage(data.reply, data.status === "error" ? "error" : "system");
+                } else if (!isBackground && !data.reply) {
+                    appendAssistantMessage("Duty Sync checked the latest roster.", "system");
+                }
+                await refreshDutySyncStatus();
+            } catch (error) {
+                if (!isBackground) {
+                    appendAssistantMessage("Error: " + error, "error");
+                }
+            }
+        }
+
+        async function pollDutySyncSilently() {
+            if (appMode !== "scheduling" || !dutySyncConnected || dutySyncNeedsReconnect) return;
+            await checkDutySync(true);
         }
 
         async function disconnectDutySync() {
@@ -2955,7 +3068,11 @@
                 appendAssistantMessage("Google Calendar connection didn’t complete.", "error");
             }
 
-            window.history.replaceState({}, document.title, window.location.pathname);
+            params.delete("calendar_status");
+            params.delete("provider");
+            const nextQuery = params.toString();
+            const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
+            window.history.replaceState({}, document.title, nextUrl);
         }
 
         document.addEventListener("click", (event) => {
@@ -2988,6 +3105,7 @@
             hideSessionBanner();
             clearStudyCards();
             refreshEntryGuidanceVisibility();
+            scheduleDutySyncPolling();
             bootstrapSession();
         }
 
@@ -3927,6 +4045,7 @@
             }
         });
 
+        handleInitialDutySyncDeepLink();
         renderModeState();
         autoResizeInput();
         updateComposerState();
