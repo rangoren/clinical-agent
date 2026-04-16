@@ -19,6 +19,7 @@ from services.duty_sync_parsing import (
     normalize_sheet_id,
     normalize_text,
 )
+from services.duty_sync_diff import build_diff_changes, duty_map_by_key
 from services.google_calendar_service import (
     GOOGLE_HTTP_TIMEOUT_SECONDS,
     GOOGLE_SHEETS_READONLY_SCOPE,
@@ -401,83 +402,11 @@ def _active_pending_review(session_id):
 
 
 def _duty_map_by_key(duties):
-    return {item.get("duty_key"): item for item in duties or [] if item.get("duty_key")}
-
-
-def _duty_map_by_date(duties):
-    mapped = {}
-    for item in duties or []:
-        duty_date = item.get("date")
-        if duty_date:
-            mapped[duty_date] = item
-    return mapped
+    return duty_map_by_key(duties)
 
 
 def _build_diff_changes(approved_duties, detected_duties):
-    approved_by_key = _duty_map_by_key(approved_duties)
-    detected_by_key = _duty_map_by_key(detected_duties)
-    approved_by_date = _duty_map_by_date(approved_duties)
-    detected_by_date = _duty_map_by_date(detected_duties)
-
-    consumed_old_keys = set()
-    consumed_new_keys = set()
-    changes = []
-
-    for duty_date, old_item in approved_by_date.items():
-        new_item = detected_by_date.get(duty_date)
-        if not new_item:
-            continue
-        if old_item.get("duty_key") == new_item.get("duty_key"):
-            consumed_old_keys.add(old_item["duty_key"])
-            consumed_new_keys.add(new_item["duty_key"])
-            continue
-        changes.append(
-            {
-                "change_type": "changed",
-                "change_key": f"changed:{duty_date}",
-                "date": duty_date,
-                "included": True,
-                "old_duty": old_item,
-                "new_duty": new_item,
-            }
-        )
-        consumed_old_keys.add(old_item["duty_key"])
-        consumed_new_keys.add(new_item["duty_key"])
-
-    for duty_key, new_item in detected_by_key.items():
-        if duty_key in consumed_new_keys:
-            continue
-        if duty_key in approved_by_key:
-            consumed_old_keys.add(duty_key)
-            continue
-        changes.append(
-            {
-                "change_type": "added",
-                "change_key": f"added:{duty_key}",
-                "date": new_item.get("date"),
-                "included": True,
-                "new_duty": new_item,
-            }
-        )
-        consumed_new_keys.add(duty_key)
-
-    for duty_key, old_item in approved_by_key.items():
-        if duty_key in consumed_old_keys:
-            continue
-        if duty_key in detected_by_key:
-            continue
-        changes.append(
-            {
-                "change_type": "removed",
-                "change_key": f"removed:{duty_key}",
-                "date": old_item.get("date"),
-                "included": True,
-                "old_duty": old_item,
-            }
-        )
-
-    changes.sort(key=lambda item: (item.get("date") or "", item.get("change_type") or ""))
-    return changes
+    return build_diff_changes(approved_duties, detected_duties)
 
 
 def _review_summary(changes):
@@ -541,6 +470,22 @@ def _replace_pending_review(session_id, source_tab_name, source_month, changes):
     return doc
 
 
+def _clear_pending_review_if_unchanged(session_id):
+    existing = _active_pending_review(session_id)
+    if not existing:
+        return False
+    now = _utcnow()
+    duty_sync_pending_reviews_collection.update_one(
+        {"_id": existing["_id"]},
+        {"$set": {"status": "superseded", "resolved_at": now, "updated_at": now}},
+    )
+    duty_sync_connections_collection.update_one(
+        {"session_id": session_id},
+        {"$set": {"current_status": "connected", "updated_at": now}},
+    )
+    return True
+
+
 def _build_review_payload(session_id, source_tab_name, source_month, detected_duties):
     snapshot = _latest_approved_snapshot(session_id)
     approved_duties = (snapshot or {}).get("duties_json") or []
@@ -557,6 +502,7 @@ def _build_review_payload(session_id, source_tab_name, source_month, detected_du
             for item in detected_duties
         ]
     if not changes:
+        _clear_pending_review_if_unchanged(session_id)
         return None
     review_doc = _replace_pending_review(session_id, source_tab_name, source_month, changes)
     return _serialize_review_doc(review_doc)
