@@ -2731,10 +2731,6 @@
 
         async function handleDutySyncPrimaryAction() {
             if (appMode !== "scheduling") return;
-            if (activeDutyReview) {
-                appendDutyReviewCard(activeDutyReview);
-                return;
-            }
             if (dutySyncConnected && !dutySyncNeedsReconnect) {
                 await checkDutySync(false);
                 return;
@@ -2794,6 +2790,9 @@
                 }
                 if (data.pending_review) {
                     activeDutyReview = data.pending_review;
+                    if (!isBackground) {
+                        appendDutyReviewCard(data.pending_review);
+                    }
                     if (isBackground && data.has_new_pending_review) {
                         appendAssistantMessage(data.reply || "Duty Sync found updates that need review.", "system");
                         appendDutyReviewCard(data.pending_review);
@@ -2919,22 +2918,6 @@
             title.textContent = `Duty review · ${review.source_month || "latest roster"}`;
             card.appendChild(title);
 
-            const summary = document.createElement("div");
-            summary.className = "duty-review-summary";
-            const summaryValues = review.summary || {};
-            [
-                `Added: ${summaryValues.added || 0}`,
-                `Changed: ${summaryValues.changed || 0}`,
-                `Removed: ${summaryValues.removed || 0}`,
-                `Included now: ${review.included_count || 0}`
-            ].forEach((text) => {
-                const chip = document.createElement("span");
-                chip.className = "duty-review-chip";
-                chip.textContent = text;
-                summary.appendChild(chip);
-            });
-            card.appendChild(summary);
-
             const list = document.createElement("div");
             list.className = "duty-review-list";
             (review.changes || []).forEach((change) => {
@@ -2964,6 +2947,22 @@
                 list.appendChild(item);
             });
             card.appendChild(list);
+
+            const summary = document.createElement("div");
+            summary.className = "duty-review-summary";
+            const summaryValues = review.summary || {};
+            [
+                `Added: ${summaryValues.added || 0}`,
+                `Changed: ${summaryValues.changed || 0}`,
+                `Removed: ${summaryValues.removed || 0}`,
+                `Included now: ${review.included_count || 0}`
+            ].forEach((text) => {
+                const chip = document.createElement("span");
+                chip.className = "duty-review-chip";
+                chip.textContent = text;
+                summary.appendChild(chip);
+            });
+            card.appendChild(summary);
 
             const footerActions = document.createElement("div");
             footerActions.className = "draft-actions";
