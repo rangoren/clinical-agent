@@ -2648,6 +2648,16 @@
             pendingDutySyncReviewDeepLink = reviewDeepLink === "1";
         }
 
+        function resolveDutyReviewScope(status) {
+            const pendingReview = status && status.pending_review ? status.pending_review : null;
+            const scopedReview = status && status.push_review_scope ? status.push_review_scope : null;
+            if (!pendingReview) return null;
+            if (!scopedReview) return pendingReview;
+            if (scopedReview.review_id !== pendingReview.review_id) return pendingReview;
+            if ((scopedReview.review_type || "incremental") !== (pendingReview.review_type || "incremental")) return pendingReview;
+            return scopedReview;
+        }
+
         function updateDutySyncUi(status) {
             const label = document.getElementById("duty-sync-label");
             const details = document.getElementById("duty-sync-details");
@@ -2709,7 +2719,7 @@
 
             if (pendingDutySyncReviewDeepLink && status.pending_review) {
                 pendingDutySyncReviewDeepLink = false;
-                appendDutyReviewCard(status.push_review_scope || status.pending_review);
+                appendDutyReviewCard(resolveDutyReviewScope(status));
                 const params = new URLSearchParams(window.location.search);
                 params.delete("duty_sync_review");
                 const nextQuery = params.toString();

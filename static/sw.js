@@ -25,6 +25,18 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
+        if ("navigate" in client) {
+          return client.navigate(targetUrl).then((navigatedClient) => {
+            const activeClient = navigatedClient || client;
+            if (activeClient && "postMessage" in activeClient) {
+              activeClient.postMessage({ type: "duty-sync-open-review", url: targetUrl });
+            }
+            if (activeClient && "focus" in activeClient) {
+              return activeClient.focus();
+            }
+            return activeClient;
+          });
+        }
         if ("focus" in client) {
           client.postMessage({ type: "duty-sync-open-review", url: targetUrl });
           return client.focus();

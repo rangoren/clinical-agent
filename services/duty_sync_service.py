@@ -497,11 +497,12 @@ def _build_review_payload(session_id, source_tab_name, source_month, detected_du
     snapshot = _latest_approved_snapshot(session_id)
     pending_review = _active_pending_review(session_id)
     approved_duties = (snapshot or {}).get("duties_json") or []
+    same_month_pending_review = bool(pending_review and pending_review.get("source_month") == source_month)
     if pending_review and pending_review.get("review_type") == "monthly_rollover" and pending_review.get("source_month") == source_month:
         approved_duties = [item.get("new_duty") for item in (pending_review.get("detected_changes_json") or []) if item.get("new_duty")]
     review_type = "incremental"
     changes = _build_diff_changes(approved_duties, detected_duties)
-    if snapshot and snapshot.get("source_month") and snapshot.get("source_month") != source_month and detected_duties:
+    if snapshot and snapshot.get("source_month") and snapshot.get("source_month") != source_month and detected_duties and not same_month_pending_review:
         review_type = "monthly_rollover"
         changes = [
             {
