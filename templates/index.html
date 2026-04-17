@@ -4215,19 +4215,9 @@
             navigator.serviceWorker.addEventListener("message", async (event) => {
                 const data = event.data || {};
                 if (data.type !== "duty-sync-open-review") return;
-                pendingDutySyncReviewDeepLink = true;
                 const targetUrl = data.url || buildDutySyncDeepLinkPath();
-                const shouldForceNavigation = document.hidden || appMode !== "scheduling";
-                if (shouldForceNavigation) {
-                    window.location.assign(targetUrl);
-                    return;
-                }
-                if (appMode !== "scheduling") {
-                    appMode = "scheduling";
-                    renderModeState();
-                }
-                window.history.replaceState({}, document.title, targetUrl);
-                await refreshDutySyncStatus();
+                pendingDutySyncReviewDeepLink = true;
+                window.location.href = targetUrl;
             });
         }
         renderModeState();

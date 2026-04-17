@@ -125,7 +125,16 @@ def send_web_push_message(session_id, title, body, tag="duty-sync-review", url=N
 def _review_signature(review):
     if not review:
         return ""
-    return json.dumps(review, sort_keys=True, ensure_ascii=False)
+    stable_review = {
+        "review_id": review.get("review_id"),
+        "review_type": review.get("review_type"),
+        "source_month": review.get("source_month"),
+        "source_tab_name": review.get("source_tab_name"),
+        "summary": review.get("summary"),
+        "included_count": review.get("included_count"),
+        "changes": review.get("changes") or [],
+    }
+    return json.dumps(stable_review, sort_keys=True, ensure_ascii=False)
 
 
 def _build_push_review_scope(current_review, previous_review):
