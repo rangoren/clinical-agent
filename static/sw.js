@@ -22,11 +22,14 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = (event.notification.data && event.notification.data.url) || "/?app_mode=scheduling&duty_sync_review=1";
+  self.__dutySyncDebug("notificationclick fired", { targetUrl });
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       if (clients && clients.length) {
         const client = clients[0];
+        self.__dutySyncDebug("client found", { clientCount: clients.length, targetUrl });
         if ("navigate" in client) {
+          self.__dutySyncDebug("navigation attempted", { via: "client.navigate", targetUrl });
           return client.navigate(targetUrl).then((navigatedClient) => {
             const activeClient = navigatedClient || client;
             if (activeClient && "postMessage" in activeClient) {
@@ -42,14 +45,20 @@ self.addEventListener("notificationclick", (event) => {
           client.postMessage({ type: "duty-sync-open-review", url: targetUrl });
         }
         if ("focus" in client) {
+          self.__dutySyncDebug("navigation attempted", { via: "focus-only", targetUrl });
           return client.focus();
         }
         return client;
       }
+      self.__dutySyncDebug("no client found", { targetUrl });
       if (self.clients.openWindow) {
+        self.__dutySyncDebug("navigation attempted", { via: "openWindow", targetUrl });
         return self.clients.openWindow(targetUrl);
       }
       return undefined;
     })
   );
 });
+self.__dutySyncDebug = (...args) => {
+  console.log("[DutySyncDebug][SW]", ...args);
+};
