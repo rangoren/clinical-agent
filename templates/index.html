@@ -2866,7 +2866,10 @@
             const start = parseDutyDateTime((duty || {}).start_datetime);
             const end = parseDutyDateTime((duty || {}).end_datetime);
             if (!start || !end) return "";
-            return `${dutyTimeFormatter.format(start)}-${dutyTimeFormatter.format(end)}`;
+            const startDay = start.toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+            const endDay = end.toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+            const nextDaySuffix = startDay !== endDay ? " (+1 day)" : "";
+            return `${dutyTimeFormatter.format(start)}-${dutyTimeFormatter.format(end)}${nextDaySuffix}`;
         }
 
         function formatDutyLabel(duty) {
@@ -2890,6 +2893,13 @@
             if (change.change_type === "changed") {
                 const oldDuty = change.old_duty || {};
                 const newDuty = change.new_duty || {};
+                const oldTitle = oldDuty.title || oldDuty.role || "";
+                const newTitle = newDuty.title || newDuty.role || "";
+                const oldTimeRange = formatDutyTimeRange(oldDuty);
+                const newTimeRange = formatDutyTimeRange(newDuty);
+                if (oldTitle && newTitle && oldTitle === newTitle) {
+                    return `${oldTitle} · ${oldTimeRange} -> ${newTimeRange}`;
+                }
                 return `From ${formatDutyLabel(oldDuty)} to ${formatDutyLabel(newDuty)}`;
             }
             const duty = change.new_duty || change.old_duty || {};
