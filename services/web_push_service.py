@@ -119,6 +119,33 @@ def _review_signature(review):
     return json.dumps(review, sort_keys=True, ensure_ascii=False)
 
 
+def _build_push_review_scope(current_review, previous_review):
+    if not current_review:
+        return None
+    if current_review.get("review_type") == "monthly_rollover":
+        return current_review
+    previous_map = {}
+    for item in (previous_review or {}).get("changes") or []:
+        previous_map[item.get("change_key")] = json.dumps(item, sort_keys=True, ensure_ascii=False)
+    scoped_changes = []
+    for item in current_review.get("changes") or []:
+        change_key = item.get("change_key")
+        serialized = json.dumps(item, sort_keys=True, ensure_ascii=False)
+        if previous_map.get(change_key) != serialized:
+            scoped_changes.append(item)
+    if not scoped_changes:
+        scoped_changes = current_review.get("changes") or []
+    scoped_review = dict(current_review)
+    scoped_review["changes"] = scoped_changes
+    summary = {"added": 0, "changed": 0, "removed": 0}
+    for item in scoped_changes:
+        if item.get("change_type") in summary:
+            summary[item.get("change_type")] += 1
+    scoped_review["summary"] = summary
+    scoped_review["included_count"] = sum(1 for item in scoped_changes if item.get("included", True))
+    return scoped_review
+
+
 def _poll_once():
     from services.duty_sync_service import DEFAULT_DUTY_SYNC_POLLING_MINUTES, poll_duty_sheet
 
@@ -132,19 +159,30 @@ def _poll_once():
             result = poll_duty_sheet(session_id)
             review = result.get("pending_review")
             if review:
-                connection = duty_sync_connections_collection.find_one({"session_id": session_id}, {"last_pushed_review_signature": 1})
+                connection = duty_sync_connections_collection.find_one(
+                    {"session_id": session_id},
+                    {"last_pushed_review_signature": 1, "last_pushed_review_payload": 1},
+                )
                 current_signature = _review_signature(review)
                 if current_signature and current_signature != (connection or {}).get("last_pushed_review_signature"):
-                    sent_count = send_duty_sync_push(session_id, review, result.get("reply"))
+                    push_scope_review = _build_push_review_scope(review, (connection or {}).get("last_pushed_review_payload") or {})
+                    sent_count = send_duty_sync_push(session_id, push_scope_review, result.get("reply"))
                     if sent_count:
                         duty_sync_connections_collection.update_one(
                             {"session_id": session_id},
-                            {"$set": {"last_pushed_review_signature": current_signature, "last_pushed_at": datetime.utcnow()}},
+                            {
+                                "$set": {
+                                    "last_pushed_review_signature": current_signature,
+                                    "last_pushed_review_payload": review,
+                                    "last_push_review_scope": push_scope_review,
+                                    "last_pushed_at": datetime.utcnow(),
+                                }
+                            },
                         )
             else:
                 duty_sync_connections_collection.update_one(
                     {"session_id": session_id},
-                    {"$set": {"last_pushed_review_signature": None}},
+                    {"$set": {"last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
                 )
         except Exception as exc:
             log_event(

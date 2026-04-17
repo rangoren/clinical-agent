@@ -576,6 +576,8 @@ def _apply_review_to_snapshot(session_id, review_doc):
                 "last_debug_reason": None,
                 "last_debug_context": None,
                 "last_pushed_review_signature": None,
+                "last_pushed_review_payload": None,
+                "last_push_review_scope": None,
             }
         },
     )
@@ -787,6 +789,7 @@ def get_duty_sync_status(session_id):
             "details": f"{pending_payload.get('included_count', 0)} updates pending review.",
             "last_checked_at": last_checked_at,
             "pending_review": pending_payload,
+            "push_review_scope": doc.get("last_push_review_scope"),
         }
         return result
 
@@ -870,7 +873,7 @@ def ignore_pending_duty_review(session_id, review_id):
     )
     duty_sync_connections_collection.update_one(
         {"session_id": session_id},
-        {"$set": {"current_status": "connected", "last_pushed_review_signature": None}},
+        {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
     )
     return {"status": "ignored", "reply": "Duty review ignored for now."}
 

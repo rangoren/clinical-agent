@@ -2624,6 +2624,16 @@
             };
         }
 
+        function maybeShowDutyPushPrompt(status) {
+            if (appMode !== "scheduling") return;
+            if (!status || !status.connected || !("Notification" in window)) return;
+            if (Notification.permission === "granted") return;
+            showSessionBanner(
+                "Turn on notifications to hear about personal Duty Sync changes right away.",
+                `<button class="secondary-button" onclick="enableDutySyncNotifications()">Enable notifications</button>`
+            );
+        }
+
         function appendDutySyncInAppNotice(replyText) {
             appendAssistantMessage(replyText || "Duty Sync found personal schedule changes.", "system");
         }
@@ -2699,13 +2709,14 @@
 
             if (pendingDutySyncReviewDeepLink && status.pending_review) {
                 pendingDutySyncReviewDeepLink = false;
-                appendDutyReviewCard(status.pending_review);
+                appendDutyReviewCard(status.push_review_scope || status.pending_review);
                 const params = new URLSearchParams(window.location.search);
                 params.delete("duty_sync_review");
                 const nextQuery = params.toString();
                 const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
                 window.history.replaceState({}, document.title, nextUrl);
             }
+            maybeShowDutyPushPrompt(status);
         }
 
         function buildDutySyncDetails(status, baseText) {
