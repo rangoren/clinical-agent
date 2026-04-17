@@ -52,7 +52,7 @@ GOOGLE_SHEETS_METADATA_URL = "https://sheets.googleapis.com/v4/spreadsheets/{she
 GOOGLE_SHEETS_VALUES_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{sheet_range}"
 DUTY_SYNC_CALENDAR_TYPE = "personal"
 DUTY_SYNC_WRITE_DISABLED_MESSAGE = "Duty Sync review is ready, but Google Calendar writes are disabled in this environment."
-DEFAULT_DUTY_SYNC_POLLING_MINUTES = 45
+DEFAULT_DUTY_SYNC_POLLING_MINUTES = 45 if APP_ENV == "production" else 5
 
 
 def _is_debug_env():
@@ -616,7 +616,7 @@ def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=F
         full_name=full_name,
     )
     now = _utcnow()
-    had_pending_before = bool(_active_pending_review(session_id))
+    previous_pending_payload = _serialize_review_doc(_active_pending_review(session_id))
 
     try:
         selected_tab = _select_relevant_tab(session_id, sheet_id, normalized_full_name)
@@ -683,7 +683,7 @@ def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=F
             "pending_review": review_payload,
         }
         if is_poll:
-            has_new_pending = bool(review_payload) and not had_pending_before
+            has_new_pending = bool(review_payload) and review_payload != previous_pending_payload
             result["polling_minutes"] = DEFAULT_DUTY_SYNC_POLLING_MINUTES
             result["has_new_pending_review"] = has_new_pending
             result["deep_link_path"] = "/?app_mode=scheduling&duty_sync_review=1"

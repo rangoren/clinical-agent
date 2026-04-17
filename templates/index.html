@@ -1926,7 +1926,7 @@
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
         const studyCardsCacheKey = "entry_study_cards_v1";
-        const dutySyncPollingIntervalMs = 45 * 60 * 1000;
+        const dutySyncPollingIntervalMs = "{{ app_env }}" === "production" ? 45 * 60 * 1000 : 5 * 60 * 1000;
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -2820,6 +2820,10 @@
 
         async function handleDutySyncPrimaryAction() {
             if (appMode !== "scheduling") return;
+            if (activeDutyReview && dutySyncConnected && !dutySyncNeedsReconnect) {
+                appendDutyReviewCard(activeDutyReview);
+                return;
+            }
             if (dutySyncConnected && !dutySyncNeedsReconnect) {
                 await checkDutySync(false);
                 return;
