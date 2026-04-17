@@ -1,8 +1,11 @@
 import os
 import re
+import base64
 from pathlib import Path
 
 from dotenv import load_dotenv
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -31,6 +34,10 @@ def _read_env_text(name):
 
 def _read_env_pem(name):
     cleaned = _read_env_text(name)
+    return _normalize_pem_text(cleaned)
+
+
+def _normalize_pem_text(cleaned):
     if not cleaned:
         return ""
     cleaned = cleaned.replace("\\n", "\n").replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -49,6 +56,33 @@ def _read_env_pem(name):
                 [f"-----BEGIN {begin_label}-----", *wrapped_lines, f"-----END {end_label}-----"]
             )
     return cleaned
+
+
+def _to_base64url(raw_bytes):
+    return base64.urlsafe_b64encode(raw_bytes).rstrip(b"=").decode()
+
+
+def _normalize_web_push_private_key(name):
+    cleaned = _normalize_pem_text(_read_env_text(name))
+    if not cleaned:
+        return "", ""
+    try:
+        if "BEGIN" in cleaned and "PRIVATE KEY" in cleaned:
+            key = serialization.load_pem_private_key(cleaned.encode(), password=None)
+        else:
+            padded = cleaned + ("=" * ((4 - len(cleaned) % 4) % 4))
+            decoded = base64.urlsafe_b64decode(padded.encode())
+            if len(decoded) == 32:
+                private_value = int.from_bytes(decoded, "big")
+                key = ec.derive_private_key(private_value, ec.SECP256R1())
+            else:
+                key = serialization.load_der_private_key(decoded, password=None)
+        private_raw = key.private_numbers().private_value.to_bytes(32, "big")
+        public_numbers = key.public_key().public_numbers()
+        public_raw = b"\x04" + public_numbers.x.to_bytes(32, "big") + public_numbers.y.to_bytes(32, "big")
+        return _to_base64url(private_raw), _to_base64url(public_raw)
+    except Exception:
+        return cleaned, ""
 
 
 load_dotenv(BASE_DIR / ".env")
@@ -77,8 +111,8 @@ APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Asia/Jerusalem")
 ALLOW_NON_PROD_PROD_DB = _read_bool("ALLOW_NON_PROD_PROD_DB", False)
 ENABLE_EXTERNAL_SIDE_EFFECTS = _read_bool("ENABLE_EXTERNAL_SIDE_EFFECTS", APP_ENV == "production")
 ENABLE_GOOGLE_CALENDAR_INTEGRATION = _read_bool("ENABLE_GOOGLE_CALENDAR_INTEGRATION", APP_ENV == "production")
-WEB_PUSH_PUBLIC_KEY = _read_env_text("WEB_PUSH_PUBLIC_KEY")
-WEB_PUSH_PRIVATE_KEY = _read_env_pem("WEB_PUSH_PRIVATE_KEY")
+WEB_PUSH_PRIVATE_KEY, _DERIVED_WEB_PUSH_PUBLIC_KEY = _normalize_web_push_private_key("WEB_PUSH_PRIVATE_KEY")
+WEB_PUSH_PUBLIC_KEY = _DERIVED_WEB_PUSH_PUBLIC_KEY or _read_env_text("WEB_PUSH_PUBLIC_KEY")
 WEB_PUSH_SUBJECT = _read_env_text("WEB_PUSH_SUBJECT")
 R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "").strip()
 R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "").strip()
