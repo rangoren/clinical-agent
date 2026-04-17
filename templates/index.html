@@ -2660,6 +2660,19 @@
             pendingDutySyncReviewDeepLink = reviewDeepLink === "1";
         }
 
+        async function resumeDutySyncReviewFromDeepLink() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("duty_sync_review") !== "1") return;
+            pendingDutySyncReviewId = params.get("duty_sync_review_id");
+            pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
+            pendingDutySyncReviewDeepLink = true;
+            if (appMode !== "scheduling") {
+                appMode = "scheduling";
+                renderModeState();
+            }
+            await refreshDutySyncStatus();
+        }
+
         function resolveDutyReviewScope(status) {
             const pendingReview = status && status.pending_review ? status.pending_review : null;
             const scopedReview = status && status.push_review_scope ? status.push_review_scope : null;
@@ -3168,6 +3181,7 @@
         async function approveDutyReview(review, card) {
             try {
                 const scoped = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
+                const singleScoped = scoped && review.scope_change_keys.length === 1;
                 const response = await fetch(scoped ? "/calendar/duty-sync/review/approve-scope" : "/calendar/duty-sync/review/approve", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -3188,7 +3202,12 @@
                     isApproved ? "system" : "error"
                 );
                 if (data.pending_review) {
-                    appendDutyReviewCard(data.pending_review);
+                    if (singleScoped) {
+                        activeDutyReview = data.pending_review;
+                        appendAssistantMessage("More Duty Sync updates are still pending review.", "system");
+                    } else {
+                        appendDutyReviewCard(data.pending_review);
+                    }
                 }
                 await refreshDutySyncStatus();
             } catch (error) {
@@ -4220,6 +4239,14 @@
                 window.location.href = targetUrl;
             });
         }
+        window.addEventListener("pageshow", () => {
+            resumeDutySyncReviewFromDeepLink().catch(() => {});
+        });
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+                resumeDutySyncReviewFromDeepLink().catch(() => {});
+            }
+        });
         renderModeState();
         autoResizeInput();
         updateComposerState();
