@@ -2465,6 +2465,7 @@
             if (appMode !== "scheduling") {
                 closeSettingsMenu();
             }
+            maybeShowDutyPushPrompt();
             updateComposerState();
         }
 
@@ -2579,6 +2580,11 @@
                 });
                 const subscribeData = await subscribeResponse.json();
                 appendAssistantMessage(subscribeData.reply || "Duty Sync push alerts are enabled.", subscribeData.status === "subscribed" ? "system" : "error");
+                hideSessionBanner();
+                const pushAction = document.getElementById("duty-sync-push-action");
+                if (pushAction) {
+                    pushAction.hidden = true;
+                }
                 await refreshDutySyncStatus();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
@@ -2626,8 +2632,10 @@
 
         function maybeShowDutyPushPrompt(status) {
             if (appMode !== "scheduling") return;
-            if (!status || !status.connected || !("Notification" in window)) return;
-            if (Notification.permission === "granted") return;
+            if (!("Notification" in window)) return;
+            if (Notification.permission === "granted" || Notification.permission === "denied") {
+                return;
+            }
             showSessionBanner(
                 "Turn on notifications to hear about personal Duty Sync changes right away.",
                 `<button class="secondary-button" onclick="enableDutySyncNotifications()">Enable notifications</button>`
@@ -2713,7 +2721,7 @@
             details.textContent = buildDutySyncDetails(status, baseText);
             action.textContent = status.current_status === "pending_review" ? "Review updates" : "Check now";
             secondaryAction.hidden = false;
-            pushAction.hidden = false;
+            pushAction.hidden = !("Notification" in window) || Notification.permission === "granted";
             pushTestAction.hidden = false;
             scheduleDutySyncPolling();
 
@@ -3022,19 +3030,23 @@
             title.textContent = `Duty review · ${review.source_month || "latest roster"}`;
             card.appendChild(title);
 
-            const summary = document.createElement("div");
-            summary.className = "duty-review-summary";
-            const summaryValues = review.summary || {};
-            [
-                `Duty: ${review.included_count || 0}`,
-                `Changed: ${summaryValues.changed || 0}`,
-            ].forEach((text) => {
-                const chip = document.createElement("span");
-                chip.className = "duty-review-chip";
-                chip.textContent = text;
-                summary.appendChild(chip);
-            });
-            card.appendChild(summary);
+            const isScopedReview = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
+            const isSingleEventReview = isScopedReview && review.scope_change_keys.length === 1;
+            if (!isSingleEventReview) {
+                const summary = document.createElement("div");
+                summary.className = "duty-review-summary";
+                const summaryValues = review.summary || {};
+                [
+                    `Duty: ${review.included_count || 0}`,
+                    `Changed: ${summaryValues.changed || 0}`,
+                ].forEach((text) => {
+                    const chip = document.createElement("span");
+                    chip.className = "duty-review-chip";
+                    chip.textContent = text;
+                    summary.appendChild(chip);
+                });
+                card.appendChild(summary);
+            }
 
             const list = document.createElement("div");
             list.className = "duty-review-list";
@@ -3049,18 +3061,20 @@
                 const actions = document.createElement("div");
                 actions.className = "duty-review-item-actions";
 
-                const toggleButton = document.createElement("button");
-                toggleButton.className = change.included === false ? "secondary-button" : "ghost-button";
-                toggleButton.textContent = change.included === false ? "Include item" : "Exclude item";
-                toggleButton.addEventListener("click", () => toggleDutyReviewItem(review.review_id, change.change_key, card));
+                if (!isSingleEventReview) {
+                    const toggleButton = document.createElement("button");
+                    toggleButton.className = change.included === false ? "secondary-button" : "ghost-button";
+                    toggleButton.textContent = change.included === false ? "Include item" : "Exclude item";
+                    toggleButton.addEventListener("click", () => toggleDutyReviewItem(review.review_id, change.change_key, card));
+                    actions.appendChild(toggleButton);
 
-                const editButton = document.createElement("button");
-                editButton.className = "ghost-button";
-                editButton.textContent = "Edit item";
-                editButton.addEventListener("click", () => editDutyReviewItem(review.review_id, change, card));
+                    const editButton = document.createElement("button");
+                    editButton.className = "ghost-button";
+                    editButton.textContent = "Edit item";
+                    editButton.addEventListener("click", () => editDutyReviewItem(review.review_id, change, card));
+                    actions.appendChild(editButton);
+                }
 
-                actions.appendChild(toggleButton);
-                actions.appendChild(editButton);
                 item.appendChild(itemTitle);
                 item.appendChild(actions);
                 list.appendChild(item);
@@ -3069,8 +3083,6 @@
 
             const footerActions = document.createElement("div");
             footerActions.className = "draft-actions";
-            const isScopedReview = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
-            const isSingleEventReview = isScopedReview && review.scope_change_keys.length === 1;
 
             const approveButton = document.createElement("button");
             approveButton.className = "secondary-button";
@@ -4196,11 +4208,17 @@
                 const data = event.data || {};
                 if (data.type !== "duty-sync-open-review") return;
                 pendingDutySyncReviewDeepLink = true;
+                const targetUrl = data.url || buildDutySyncDeepLinkPath();
+                const shouldForceNavigation = document.hidden || appMode !== "scheduling";
+                if (shouldForceNavigation) {
+                    window.location.assign(targetUrl);
+                    return;
+                }
                 if (appMode !== "scheduling") {
                     appMode = "scheduling";
                     renderModeState();
                 }
-                window.history.replaceState({}, document.title, data.url || buildDutySyncDeepLinkPath());
+                window.history.replaceState({}, document.title, targetUrl);
                 await refreshDutySyncStatus();
             });
         }
@@ -4214,7 +4232,7 @@
             renderStudyCardPlaceholders();
         }
         refreshEntryGuidanceVisibility();
-        {% if app_env != "production" %}
+        {% if app_env != "production" and app_env != "development" %}
         setupPullToRefreshOption();
         {% endif %}
         handleCalendarCallbackStatus();
