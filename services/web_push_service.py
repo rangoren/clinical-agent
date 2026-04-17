@@ -113,6 +113,12 @@ def send_web_push_message(session_id, title, body, tag="duty-sync-review", url=N
     return sent_count
 
 
+def _review_signature(review):
+    if not review:
+        return ""
+    return json.dumps(review, sort_keys=True, ensure_ascii=False)
+
+
 def _poll_once():
     from services.duty_sync_service import DEFAULT_DUTY_SYNC_POLLING_MINUTES, poll_duty_sheet
 
@@ -124,8 +130,22 @@ def _poll_once():
     for session_id in session_ids:
         try:
             result = poll_duty_sheet(session_id)
-            if result.get("has_new_pending_review") and result.get("pending_review"):
-                send_duty_sync_push(session_id, result.get("pending_review"), result.get("reply"))
+            review = result.get("pending_review")
+            if review:
+                connection = duty_sync_connections_collection.find_one({"session_id": session_id}, {"last_pushed_review_signature": 1})
+                current_signature = _review_signature(review)
+                if current_signature and current_signature != (connection or {}).get("last_pushed_review_signature"):
+                    sent_count = send_duty_sync_push(session_id, review, result.get("reply"))
+                    if sent_count:
+                        duty_sync_connections_collection.update_one(
+                            {"session_id": session_id},
+                            {"$set": {"last_pushed_review_signature": current_signature, "last_pushed_at": datetime.utcnow()}},
+                        )
+            else:
+                duty_sync_connections_collection.update_one(
+                    {"session_id": session_id},
+                    {"$set": {"last_pushed_review_signature": None}},
+                )
         except Exception as exc:
             log_event(
                 "duty_sync_push_poll_failed",

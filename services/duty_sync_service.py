@@ -429,6 +429,7 @@ def _serialize_review_doc(review_doc):
     included_count = sum(1 for item in changes if item.get("included", True))
     return {
         "review_id": review_doc.get("review_id"),
+        "review_type": review_doc.get("review_type") or "incremental",
         "status": review_doc.get("status"),
         "source_month": review_doc.get("source_month"),
         "source_tab_name": review_doc.get("source_tab_name"),
@@ -438,7 +439,7 @@ def _serialize_review_doc(review_doc):
     }
 
 
-def _replace_pending_review(session_id, source_tab_name, source_month, changes):
+def _replace_pending_review(session_id, source_tab_name, source_month, changes, review_type="incremental"):
     now = _utcnow()
     existing = _active_pending_review(session_id)
     if existing:
@@ -449,6 +450,7 @@ def _replace_pending_review(session_id, source_tab_name, source_month, changes):
                     "detected_changes_json": changes,
                     "source_tab_name": source_tab_name,
                     "source_month": source_month,
+                    "review_type": review_type,
                     "summary": _review_summary(changes),
                     "updated_at": now,
                 }
@@ -464,6 +466,7 @@ def _replace_pending_review(session_id, source_tab_name, source_month, changes):
         "detected_changes_json": changes,
         "source_tab_name": source_tab_name,
         "source_month": source_month,
+        "review_type": review_type,
         "created_at": now,
         "updated_at": now,
         "resolved_at": None,
@@ -493,8 +496,21 @@ def _clear_pending_review_if_unchanged(session_id):
 def _build_review_payload(session_id, source_tab_name, source_month, detected_duties):
     snapshot = _latest_approved_snapshot(session_id)
     approved_duties = (snapshot or {}).get("duties_json") or []
+    review_type = "incremental"
     changes = _build_diff_changes(approved_duties, detected_duties)
-    if not snapshot and detected_duties:
+    if snapshot and snapshot.get("source_month") and snapshot.get("source_month") != source_month and detected_duties:
+        review_type = "monthly_rollover"
+        changes = [
+            {
+                "change_type": "added",
+                "change_key": f"rollover:{item['duty_key']}",
+                "date": item.get("date"),
+                "included": True,
+                "new_duty": item,
+            }
+            for item in detected_duties
+        ]
+    elif not snapshot and detected_duties:
         changes = [
             {
                 "change_type": "added",
@@ -508,7 +524,7 @@ def _build_review_payload(session_id, source_tab_name, source_month, detected_du
     if not changes:
         _clear_pending_review_if_unchanged(session_id)
         return None
-    review_doc = _replace_pending_review(session_id, source_tab_name, source_month, changes)
+    review_doc = _replace_pending_review(session_id, source_tab_name, source_month, changes, review_type=review_type)
     return _serialize_review_doc(review_doc)
 
 
@@ -559,6 +575,7 @@ def _apply_review_to_snapshot(session_id, review_doc):
                 "last_error_message": None,
                 "last_debug_reason": None,
                 "last_debug_context": None,
+                "last_pushed_review_signature": None,
             }
         },
     )
@@ -853,7 +870,7 @@ def ignore_pending_duty_review(session_id, review_id):
     )
     duty_sync_connections_collection.update_one(
         {"session_id": session_id},
-        {"$set": {"current_status": "connected"}},
+        {"$set": {"current_status": "connected", "last_pushed_review_signature": None}},
     )
     return {"status": "ignored", "reply": "Duty review ignored for now."}
 
