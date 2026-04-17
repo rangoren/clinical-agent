@@ -2943,7 +2943,11 @@
         const dutyDateFormatter = new Intl.DateTimeFormat("en-GB", {
             day: "2-digit",
             month: "short",
-            year: "numeric",
+            timeZone: "Asia/Jerusalem"
+        });
+
+        const dutyWeekdayFormatter = new Intl.DateTimeFormat("en-GB", {
+            weekday: "long",
             timeZone: "Asia/Jerusalem"
         });
 
@@ -2978,9 +2982,12 @@
 
         function formatDutyReviewItemTitle(change) {
             const duty = change.new_duty || change.old_duty || {};
+            const parsed = parseDutyDateTime(duty.start_datetime || duty.date || change.date || "");
+            const weekdayText = parsed ? dutyWeekdayFormatter.format(parsed) : "";
             const dateText = formatDutyDate(duty.start_datetime || duty.date || change.date || "");
-            const title = String(duty.title || duty.role || "").replace("/", " / ");
-            return `${dateText} · ${title}`;
+            const titleParts = String(duty.title || duty.role || "").split("/").map((part) => part.trim()).filter(Boolean);
+            const titleText = titleParts.join(" · ");
+            return [weekdayText, dateText, titleText].filter(Boolean).join(" · ");
         }
 
         function removeExistingDutyReviewCard(reviewId) {
@@ -3052,16 +3059,18 @@
 
             const footerActions = document.createElement("div");
             footerActions.className = "draft-actions";
+            const isScopedReview = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
+            const isSingleEventReview = isScopedReview && review.scope_change_keys.length === 1;
 
             const approveButton = document.createElement("button");
             approveButton.className = "secondary-button";
-            approveButton.textContent = "Approve all";
-            approveButton.addEventListener("click", () => approveDutyReview(review.review_id, card));
+            approveButton.textContent = isSingleEventReview ? "Approve event" : isScopedReview ? "Approve changes" : "Approve all";
+            approveButton.addEventListener("click", () => approveDutyReview(review, card));
 
             const ignoreButton = document.createElement("button");
             ignoreButton.className = "ghost-button";
-            ignoreButton.textContent = "Ignore for now";
-            ignoreButton.addEventListener("click", () => ignoreDutyReview(review.review_id, card));
+            ignoreButton.textContent = isSingleEventReview ? "Ignore event" : isScopedReview ? "Ignore changes" : "Ignore for now";
+            ignoreButton.addEventListener("click", () => ignoreDutyReview(review, card));
 
             footerActions.appendChild(approveButton);
             footerActions.appendChild(ignoreButton);
@@ -3126,14 +3135,16 @@
             }
         }
 
-        async function approveDutyReview(reviewId, card) {
+        async function approveDutyReview(review, card) {
             try {
-                const response = await fetch("/calendar/duty-sync/review/approve", {
+                const scoped = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
+                const response = await fetch(scoped ? "/calendar/duty-sync/review/approve-scope" : "/calendar/duty-sync/review/approve", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         session_id: sessionId,
-                        review_id: reviewId
+                        review_id: review.review_id,
+                        change_keys: review.scope_change_keys || []
                     })
                 });
                 const data = await response.json();
@@ -3146,26 +3157,34 @@
                     data.reply || "Duty review approved.",
                     isApproved ? "system" : "error"
                 );
+                if (data.pending_review) {
+                    appendDutyReviewCard(data.pending_review);
+                }
                 await refreshDutySyncStatus();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
         }
 
-        async function ignoreDutyReview(reviewId, card) {
+        async function ignoreDutyReview(review, card) {
             try {
-                const response = await fetch("/calendar/duty-sync/review/ignore", {
+                const scoped = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
+                const response = await fetch(scoped ? "/calendar/duty-sync/review/ignore-scope" : "/calendar/duty-sync/review/ignore", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         session_id: sessionId,
-                        review_id: reviewId
+                        review_id: review.review_id,
+                        change_keys: review.scope_change_keys || []
                     })
                 });
                 const data = await response.json();
                 if (card) card.remove();
                 activeDutyReview = null;
                 appendAssistantMessage(data.reply || "Duty review ignored for now.", data.status === "not_found" ? "error" : "system");
+                if (data.pending_review) {
+                    appendDutyReviewCard(data.pending_review);
+                }
                 await refreshDutySyncStatus();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
@@ -4162,6 +4181,19 @@
 
         handleInitialDutySyncDeepLink();
         registerDutyPushServiceWorker().catch(() => {});
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.addEventListener("message", async (event) => {
+                const data = event.data || {};
+                if (data.type !== "duty-sync-open-review") return;
+                pendingDutySyncReviewDeepLink = true;
+                if (appMode !== "scheduling") {
+                    appMode = "scheduling";
+                    renderModeState();
+                }
+                window.history.replaceState({}, document.title, data.url || buildDutySyncDeepLinkPath());
+                await refreshDutySyncStatus();
+            });
+        }
         renderModeState();
         autoResizeInput();
         updateComposerState();

@@ -137,6 +137,7 @@ def _build_push_review_scope(current_review, previous_review):
         scoped_changes = current_review.get("changes") or []
     scoped_review = dict(current_review)
     scoped_review["changes"] = scoped_changes
+    scoped_review["scope_change_keys"] = [item.get("change_key") for item in scoped_changes if item.get("change_key")]
     summary = {"added": 0, "changed": 0, "removed": 0}
     for item in scoped_changes:
         if item.get("change_type") in summary:

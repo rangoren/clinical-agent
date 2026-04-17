@@ -495,7 +495,10 @@ def _clear_pending_review_if_unchanged(session_id):
 
 def _build_review_payload(session_id, source_tab_name, source_month, detected_duties):
     snapshot = _latest_approved_snapshot(session_id)
+    pending_review = _active_pending_review(session_id)
     approved_duties = (snapshot or {}).get("duties_json") or []
+    if pending_review and pending_review.get("review_type") == "monthly_rollover" and pending_review.get("source_month") == source_month:
+        approved_duties = [item.get("new_duty") for item in (pending_review.get("detected_changes_json") or []) if item.get("new_duty")]
     review_type = "incremental"
     changes = _build_diff_changes(approved_duties, detected_duties)
     if snapshot and snapshot.get("source_month") and snapshot.get("source_month") != source_month and detected_duties:
@@ -529,13 +532,42 @@ def _build_review_payload(session_id, source_tab_name, source_month, detected_du
 
 
 def _apply_review_to_snapshot(session_id, review_doc):
+    duties_json = _apply_review_changes_to_snapshot(
+        session_id=session_id,
+        source_tab_name=review_doc.get("source_tab_name"),
+        source_month=review_doc.get("source_month"),
+        selected_changes=review_doc.get("detected_changes_json") or [],
+    )
+    now = _utcnow()
+    duty_sync_pending_reviews_collection.update_one(
+        {"_id": review_doc["_id"]},
+        {"$set": {"status": "approved", "resolved_at": now, "updated_at": now}},
+    )
+    duty_sync_connections_collection.update_one(
+        {"session_id": session_id},
+        {
+            "$set": {
+                "current_status": "connected",
+                "last_error_message": None,
+                "last_debug_reason": None,
+                "last_debug_context": None,
+                "last_pushed_review_signature": None,
+                "last_pushed_review_payload": None,
+                "last_push_review_scope": None,
+            }
+        },
+    )
+    return duties_json
+
+
+def _apply_review_changes_to_snapshot(session_id, source_tab_name, source_month, selected_changes):
     now = _utcnow()
     latest_connection = _connection_doc(session_id) or {}
     latest_detected_duties = _duty_map_by_key(latest_connection.get("latest_detected_duties") or [])
     latest_snapshot = _latest_approved_snapshot(session_id)
     approved_duties = _duty_map_by_key((latest_snapshot or {}).get("duties_json") or [])
 
-    for change in review_doc.get("detected_changes_json") or []:
+    for change in selected_changes or []:
         if not change.get("included", True):
             continue
         change_type = change.get("change_type")
@@ -557,31 +589,17 @@ def _apply_review_to_snapshot(session_id, review_doc):
     snapshot_doc = {
         "session_id": session_id,
         "user_id": session_id,
-        "source_tab_name": review_doc.get("source_tab_name"),
-        "source_month": review_doc.get("source_month"),
+        "source_tab_name": source_tab_name,
+        "source_month": source_month,
         "duties_json": duties_json,
         "approved_at": now,
     }
     duty_sync_snapshots_collection.insert_one(snapshot_doc)
-    duty_sync_pending_reviews_collection.update_one(
-        {"_id": review_doc["_id"]},
-        {"$set": {"status": "approved", "resolved_at": now, "updated_at": now}},
-    )
-    duty_sync_connections_collection.update_one(
-        {"session_id": session_id},
-        {
-            "$set": {
-                "current_status": "connected",
-                "last_error_message": None,
-                "last_debug_reason": None,
-                "last_debug_context": None,
-                "last_pushed_review_signature": None,
-                "last_pushed_review_payload": None,
-                "last_push_review_scope": None,
-            }
-        },
-    )
     return duties_json
+
+
+def _change_keys_set(change_keys):
+    return {key for key in (change_keys or []) if key}
 
 
 def _upsert_connection_state(session_id, payload):
@@ -860,6 +878,53 @@ def approve_pending_duty_review(session_id, review_id):
     }
 
 
+def approve_pending_duty_review_scope(session_id, review_id, change_keys):
+    review_doc = duty_sync_pending_reviews_collection.find_one(
+        {"session_id": session_id, "review_id": review_id, "status": "pending"}
+    )
+    if not review_doc:
+        return {"status": "not_found", "reply": "No pending duty review was found."}
+    selected_keys = _change_keys_set(change_keys)
+    selected_changes = [item for item in (review_doc.get("detected_changes_json") or []) if item.get("change_key") in selected_keys]
+    if not selected_changes:
+        return {"status": "not_found", "reply": "No matching duty review items were found."}
+    calendar_sync_result = _apply_review_to_calendar(session_id, {**review_doc, "detected_changes_json": selected_changes})
+    if calendar_sync_result.get("status") != "synced":
+        return calendar_sync_result
+    duties_json = _apply_review_changes_to_snapshot(
+        session_id=session_id,
+        source_tab_name=review_doc.get("source_tab_name"),
+        source_month=review_doc.get("source_month"),
+        selected_changes=selected_changes,
+    )
+    remaining_changes = [item for item in (review_doc.get("detected_changes_json") or []) if item.get("change_key") not in selected_keys]
+    now = _utcnow()
+    if remaining_changes:
+        duty_sync_pending_reviews_collection.update_one(
+            {"_id": review_doc["_id"]},
+            {"$set": {"detected_changes_json": remaining_changes, "summary": _review_summary(remaining_changes), "updated_at": now}},
+        )
+        duty_sync_connections_collection.update_one(
+            {"session_id": session_id},
+            {"$set": {"current_status": "pending_review", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
+        )
+    else:
+        duty_sync_pending_reviews_collection.update_one(
+            {"_id": review_doc["_id"]},
+            {"$set": {"status": "approved", "resolved_at": now, "updated_at": now}},
+        )
+        duty_sync_connections_collection.update_one(
+            {"session_id": session_id},
+            {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
+        )
+    return {
+        "status": "approved",
+        "reply": "Duty review updates were applied.",
+        "approved_duty_count": len(duties_json),
+        "pending_review": _serialize_review_doc(duty_sync_pending_reviews_collection.find_one({"_id": review_doc["_id"]})) if remaining_changes else None,
+    }
+
+
 def ignore_pending_duty_review(session_id, review_id):
     review_doc = duty_sync_pending_reviews_collection.find_one(
         {"session_id": session_id, "review_id": review_id, "status": "pending"}
@@ -876,6 +941,36 @@ def ignore_pending_duty_review(session_id, review_id):
         {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
     )
     return {"status": "ignored", "reply": "Duty review ignored for now."}
+
+
+def ignore_pending_duty_review_scope(session_id, review_id, change_keys):
+    review_doc = duty_sync_pending_reviews_collection.find_one(
+        {"session_id": session_id, "review_id": review_id, "status": "pending"}
+    )
+    if not review_doc:
+        return {"status": "not_found", "reply": "No pending duty review was found."}
+    selected_keys = _change_keys_set(change_keys)
+    remaining_changes = [item for item in (review_doc.get("detected_changes_json") or []) if item.get("change_key") not in selected_keys]
+    now = _utcnow()
+    if remaining_changes:
+        duty_sync_pending_reviews_collection.update_one(
+            {"_id": review_doc["_id"]},
+            {"$set": {"detected_changes_json": remaining_changes, "summary": _review_summary(remaining_changes), "updated_at": now}},
+        )
+        return {
+            "status": "ignored",
+            "reply": "Duty review items ignored for now.",
+            "pending_review": _serialize_review_doc(duty_sync_pending_reviews_collection.find_one({"_id": review_doc["_id"]})),
+        }
+    duty_sync_pending_reviews_collection.update_one(
+        {"_id": review_doc["_id"]},
+        {"$set": {"status": "ignored", "resolved_at": now, "updated_at": now}},
+    )
+    duty_sync_connections_collection.update_one(
+        {"session_id": session_id},
+        {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
+    )
+    return {"status": "ignored", "reply": "Duty review ignored for now.", "pending_review": None}
 
 
 def toggle_pending_review_change(session_id, review_id, change_key):

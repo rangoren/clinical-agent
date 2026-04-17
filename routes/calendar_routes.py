@@ -10,12 +10,14 @@ from services.google_calendar_service import (
 )
 from services.duty_sync_service import (
     approve_pending_duty_review,
+    approve_pending_duty_review_scope,
     check_duty_sheet,
     connect_duty_sheet,
     disconnect_duty_sheet,
     edit_pending_review_change,
     get_duty_sync_status,
     ignore_pending_duty_review,
+    ignore_pending_duty_review_scope,
     poll_duty_sheet,
     toggle_pending_review_change,
 )
@@ -161,6 +163,22 @@ async def handle_duty_sync_review_approve(request: Request):
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
 
 
+@router.post("/calendar/duty-sync/review/approve-scope")
+async def handle_duty_sync_review_approve_scope(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            approve_pending_duty_review_scope(
+                session_id=data.get("session_id"),
+                review_id=data.get("review_id"),
+                change_keys=data.get("change_keys") or [],
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/review/approve-scope", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
 @router.post("/calendar/duty-sync/review/ignore")
 async def handle_duty_sync_review_ignore(request: Request):
     try:
@@ -173,6 +191,22 @@ async def handle_duty_sync_review_ignore(request: Request):
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/review/ignore", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/review/ignore-scope")
+async def handle_duty_sync_review_ignore_scope(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            ignore_pending_duty_review_scope(
+                session_id=data.get("session_id"),
+                review_id=data.get("review_id"),
+                change_keys=data.get("change_keys") or [],
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/review/ignore-scope", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
 
 

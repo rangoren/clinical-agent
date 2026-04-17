@@ -26,7 +26,7 @@ self.addEventListener("notificationclick", (event) => {
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
         if ("focus" in client) {
-          client.navigate(targetUrl);
+          client.postMessage({ type: "duty-sync-open-review", url: targetUrl });
           return client.focus();
         }
       }
