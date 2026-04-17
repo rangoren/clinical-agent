@@ -2153,7 +2153,7 @@ def _build_monthly_shift_summary(session_id, message):
 
 def build_scheduling_welcome(session_id):
     if has_google_calendar_connection(session_id):
-        return "Scheduling is on."
+        return ""
     return "Connect your calendar in Settings to start creating and syncing events."
 
 

@@ -23,29 +23,36 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = (event.notification.data && event.notification.data.url) || "/?app_mode=scheduling&duty_sync_review=1";
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if ("navigate" in client) {
-          return client.navigate(targetUrl).then((navigatedClient) => {
-            const activeClient = navigatedClient || client;
-            if (activeClient && "postMessage" in activeClient) {
-              activeClient.postMessage({ type: "duty-sync-open-review", url: targetUrl });
+    (self.clients.openWindow
+      ? self.clients.openWindow(targetUrl).then((openedClient) => {
+          if (openedClient && "postMessage" in openedClient) {
+            openedClient.postMessage({ type: "duty-sync-open-review", url: targetUrl });
+          }
+          if (openedClient && "focus" in openedClient) {
+            return openedClient.focus();
+          }
+          return openedClient;
+        })
+      : self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+          for (const client of clients) {
+            if ("navigate" in client) {
+              return client.navigate(targetUrl).then((navigatedClient) => {
+                const activeClient = navigatedClient || client;
+                if (activeClient && "postMessage" in activeClient) {
+                  activeClient.postMessage({ type: "duty-sync-open-review", url: targetUrl });
+                }
+                if (activeClient && "focus" in activeClient) {
+                  return activeClient.focus();
+                }
+                return activeClient;
+              });
             }
-            if (activeClient && "focus" in activeClient) {
-              return activeClient.focus();
+            if ("focus" in client) {
+              client.postMessage({ type: "duty-sync-open-review", url: targetUrl });
+              return client.focus();
             }
-            return activeClient;
-          });
-        }
-        if ("focus" in client) {
-          client.postMessage({ type: "duty-sync-open-review", url: targetUrl });
-          return client.focus();
-        }
-      }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(targetUrl);
-      }
-      return undefined;
-    })
+          }
+          return undefined;
+        }))
   );
 });

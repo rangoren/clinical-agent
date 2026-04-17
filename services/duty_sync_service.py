@@ -435,6 +435,7 @@ def _serialize_review_doc(review_doc):
         "source_tab_name": review_doc.get("source_tab_name"),
         "summary": review_doc.get("summary") or _review_summary(changes),
         "included_count": included_count,
+        "updated_at": as_iso(review_doc.get("updated_at")) if review_doc.get("updated_at") else None,
         "changes": changes,
     }
 
@@ -498,11 +499,16 @@ def _build_review_payload(session_id, source_tab_name, source_month, detected_du
     pending_review = _active_pending_review(session_id)
     approved_duties = (snapshot or {}).get("duties_json") or []
     same_month_pending_review = bool(pending_review and pending_review.get("source_month") == source_month)
+    previous_source_month = None
+    if pending_review and pending_review.get("source_month"):
+        previous_source_month = pending_review.get("source_month")
+    elif snapshot and snapshot.get("source_month"):
+        previous_source_month = snapshot.get("source_month")
     if pending_review and pending_review.get("review_type") == "monthly_rollover" and pending_review.get("source_month") == source_month:
         approved_duties = [item.get("new_duty") for item in (pending_review.get("detected_changes_json") or []) if item.get("new_duty")]
     review_type = "incremental"
     changes = _build_diff_changes(approved_duties, detected_duties)
-    if snapshot and snapshot.get("source_month") and snapshot.get("source_month") != source_month and detected_duties and not same_month_pending_review:
+    if previous_source_month and previous_source_month != source_month and detected_duties and not same_month_pending_review:
         review_type = "monthly_rollover"
         changes = [
             {

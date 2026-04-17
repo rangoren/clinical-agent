@@ -2472,6 +2472,8 @@
         let dutySyncConnected = false;
         let dutySyncNeedsReconnect = false;
         let activeDutyReview = null;
+        let pendingDutySyncReviewId = null;
+        let pendingDutySyncReviewUpdatedAt = null;
 
         function updateCalendarUi(status) {
             const label = document.getElementById("calendar-label");
@@ -2650,6 +2652,8 @@
             const params = new URLSearchParams(window.location.search);
             const requestedMode = params.get("app_mode");
             const reviewDeepLink = params.get("duty_sync_review");
+            pendingDutySyncReviewId = params.get("duty_sync_review_id");
+            pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
             if (requestedMode === "scheduling") {
                 appMode = "scheduling";
             }
@@ -2663,6 +2667,8 @@
             if (!scopedReview) return pendingReview;
             if (scopedReview.review_id !== pendingReview.review_id) return pendingReview;
             if ((scopedReview.review_type || "incremental") !== (pendingReview.review_type || "incremental")) return pendingReview;
+            if (pendingDutySyncReviewId && scopedReview.review_id !== pendingDutySyncReviewId) return pendingReview;
+            if (pendingDutySyncReviewUpdatedAt && scopedReview.updated_at !== pendingDutySyncReviewUpdatedAt) return pendingReview;
             return scopedReview;
         }
 
@@ -2730,6 +2736,8 @@
                 appendDutyReviewCard(resolveDutyReviewScope(status));
                 const params = new URLSearchParams(window.location.search);
                 params.delete("duty_sync_review");
+                params.delete("duty_sync_review_id");
+                params.delete("duty_sync_review_updated_at");
                 const nextQuery = params.toString();
                 const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
                 window.history.replaceState({}, document.title, nextUrl);
@@ -3219,7 +3227,7 @@
             if (!calendarStatus) return;
 
             if (calendarStatus === "connected") {
-                appendAssistantMessage("Google Calendar is connected. New scheduling changes can sync there now.", "system");
+                appendAssistantMessage("Google Calendar connected. You can keep going in Duty Sync now.", "system");
             } else if (calendarStatus === "error") {
                 appendAssistantMessage("Google Calendar connection didn’t complete.", "error");
             }

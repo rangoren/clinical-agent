@@ -64,20 +64,20 @@ async def handle_google_calendar_callback(code: str = "", state: str = "", error
     try:
         if error:
             log_event("google_calendar_callback_error", payload={"reason": "provider_error", "error": error}, level="error")
-            return RedirectResponse(url=f"{base_redirect}?calendar_status=error")
+            return RedirectResponse(url=f"{base_redirect}?app_mode=scheduling&calendar_status=error")
         result = complete_google_calendar_connect(code=code, state=state)
         if result.get("status") == "connected":
-            return RedirectResponse(url=f"{base_redirect}?calendar_status=connected&provider=google")
+            return RedirectResponse(url=f"{base_redirect}?app_mode=scheduling&calendar_status=connected&provider=google")
         log_event(
             "google_calendar_callback_error",
             session_id=result.get("session_id"),
             payload={"reason": result.get("status"), "reply": result.get("reply")},
             level="error",
         )
-        return RedirectResponse(url=f"{base_redirect}?calendar_status=error")
+        return RedirectResponse(url=f"{base_redirect}?app_mode=scheduling&calendar_status=error")
     except Exception as exc:
         log_event("google_calendar_callback_error", payload={"reason": "exception", "error": str(exc)}, level="error")
-        return RedirectResponse(url=f"{base_redirect}?calendar_status=error")
+        return RedirectResponse(url=f"{base_redirect}?app_mode=scheduling&calendar_status=error")
 
 
 @router.post("/calendar/disconnect/google")

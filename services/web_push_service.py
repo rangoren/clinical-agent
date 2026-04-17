@@ -4,6 +4,7 @@ import json
 import threading
 import time
 from datetime import datetime
+from urllib.parse import urlencode
 
 from db import duty_sync_connections_collection, push_subscriptions_collection
 from services.logging_service import log_event
@@ -88,12 +89,20 @@ def _send_notification_to_subscription(subscription, payload):
 def send_duty_sync_push(session_id, review, reply_text):
     if not web_push_configured() or not review:
         return 0
+    query = urlencode(
+        {
+            "app_mode": "scheduling",
+            "duty_sync_review": "1",
+            "duty_sync_review_id": review.get("review_id") or "",
+            "duty_sync_review_updated_at": review.get("updated_at") or "",
+        }
+    )
     return send_web_push_message(
         session_id=session_id,
         title="Duty Sync update",
         body=reply_text or "Duty Sync found personal schedule changes.",
         tag=review.get("review_id") or "duty-sync-review",
-        url=f"{APP_BASE_URL}/?app_mode=scheduling&duty_sync_review=1" if APP_BASE_URL else "/?app_mode=scheduling&duty_sync_review=1",
+        url=f"{APP_BASE_URL}/?{query}" if APP_BASE_URL else f"/?{query}",
     )
 
 
