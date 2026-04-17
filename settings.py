@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -32,7 +33,22 @@ def _read_env_pem(name):
     cleaned = _read_env_text(name)
     if not cleaned:
         return ""
-    return cleaned.replace("\\n", "\n")
+    cleaned = cleaned.replace("\\n", "\n").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if "BEGIN" in cleaned and "END" in cleaned:
+        begin_match = re.search(r"-----BEGIN ([A-Z ]+)-----", cleaned)
+        end_match = re.search(r"-----END ([A-Z ]+)-----", cleaned)
+        if begin_match and end_match:
+            begin_label = begin_match.group(1)
+            end_label = end_match.group(1)
+            body = cleaned
+            body = re.sub(r"-----BEGIN [A-Z ]+-----", "", body)
+            body = re.sub(r"-----END [A-Z ]+-----", "", body)
+            body = re.sub(r"\s+", "", body)
+            wrapped_lines = [body[index : index + 64] for index in range(0, len(body), 64)]
+            return "\n".join(
+                [f"-----BEGIN {begin_label}-----", *wrapped_lines, f"-----END {end_label}-----"]
+            )
+    return cleaned
 
 
 load_dotenv(BASE_DIR / ".env")
