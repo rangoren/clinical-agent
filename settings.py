@@ -16,6 +16,25 @@ def _read_bool(name, default):
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _read_env_text(name):
+    raw_value = os.getenv(name, "")
+    cleaned = raw_value.strip()
+    if (
+        len(cleaned) >= 2
+        and cleaned[0] == cleaned[-1]
+        and cleaned[0] in {'"', "'"}
+    ):
+        cleaned = cleaned[1:-1].strip()
+    return cleaned
+
+
+def _read_env_pem(name):
+    cleaned = _read_env_text(name)
+    if not cleaned:
+        return ""
+    return cleaned.replace("\\n", "\n")
+
+
 load_dotenv(BASE_DIR / ".env")
 
 APP_ENV = os.getenv("APP_ENV", "production").strip().lower()
@@ -42,9 +61,9 @@ APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Asia/Jerusalem")
 ALLOW_NON_PROD_PROD_DB = _read_bool("ALLOW_NON_PROD_PROD_DB", False)
 ENABLE_EXTERNAL_SIDE_EFFECTS = _read_bool("ENABLE_EXTERNAL_SIDE_EFFECTS", APP_ENV == "production")
 ENABLE_GOOGLE_CALENDAR_INTEGRATION = _read_bool("ENABLE_GOOGLE_CALENDAR_INTEGRATION", APP_ENV == "production")
-WEB_PUSH_PUBLIC_KEY = os.getenv("WEB_PUSH_PUBLIC_KEY", "").strip()
-WEB_PUSH_PRIVATE_KEY = os.getenv("WEB_PUSH_PRIVATE_KEY", "").strip()
-WEB_PUSH_SUBJECT = os.getenv("WEB_PUSH_SUBJECT", "").strip()
+WEB_PUSH_PUBLIC_KEY = _read_env_text("WEB_PUSH_PUBLIC_KEY")
+WEB_PUSH_PRIVATE_KEY = _read_env_pem("WEB_PUSH_PRIVATE_KEY")
+WEB_PUSH_SUBJECT = _read_env_text("WEB_PUSH_SUBJECT")
 R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "").strip()
 R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "").strip()
 R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
