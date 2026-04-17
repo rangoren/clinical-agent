@@ -88,11 +88,23 @@ def _send_notification_to_subscription(subscription, payload):
 def send_duty_sync_push(session_id, review, reply_text):
     if not web_push_configured() or not review:
         return 0
+    return send_web_push_message(
+        session_id=session_id,
+        title="Duty Sync update",
+        body=reply_text or "Duty Sync found personal schedule changes.",
+        tag=review.get("review_id") or "duty-sync-review",
+        url=f"{APP_BASE_URL}/?app_mode=scheduling&duty_sync_review=1" if APP_BASE_URL else "/?app_mode=scheduling&duty_sync_review=1",
+    )
+
+
+def send_web_push_message(session_id, title, body, tag="duty-sync-review", url=None):
+    if not web_push_configured():
+        return 0
     payload = {
-        "title": "Duty Sync update",
-        "body": reply_text or "Duty Sync found personal schedule changes.",
-        "tag": review.get("review_id") or "duty-sync-review",
-        "url": f"{APP_BASE_URL}/?app_mode=scheduling&duty_sync_review=1" if APP_BASE_URL else "/?app_mode=scheduling&duty_sync_review=1",
+        "title": title,
+        "body": body,
+        "tag": tag,
+        "url": url or (f"{APP_BASE_URL}/?app_mode=scheduling&duty_sync_review=1" if APP_BASE_URL else "/?app_mode=scheduling&duty_sync_review=1"),
     }
     sent_count = 0
     for doc in push_subscriptions_collection.find({"session_id": session_id}):

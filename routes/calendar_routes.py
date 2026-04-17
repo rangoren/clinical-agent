@@ -24,6 +24,7 @@ from services.web_push_service import (
     delete_web_push_subscription,
     get_web_push_status,
     save_web_push_subscription,
+    send_web_push_message,
 )
 
 
@@ -246,4 +247,27 @@ async def handle_duty_sync_push_unsubscribe(request: Request):
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/push/unsubscribe", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/push/test")
+async def handle_duty_sync_push_test(request: Request):
+    try:
+        data = await request.json()
+        session_id = data.get("session_id")
+        sent_count = send_web_push_message(
+            session_id=session_id,
+            title="Duty Sync test",
+            body="Test push sent from Duty Sync settings.",
+            tag="duty-sync-test",
+        )
+        return JSONResponse(
+            {
+                "status": "sent" if sent_count else "not_sent",
+                "reply": "Test push sent." if sent_count else "No push subscription was found for this session.",
+                "sent_count": sent_count,
+            }
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/push/test", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})

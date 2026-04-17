@@ -1828,6 +1828,8 @@
                                 </div>
                                 <button id="duty-sync-action" class="calendar-action" onclick="handleDutySyncPrimaryAction()">Connect Sheet</button>
                                 <button id="duty-sync-secondary-action" class="calendar-action secondary" onclick="disconnectDutySync()" hidden>Disconnect Sheet</button>
+                                <button id="duty-sync-push-action" class="calendar-action secondary" onclick="enableDutySyncNotifications()" hidden>Enable notifications</button>
+                                <button id="duty-sync-push-test-action" class="calendar-action secondary" onclick="sendDutySyncTestPush()" hidden>Send test push</button>
                             </div>
                         </div>
                     </div>
@@ -2538,11 +2540,17 @@
             return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
         }
 
-        async function ensureDutySyncPushFromUserGesture() {
-            if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+        async function enableDutySyncNotifications() {
+            if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+                appendAssistantMessage("Push notifications are not supported on this device.", "error");
                 return;
             }
             try {
+                const permission = await Notification.requestPermission();
+                if (permission !== "granted") {
+                    appendAssistantMessage("Notification permission was not granted.", "error");
+                    return;
+                }
                 const registration = await registerDutyPushServiceWorker();
                 const statusResponse = await fetch("/calendar/duty-sync/push/status", {
                     method: "POST",
@@ -2551,13 +2559,7 @@
                 });
                 const status = await statusResponse.json();
                 if (!status.available || !status.public_key) {
-                    return;
-                }
-                let permission = Notification.permission;
-                if (permission === "default") {
-                    permission = await Notification.requestPermission();
-                }
-                if (permission !== "granted") {
+                    appendAssistantMessage("Web push is not configured in this environment.", "error");
                     return;
                 }
                 let subscription = await registration.pushManager.getSubscription();
@@ -2567,7 +2569,7 @@
                         applicationServerKey: base64ToUint8Array(status.public_key)
                     });
                 }
-                await fetch("/calendar/duty-sync/push/subscribe", {
+                const subscribeResponse = await fetch("/calendar/duty-sync/push/subscribe", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -2575,8 +2577,25 @@
                         subscription: subscription.toJSON()
                     })
                 });
-            } catch (_error) {
-                // Keep push setup non-blocking.
+                const subscribeData = await subscribeResponse.json();
+                appendAssistantMessage(subscribeData.reply || "Duty Sync push alerts are enabled.", subscribeData.status === "subscribed" ? "system" : "error");
+                await refreshDutySyncStatus();
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function sendDutySyncTestPush() {
+            try {
+                const response = await fetch("/calendar/duty-sync/push/test", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+                const data = await response.json();
+                appendAssistantMessage(data.reply || "Test push sent.", data.status === "sent" ? "system" : "error");
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
             }
         }
 
@@ -2624,6 +2643,8 @@
             const details = document.getElementById("duty-sync-details");
             const action = document.getElementById("duty-sync-action");
             const secondaryAction = document.getElementById("duty-sync-secondary-action");
+            const pushAction = document.getElementById("duty-sync-push-action");
+            const pushTestAction = document.getElementById("duty-sync-push-test-action");
             if (appMode !== "scheduling") return;
 
             dutySyncConnected = !!(status && status.connected);
@@ -2636,6 +2657,8 @@
                 action.textContent = "Connect Sheet";
                 action.disabled = true;
                 secondaryAction.hidden = true;
+                pushAction.hidden = true;
+                pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
                 return;
             }
@@ -2646,6 +2669,8 @@
                 details.textContent = buildDutySyncDetails(status, status.details || "Reconnect Google once to allow Duty Sync to read the test sheet.");
                 action.textContent = "Reconnect Google";
                 secondaryAction.hidden = true;
+                pushAction.hidden = true;
+                pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
                 return;
             }
@@ -2655,6 +2680,8 @@
                 details.textContent = buildDutySyncDetails(status, status.details || "Connect the test duty sheet once from Settings.");
                 action.textContent = "Connect Sheet";
                 secondaryAction.hidden = true;
+                pushAction.hidden = true;
+                pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
                 return;
             }
@@ -2666,6 +2693,8 @@
             details.textContent = buildDutySyncDetails(status, baseText);
             action.textContent = status.current_status === "pending_review" ? "Review updates" : "Check now";
             secondaryAction.hidden = false;
+            pushAction.hidden = false;
+            pushTestAction.hidden = false;
             scheduleDutySyncPolling();
 
             if (pendingDutySyncReviewDeepLink && status.pending_review) {
@@ -2824,7 +2853,6 @@
                     appendDutyReviewCard(data.pending_review);
                 }
                 await refreshDutySyncStatus();
-                await ensureDutySyncPushFromUserGesture();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
@@ -2865,9 +2893,6 @@
                     appendAssistantMessage("Duty Sync checked the latest roster.", "system");
                 }
                 await refreshDutySyncStatus();
-                if (!isBackground) {
-                    await ensureDutySyncPushFromUserGesture();
-                }
             } catch (error) {
                 if (!isBackground) {
                     appendAssistantMessage("Error: " + error, "error");
