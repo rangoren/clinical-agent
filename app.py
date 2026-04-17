@@ -11,6 +11,7 @@ from routes.undo_routes import router as undo_router
 from routes.home_routes import APP_VERSION
 from services.logging_service import log_event
 from services.study_service import ensure_study_content_seed
+from services.web_push_service import start_duty_sync_push_poller, web_push_configured
 from settings import APP_BASE_URL, APP_ENV, ENABLE_EXTERNAL_SIDE_EFFECTS, ENABLE_GOOGLE_CALENDAR_INTEGRATION, MONGODB_DB_NAME
 
 
@@ -21,6 +22,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.on_event("startup")
 def log_startup_version():
     ensure_study_content_seed()
+    push_poller_started = start_duty_sync_push_poller()
     log_event(
         "app_startup",
         payload={
@@ -30,6 +32,8 @@ def log_startup_version():
             "app_base_url": APP_BASE_URL or "(not set)",
             "external_side_effects_enabled": ENABLE_EXTERNAL_SIDE_EFFECTS,
             "google_calendar_integration_enabled": ENABLE_GOOGLE_CALENDAR_INTEGRATION,
+            "web_push_configured": web_push_configured(),
+            "duty_sync_push_poller_started": push_poller_started,
         },
     )
 

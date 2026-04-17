@@ -12,12 +12,16 @@ from db import (
 )
 from services.duty_sync_parsing import (
     RELEVANT_TAB_TOKEN,
+    RELEVANT_ROLE_HEADERS,
+    ROLE_TITLE_MAP,
     STRUCTURAL_CHANGE_MESSAGE,
     DutySyncStructuralError,
     analyze_candidate_tab,
     as_iso,
+    build_duty_datetimes,
     normalize_sheet_id,
     normalize_text,
+    parse_sheet_date,
 )
 from services.duty_sync_diff import build_diff_changes, duty_map_by_key
 from services.google_calendar_service import (
@@ -883,5 +887,85 @@ def toggle_pending_review_change(session_id, review_id, change_key):
     return {
         "status": "updated",
         "reply": "Duty review updated.",
+        "pending_review": _serialize_review_doc(fresh),
+    }
+
+
+def _resolve_review_edit_target(change):
+    if change.get("new_duty"):
+        return "new_duty"
+    if change.get("old_duty"):
+        return "old_duty"
+    return None
+
+
+def _resolve_role_and_title_for_review_edit(raw_title, current_duty):
+    normalized_title = normalize_text(raw_title)
+    if not normalized_title:
+        raise DutySyncStructuralError("Duty review edit needs a non-empty event title.")
+    for role in RELEVANT_ROLE_HEADERS:
+        if normalized_title in {normalize_text(role), normalize_text(ROLE_TITLE_MAP.get(role))}:
+            return role, ROLE_TITLE_MAP[role]
+    current_role = normalize_text((current_duty or {}).get("role"))
+    current_title = normalized_title
+    if current_role in ROLE_TITLE_MAP:
+        return current_role, current_title
+    raise DutySyncStructuralError("Duty review edit must keep a known duty role.", {"title": raw_title})
+
+
+def _apply_review_item_edit(session_id, duty, edited_date, edited_title):
+    parsed_date = parse_sheet_date(edited_date)
+    if not parsed_date:
+        raise DutySyncStructuralError("Duty review edit needs a readable date.", {"date": edited_date})
+    role, title = _resolve_role_and_title_for_review_edit(edited_title, duty)
+    start_dt, end_dt = build_duty_datetimes(parsed_date, role)
+    updated = dict(duty or {})
+    updated["date"] = parsed_date.isoformat()
+    updated["role"] = role
+    updated["title"] = title
+    updated["duty_key"] = f"{session_id}:{parsed_date.isoformat()}:{role}"
+    updated["start_datetime"] = as_iso(start_dt)
+    updated["end_datetime"] = as_iso(end_dt)
+    return updated
+
+
+def edit_pending_review_change(session_id, review_id, change_key, edited_date, edited_title):
+    review_doc = duty_sync_pending_reviews_collection.find_one(
+        {"session_id": session_id, "review_id": review_id, "status": "pending"}
+    )
+    if not review_doc:
+        return {"status": "not_found", "reply": "No pending duty review was found."}
+
+    changes = review_doc.get("detected_changes_json") or []
+    updated = False
+    for item in changes:
+        if item.get("change_key") != change_key:
+            continue
+        target_key = _resolve_review_edit_target(item)
+        if not target_key:
+            return {"status": "not_found", "reply": "That duty review item could not be edited."}
+        try:
+            item[target_key] = _apply_review_item_edit(session_id, item.get(target_key) or {}, edited_date, edited_title)
+        except DutySyncStructuralError as exc:
+            return {"status": "invalid", "reply": exc.detail}
+        updated = True
+        break
+
+    if not updated:
+        return {"status": "not_found", "reply": "That duty review item was not found."}
+
+    duty_sync_pending_reviews_collection.update_one(
+        {"_id": review_doc["_id"]},
+        {
+            "$set": {
+                "detected_changes_json": changes,
+                "updated_at": _utcnow(),
+            }
+        },
+    )
+    fresh = duty_sync_pending_reviews_collection.find_one({"_id": review_doc["_id"]})
+    return {
+        "status": "updated",
+        "reply": "Duty review item updated.",
         "pending_review": _serialize_review_doc(fresh),
     }

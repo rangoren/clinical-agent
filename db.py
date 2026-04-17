@@ -25,6 +25,7 @@ duty_sync_connections_collection = db["duty_sync_connections"]
 duty_sync_snapshots_collection = db["duty_sync_snapshots"]
 duty_sync_pending_reviews_collection = db["duty_sync_pending_reviews"]
 duty_sync_managed_events_collection = db["duty_sync_managed_events"]
+push_subscriptions_collection = db["push_subscriptions"]
 study_content_collection = db["study_content"]
 study_user_state_collection = db["study_user_state"]
 textbook_cache_collection = db["textbook_cache"]
@@ -49,6 +50,8 @@ def _ensure_indexes():
         duty_sync_snapshots_collection.create_index([("session_id", ASCENDING), ("approved_at", ASCENDING)])
         duty_sync_pending_reviews_collection.create_index([("session_id", ASCENDING), ("status", ASCENDING), ("created_at", ASCENDING)])
         duty_sync_managed_events_collection.create_index([("session_id", ASCENDING), ("duty_key", ASCENDING)], unique=True)
+        push_subscriptions_collection.create_index([("session_id", ASCENDING), ("endpoint", ASCENDING)], unique=True)
+        push_subscriptions_collection.create_index([("updated_at", ASCENDING)])
         study_content_collection.create_index([("id", ASCENDING)], unique=True)
         study_content_collection.create_index([("approved_for_stage_b", ASCENDING), ("topic", ASCENDING), ("item_type", ASCENDING)])
         study_user_state_collection.create_index([("session_id", ASCENDING)], unique=True)

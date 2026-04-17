@@ -13,12 +13,18 @@ from services.duty_sync_service import (
     check_duty_sheet,
     connect_duty_sheet,
     disconnect_duty_sheet,
+    edit_pending_review_change,
     get_duty_sync_status,
     ignore_pending_duty_review,
     poll_duty_sheet,
     toggle_pending_review_change,
 )
 from services.logging_service import log_event
+from services.web_push_service import (
+    delete_web_push_subscription,
+    get_web_push_status,
+    save_web_push_subscription,
+)
 
 
 router = APIRouter()
@@ -182,4 +188,62 @@ async def handle_duty_sync_review_toggle_item(request: Request):
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/review/toggle-item", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/review/edit-item")
+async def handle_duty_sync_review_edit_item(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            edit_pending_review_change(
+                session_id=data.get("session_id"),
+                review_id=data.get("review_id"),
+                change_key=data.get("change_key"),
+                edited_date=data.get("edited_date"),
+                edited_title=data.get("edited_title"),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/review/edit-item", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/push/status")
+async def handle_duty_sync_push_status(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(get_web_push_status(data.get("session_id")))
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/push/status", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/push/subscribe")
+async def handle_duty_sync_push_subscribe(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            save_web_push_subscription(
+                session_id=data.get("session_id"),
+                subscription=data.get("subscription") or {},
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/push/subscribe", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/push/unsubscribe")
+async def handle_duty_sync_push_unsubscribe(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            delete_web_push_subscription(
+                session_id=data.get("session_id"),
+                endpoint=data.get("endpoint"),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/push/unsubscribe", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})

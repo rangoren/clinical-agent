@@ -934,17 +934,17 @@
         .duty-review-list {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 16px;
         }
 
         .duty-review-item {
             border: 1px solid rgba(15, 118, 110, 0.1);
             border-radius: 14px;
-            padding: 12px;
+            padding: 13px 12px;
             background: rgba(255, 255, 255, 0.84);
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 10px;
         }
 
         .duty-review-item.excluded {
@@ -957,11 +957,6 @@
             color: var(--text);
             font-size: 0.92rem;
             font-weight: 700;
-        }
-
-        .duty-review-item-meta {
-            color: var(--muted);
-            font-size: 0.82rem;
             line-height: 1.45;
         }
 
@@ -1925,6 +1920,7 @@
         let pendingStudyCardsTimer = null;
         let dutySyncPollTimer = null;
         let pendingDutySyncReviewDeepLink = false;
+        let dutyPushRegistration = null;
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
         const studyCardsCacheKey = "entry_study_cards_v1";
@@ -2524,6 +2520,66 @@
             return "/?app_mode=scheduling&duty_sync_review=1";
         }
 
+        async function registerDutyPushServiceWorker() {
+            if (!("serviceWorker" in navigator)) {
+                return null;
+            }
+            if (dutyPushRegistration) {
+                return dutyPushRegistration;
+            }
+            dutyPushRegistration = await navigator.serviceWorker.register("/static/sw.js");
+            return dutyPushRegistration;
+        }
+
+        function base64ToUint8Array(base64String) {
+            const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+            const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+            const rawData = window.atob(base64);
+            return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+        }
+
+        async function ensureDutySyncPushFromUserGesture() {
+            if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+                return;
+            }
+            try {
+                const registration = await registerDutyPushServiceWorker();
+                const statusResponse = await fetch("/calendar/duty-sync/push/status", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+                const status = await statusResponse.json();
+                if (!status.available || !status.public_key) {
+                    return;
+                }
+                let permission = Notification.permission;
+                if (permission === "default") {
+                    permission = await Notification.requestPermission();
+                }
+                if (permission !== "granted") {
+                    return;
+                }
+                let subscription = await registration.pushManager.getSubscription();
+                if (!subscription) {
+                    subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: base64ToUint8Array(status.public_key)
+                    });
+                }
+                await fetch("/calendar/duty-sync/push/subscribe", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        subscription: subscription.toJSON()
+                    })
+                });
+            } catch (_error) {
+                // Keep push setup non-blocking.
+            }
+        }
+
         function openDutySyncReviewContext(review) {
             if (appMode !== "scheduling") {
                 appMode = "scheduling";
@@ -2547,6 +2603,10 @@
                 window.location.href = buildDutySyncDeepLinkPath();
                 notification.close();
             };
+        }
+
+        function appendDutySyncInAppNotice(replyText) {
+            appendAssistantMessage(replyText || "Duty Sync found personal schedule changes.", "system");
         }
 
         function handleInitialDutySyncDeepLink() {
@@ -2764,6 +2824,7 @@
                     appendDutyReviewCard(data.pending_review);
                 }
                 await refreshDutySyncStatus();
+                await ensureDutySyncPushFromUserGesture();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
@@ -2794,7 +2855,7 @@
                         appendDutyReviewCard(data.pending_review);
                     }
                     if (isBackground && data.has_new_pending_review) {
-                        appendAssistantMessage(data.reply || "Duty Sync found updates that need review.", "system");
+                        appendDutySyncInAppNotice(data.reply || "Duty Sync found updates that need review.");
                         appendDutyReviewCard(data.pending_review);
                         maybeShowDutySyncBrowserNotification(data.pending_review, data.reply);
                     }
@@ -2804,6 +2865,9 @@
                     appendAssistantMessage("Duty Sync checked the latest roster.", "system");
                 }
                 await refreshDutySyncStatus();
+                if (!isBackground) {
+                    await ensureDutySyncPushFromUserGesture();
+                }
             } catch (error) {
                 if (!isBackground) {
                     appendAssistantMessage("Error: " + error, "error");
@@ -2872,38 +2936,11 @@
             return `${dutyTimeFormatter.format(start)}-${dutyTimeFormatter.format(end)}${nextDaySuffix}`;
         }
 
-        function formatDutyLabel(duty) {
-            if (!duty) return "";
-            const title = duty.title || duty.role || "";
-            const timeRange = formatDutyTimeRange(duty);
-            return timeRange ? `${title} · ${timeRange}` : title;
-        }
-
-        function formatDutyChangeTitle(change) {
-            const typeLabel = change.change_type === "added"
-                ? "Added duty"
-                : change.change_type === "removed"
-                ? "Removed duty"
-                : "Changed duty";
+        function formatDutyReviewItemTitle(change) {
             const duty = change.new_duty || change.old_duty || {};
-            return `${typeLabel} · ${formatDutyDate(duty.start_datetime || duty.date || change.date || "")}`;
-        }
-
-        function formatDutyChangeMeta(change) {
-            if (change.change_type === "changed") {
-                const oldDuty = change.old_duty || {};
-                const newDuty = change.new_duty || {};
-                const oldTitle = oldDuty.title || oldDuty.role || "";
-                const newTitle = newDuty.title || newDuty.role || "";
-                const oldTimeRange = formatDutyTimeRange(oldDuty);
-                const newTimeRange = formatDutyTimeRange(newDuty);
-                if (oldTitle && newTitle && oldTitle === newTitle) {
-                    return `${oldTitle} · ${oldTimeRange} -> ${newTimeRange}`;
-                }
-                return `From ${formatDutyLabel(oldDuty)} to ${formatDutyLabel(newDuty)}`;
-            }
-            const duty = change.new_duty || change.old_duty || {};
-            return formatDutyLabel(duty);
+            const dateText = formatDutyDate(duty.start_datetime || duty.date || change.date || "");
+            const title = String(duty.title || duty.role || "").replace("/", " / ");
+            return `${dateText} · ${title}`;
         }
 
         function removeExistingDutyReviewCard(reviewId) {
@@ -2928,6 +2965,20 @@
             title.textContent = `Duty review · ${review.source_month || "latest roster"}`;
             card.appendChild(title);
 
+            const summary = document.createElement("div");
+            summary.className = "duty-review-summary";
+            const summaryValues = review.summary || {};
+            [
+                `Duty: ${review.included_count || 0}`,
+                `Changed: ${summaryValues.changed || 0}`,
+            ].forEach((text) => {
+                const chip = document.createElement("span");
+                chip.className = "duty-review-chip";
+                chip.textContent = text;
+                summary.appendChild(chip);
+            });
+            card.appendChild(summary);
+
             const list = document.createElement("div");
             list.className = "duty-review-list";
             (review.changes || []).forEach((change) => {
@@ -2936,11 +2987,7 @@
 
                 const itemTitle = document.createElement("p");
                 itemTitle.className = "duty-review-item-title";
-                itemTitle.textContent = formatDutyChangeTitle(change);
-
-                const itemMeta = document.createElement("div");
-                itemMeta.className = "duty-review-item-meta";
-                itemMeta.textContent = formatDutyChangeMeta(change);
+                itemTitle.textContent = formatDutyReviewItemTitle(change);
 
                 const actions = document.createElement("div");
                 actions.className = "duty-review-item-actions";
@@ -2950,29 +2997,18 @@
                 toggleButton.textContent = change.included === false ? "Include item" : "Exclude item";
                 toggleButton.addEventListener("click", () => toggleDutyReviewItem(review.review_id, change.change_key, card));
 
+                const editButton = document.createElement("button");
+                editButton.className = "ghost-button";
+                editButton.textContent = "Edit item";
+                editButton.addEventListener("click", () => editDutyReviewItem(review.review_id, change, card));
+
                 actions.appendChild(toggleButton);
+                actions.appendChild(editButton);
                 item.appendChild(itemTitle);
-                item.appendChild(itemMeta);
                 item.appendChild(actions);
                 list.appendChild(item);
             });
             card.appendChild(list);
-
-            const summary = document.createElement("div");
-            summary.className = "duty-review-summary";
-            const summaryValues = review.summary || {};
-            [
-                `Added: ${summaryValues.added || 0}`,
-                `Changed: ${summaryValues.changed || 0}`,
-                `Removed: ${summaryValues.removed || 0}`,
-                `Included now: ${review.included_count || 0}`
-            ].forEach((text) => {
-                const chip = document.createElement("span");
-                chip.className = "duty-review-chip";
-                chip.textContent = text;
-                summary.appendChild(chip);
-            });
-            card.appendChild(summary);
 
             const footerActions = document.createElement("div");
             footerActions.className = "draft-actions";
@@ -3010,6 +3046,36 @@
                 if (data.reply) {
                     appendAssistantMessage(data.reply, data.status === "not_found" ? "error" : "system");
                 }
+                if (data.pending_review) {
+                    if (card) card.remove();
+                    appendDutyReviewCard(data.pending_review);
+                    await refreshDutySyncStatus();
+                }
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function editDutyReviewItem(reviewId, change, card) {
+            const duty = change.new_duty || change.old_duty || {};
+            const editedDate = window.prompt("Edit date (YYYY-MM-DD)", (duty.date || "").slice(0, 10));
+            if (editedDate === null) return;
+            const editedTitle = window.prompt("Edit event text", duty.title || duty.role || "");
+            if (editedTitle === null) return;
+            try {
+                const response = await fetch("/calendar/duty-sync/review/edit-item", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        review_id: reviewId,
+                        change_key: change.change_key,
+                        edited_date: editedDate,
+                        edited_title: editedTitle
+                    })
+                });
+                const data = await response.json();
+                appendAssistantMessage(data.reply || "Duty review item updated.", data.status === "updated" ? "system" : "error");
                 if (data.pending_review) {
                     if (card) card.remove();
                     appendDutyReviewCard(data.pending_review);
@@ -4055,6 +4121,7 @@
         });
 
         handleInitialDutySyncDeepLink();
+        registerDutyPushServiceWorker().catch(() => {});
         renderModeState();
         autoResizeInput();
         updateComposerState();
