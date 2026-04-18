@@ -16,6 +16,7 @@ from services.duty_sync_service import (
     disconnect_duty_sheet,
     edit_pending_review_change,
     get_duty_sync_status,
+    load_pending_duty_review,
     ignore_pending_duty_review,
     ignore_pending_duty_review_scope,
     poll_duty_sheet,
@@ -241,6 +242,22 @@ async def handle_duty_sync_review_edit_item(request: Request):
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/review/edit-item", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/review/load")
+async def handle_duty_sync_review_load(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            load_pending_duty_review(
+                session_id=data.get("session_id"),
+                review_id=data.get("review_id"),
+                updated_at=data.get("updated_at"),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/review/load", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
 
 
