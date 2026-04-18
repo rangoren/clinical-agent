@@ -2486,6 +2486,7 @@
         let lastOpenedDutySyncReviewKey = null;
         let pendingDutySyncInlineReview = null;
         let dutySyncReviewOpenPromise = null;
+        let dutySyncPushRenderLock = false;
 
         function dutySyncDebug(...args) {
             {% if app_env != "production" %}
@@ -2559,7 +2560,11 @@
         }
 
         function hasActiveDutySyncPushContext() {
-            return !!(pendingDutySyncReviewDeepLink || pendingDutySyncReviewId || pendingDutySyncReviewUpdatedAt);
+            return !!(dutySyncPushRenderLock || pendingDutySyncReviewDeepLink || pendingDutySyncReviewId || pendingDutySyncReviewUpdatedAt);
+        }
+
+        function setDutySyncPushRenderLock(active) {
+            dutySyncPushRenderLock = !!active;
         }
 
         async function loadDutySyncReviewForDeepLink() {
@@ -2731,7 +2736,7 @@
                 renderModeState();
             }
             if (review) {
-                appendDutyReviewCard(review);
+                appendDutyReviewCard(review, "generic_pending_review", "openDutySyncReviewContext");
             }
         }
 
@@ -2830,6 +2835,7 @@
             swTrace.forEach((line) => persistDutySyncPushDebug(line));
             if (reviewDeepLink === "1") {
                 persistDutySyncPushDebug("[Client] deep-link parsed");
+                setDutySyncPushRenderLock(true);
             }
             if (requestedMode === "scheduling") {
                 appMode = "scheduling";
@@ -2846,6 +2852,7 @@
             pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
             pendingDutySyncInlineReview = loadPendingDutySyncInlineReview();
             pendingDutySyncReviewDeepLink = true;
+            setDutySyncPushRenderLock(true);
             const resumeStartedAt = Date.now();
             persistDutySyncPushDebug(`[Timing] resume started ${resumeStartedAt}`);
             dutySyncDebug("duty review open handler fired", {
@@ -2927,13 +2934,14 @@
                 return false;
             }
             pendingDutySyncReviewDeepLink = false;
+            setDutySyncPushRenderLock(false);
             lastOpenedDutySyncReviewKey = openKey;
             clearPendingDutySyncInlineReview();
             dutySyncDebug("review open handler fired", {
                 reviewId: status && status.pending_review ? status.pending_review.review_id : review.review_id,
                 scopedReviewId: status && status.push_review_scope ? status.push_review_scope.review_id : null
             });
-            appendDutyReviewCard(review, "push_scoped");
+            appendDutyReviewCard(review, "push_scoped", "maybeOpenDutySyncReviewFromStatus");
             const params = new URLSearchParams(window.location.search);
             params.delete("duty_sync_review");
             params.delete("duty_sync_review_id");
@@ -2953,6 +2961,7 @@
                 return false;
             }
             pendingDutySyncReviewDeepLink = false;
+            setDutySyncPushRenderLock(false);
             lastOpenedDutySyncReviewKey = openKey;
             clearPendingDutySyncInlineReview();
             persistDutySyncPushDebug("[App] review open handler fired");
@@ -2961,7 +2970,7 @@
                 scopedReviewId: review.review_id,
                 source: renderSource
             });
-            appendDutyReviewCard(review, renderSource);
+            appendDutyReviewCard(review, renderSource, "maybeOpenDutySyncReviewFromPayload");
             if (resumeStartedAt) {
                 const renderedAt = Date.now();
                 persistDutySyncPushDebug(`[Timing] review rendered ${renderedAt}`);
@@ -3168,10 +3177,12 @@
             if (appMode !== "scheduling") return;
             closeSettingsMenu();
             if (activeDutyReview && dutySyncConnected && !dutySyncNeedsReconnect) {
-                appendDutyReviewCard(activeDutyReview);
+                setDutySyncPushRenderLock(false);
+                appendDutyReviewCard(activeDutyReview, "generic_pending_review", "handleDutySyncPrimaryAction");
                 return;
             }
             if (dutySyncConnected && !dutySyncNeedsReconnect) {
+                setDutySyncPushRenderLock(false);
                 await checkDutySync(false);
                 return;
             }
@@ -3201,7 +3212,7 @@
                     appendAssistantMessage("Duty Sync checked the latest test sheet.", "system");
                 }
                 if (data.pending_review) {
-                    appendDutyReviewCard(data.pending_review);
+                    appendDutyReviewCard(data.pending_review, "generic_pending_review", "connectDutySync");
                 }
                 await refreshDutySyncStatus();
             } catch (error) {
@@ -3231,11 +3242,11 @@
                 if (data.pending_review) {
                     activeDutyReview = data.pending_review;
                     if (!isBackground) {
-                        appendDutyReviewCard(data.pending_review);
+                        appendDutyReviewCard(data.pending_review, "generic_pending_review", "checkDutySync.interactive");
                     }
                     if (isBackground && data.has_new_pending_review) {
                         appendDutySyncInAppNotice(data.reply || "Duty Sync found updates that need review.");
-                        appendDutyReviewCard(data.pending_review, "poll");
+                        appendDutyReviewCard(data.pending_review, "poll", "checkDutySync.background");
                         maybeShowDutySyncBrowserNotification(data.pending_review, data.reply);
                     }
                 } else if (!isBackground && data.reply) {
@@ -3333,13 +3344,15 @@
             }
         }
 
-        function appendDutyReviewCard(review, renderSource = "generic_pending_review") {
+        function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown") {
             if (!review || !review.review_id) return;
+            persistDutySyncPushDebug(`[App] render attempt caller=${renderCaller} source=${renderSource} review_id=${review.review_id} item_count=${(review.changes || []).length}`);
             if (hasActiveDutySyncPushContext() && renderSource !== "push_scoped") {
-                persistDutySyncPushDebug(`[App] blocked review render source=${renderSource} review_id=${review.review_id}`);
+                persistDutySyncPushDebug(`[App] blocked review render caller=${renderCaller} source=${renderSource} review_id=${review.review_id}`);
                 dutySyncDebug("blocked review render during push context", {
                     reviewId: review.review_id,
-                    source: renderSource
+                    source: renderSource,
+                    caller: renderCaller
                 });
                 return;
             }
@@ -3349,7 +3362,8 @@
                 reviewId: review.review_id,
                 reviewType: review.review_type,
                 changeCount: (review.changes || []).length,
-                source: renderSource
+                source: renderSource,
+                caller: renderCaller
             });
             activeDutyReview = review;
             removeExistingDutyReviewCard(review.review_id);
@@ -3462,7 +3476,7 @@
                 }
                 if (data.pending_review) {
                     if (card) card.remove();
-                    appendDutyReviewCard(data.pending_review);
+                    appendDutyReviewCard(data.pending_review, "generic_pending_review", "toggleDutyReviewItem");
                     await refreshDutySyncStatus();
                 }
             } catch (error) {
@@ -3492,7 +3506,7 @@
                 appendAssistantMessage(data.reply || "Duty review item updated.", data.status === "updated" ? "system" : "error");
                 if (data.pending_review) {
                     if (card) card.remove();
-                    appendDutyReviewCard(data.pending_review);
+                    appendDutyReviewCard(data.pending_review, "generic_pending_review", "editDutyReviewItem");
                     await refreshDutySyncStatus();
                 }
             } catch (error) {
@@ -3529,7 +3543,7 @@
                         activeDutyReview = data.pending_review;
                         appendAssistantMessage("More Duty Sync updates are still pending review.", "system");
                     } else {
-                        appendDutyReviewCard(data.pending_review);
+                        appendDutyReviewCard(data.pending_review, "generic_pending_review", "approveDutyReview");
                     }
                 }
                 await refreshDutySyncStatus();
@@ -3557,7 +3571,7 @@
                 activeDutyReview = null;
                 appendAssistantMessage(data.reply || "Duty review ignored for now.", data.status === "not_found" ? "error" : "system");
                 if (data.pending_review) {
-                    appendDutyReviewCard(data.pending_review);
+                    appendDutyReviewCard(data.pending_review, "generic_pending_review", "ignoreDutyReview");
                 }
                 await refreshDutySyncStatus();
             } catch (error) {
@@ -4563,6 +4577,7 @@
                 const targetUrl = data.url || buildDutySyncDeepLinkPath();
                 dutySyncDebug("service worker message received", { targetUrl });
                 pendingDutySyncReviewDeepLink = true;
+                setDutySyncPushRenderLock(true);
                 if (data.review) {
                     try {
                         sessionStorage.setItem("duty-sync-inline-review", JSON.stringify(data.review));
