@@ -2810,8 +2810,7 @@
                 appMode = "scheduling";
                 renderModeState();
             }
-            const status = await refreshDutySyncStatus();
-            maybeOpenDutySyncReviewFromStatus(status);
+            await refreshDutySyncStatus();
         }
 
         function resolveDutyReviewScope(status) {
@@ -2828,17 +2827,23 @@
 
         function maybeOpenDutySyncReviewFromStatus(status) {
             if (!pendingDutySyncReviewDeepLink) return false;
-            let review = null;
+            if (!status || !status.pending_review) return false;
+            const resolvedReview = resolveDutyReviewScope(status);
+            if (!resolvedReview || !resolvedReview.review_id) return false;
+
+            let review = resolvedReview;
             if (
                 pendingDutySyncInlineReview &&
-                pendingDutySyncInlineReview.review_id &&
-                (!status || !status.pending_review || pendingDutySyncInlineReview.review_id === status.pending_review.review_id)
+                pendingDutySyncInlineReview.review_id === resolvedReview.review_id &&
+                (
+                    !pendingDutySyncReviewUpdatedAt ||
+                    pendingDutySyncInlineReview.updated_at === pendingDutySyncReviewUpdatedAt ||
+                    resolvedReview.updated_at === pendingDutySyncReviewUpdatedAt
+                )
             ) {
                 review = pendingDutySyncInlineReview;
             }
-            if (!review && status && status.pending_review) {
-                review = resolveDutyReviewScope(status);
-            }
+
             if (!review || !review.review_id) return false;
             const openKey = `${review.review_id}:${review.updated_at || ""}`;
             if (lastOpenedDutySyncReviewKey === openKey) {
@@ -3240,7 +3245,7 @@
             card.appendChild(title);
 
             const isScopedReview = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
-            const isSingleEventReview = isScopedReview && review.scope_change_keys.length === 1;
+            const isSingleEventReview = Array.isArray(review.changes) && review.changes.length === 1 && review.review_type !== "monthly_rollover";
             const singleChange = getSingleDutyReviewChange(review);
             if (!isSingleEventReview) {
                 const summary = document.createElement("div");
