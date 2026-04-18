@@ -2558,6 +2558,10 @@
             return review;
         }
 
+        function hasActiveDutySyncPushContext() {
+            return !!(pendingDutySyncReviewDeepLink || pendingDutySyncReviewId || pendingDutySyncReviewUpdatedAt);
+        }
+
         async function loadDutySyncReviewForDeepLink() {
             if (!pendingDutySyncReviewId) return null;
             const startedAt = Date.now();
@@ -2582,6 +2586,7 @@
                 status: data && data.status,
                 elapsedMs: Date.now() - startedAt
             });
+            persistDutySyncPushDebug(`[App] review fetch result status=${data && data.status ? data.status : "unknown"} source=${data && data.source ? data.source : "none"}`);
             if (data && data.review && data.status === "loaded") {
                 return { review: data.review, source: data.source || "push_scoped" };
             }
@@ -3230,7 +3235,7 @@
                     }
                     if (isBackground && data.has_new_pending_review) {
                         appendDutySyncInAppNotice(data.reply || "Duty Sync found updates that need review.");
-                        appendDutyReviewCard(data.pending_review);
+                        appendDutyReviewCard(data.pending_review, "poll");
                         maybeShowDutySyncBrowserNotification(data.pending_review, data.reply);
                     }
                 } else if (!isBackground && data.reply) {
@@ -3330,6 +3335,14 @@
 
         function appendDutyReviewCard(review, renderSource = "generic_pending_review") {
             if (!review || !review.review_id) return;
+            if (hasActiveDutySyncPushContext() && renderSource !== "push_scoped") {
+                persistDutySyncPushDebug(`[App] blocked review render source=${renderSource} review_id=${review.review_id}`);
+                dutySyncDebug("blocked review render during push context", {
+                    reviewId: review.review_id,
+                    source: renderSource
+                });
+                return;
+            }
             persistDutySyncPushDebug("[App] review rendered");
             persistDutySyncPushDebug(`[App] review rendered source=${renderSource} review_id=${review.review_id} item_count=${(review.changes || []).length}`);
             dutySyncDebug("review rendered", {
