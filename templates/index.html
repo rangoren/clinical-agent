@@ -2484,6 +2484,7 @@
         let pendingDutySyncReviewUpdatedAt = null;
         let dutySyncTraceId = null;
         let lastOpenedDutySyncReviewKey = null;
+        let pendingDutySyncInlineReview = null;
 
         function dutySyncDebug(...args) {
             {% if app_env != "production" %}
@@ -2702,6 +2703,52 @@
             appendAssistantMessage(replyText || "Duty Sync found personal schedule changes.", "system");
         }
 
+        function getSingleDutyReviewChange(review) {
+            if (!review || !Array.isArray(review.changes) || review.changes.length !== 1) return null;
+            return review.changes[0];
+        }
+
+        function getDutyReviewApplyText(review, isIgnore = false) {
+            const singleChange = getSingleDutyReviewChange(review);
+            if (!singleChange) return isIgnore ? "Updating review..." : "Applying changes...";
+            if (isIgnore) return "Updating review...";
+            if (singleChange.change_type === "removed") return "Removing from calendar...";
+            if (singleChange.change_type === "added") return "Adding to calendar...";
+            return "Updating calendar...";
+        }
+
+        function getSingleDutyReviewMessage(change) {
+            if (!change) return "";
+            if (change.change_type === "removed") return "This shift was removed from the duty roster.";
+            if (change.change_type === "added") return "This is a new shift from the duty roster.";
+            return "This shift changed in the duty roster.";
+        }
+
+        function getSingleDutyReviewApproveLabel(change) {
+            if (!change) return "Apply change";
+            if (change.change_type === "removed") return "Remove from calendar";
+            if (change.change_type === "added") return "Add to calendar";
+            return "Update in calendar";
+        }
+
+        function setDutyReviewLoading(card, loading, text) {
+            if (!card) return;
+            let statusNode = card.querySelector(".duty-review-status");
+            if (loading) {
+                if (!statusNode) {
+                    statusNode = document.createElement("p");
+                    statusNode.className = "calendar-subcopy duty-review-status";
+                    card.appendChild(statusNode);
+                }
+                statusNode.textContent = text || "Applying changes...";
+            } else if (statusNode) {
+                statusNode.remove();
+            }
+            card.querySelectorAll("button").forEach((button) => {
+                button.disabled = !!loading;
+            });
+        }
+
         function handleInitialDutySyncDeepLink() {
             const params = new URLSearchParams(window.location.search);
             const requestedMode = params.get("app_mode");
@@ -2760,6 +2807,13 @@
         }
 
         function maybeOpenDutySyncReviewFromStatus(status) {
+            if (pendingDutySyncInlineReview && pendingDutySyncInlineReview.review_id) {
+                const inlineReview = pendingDutySyncInlineReview;
+                pendingDutySyncInlineReview = null;
+                pendingDutySyncReviewDeepLink = false;
+                appendDutyReviewCard(inlineReview);
+                return true;
+            }
             if (!pendingDutySyncReviewDeepLink || !status || !status.pending_review) return false;
             const review = resolveDutyReviewScope(status);
             if (!review || !review.review_id) return false;
@@ -2973,6 +3027,7 @@
 
         async function handleDutySyncPrimaryAction() {
             if (appMode !== "scheduling") return;
+            closeSettingsMenu();
             if (activeDutyReview && dutySyncConnected && !dutySyncNeedsReconnect) {
                 appendDutyReviewCard(activeDutyReview);
                 return;
@@ -3162,6 +3217,7 @@
 
             const isScopedReview = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
             const isSingleEventReview = isScopedReview && review.scope_change_keys.length === 1;
+            const singleChange = getSingleDutyReviewChange(review);
             if (!isSingleEventReview) {
                 const summary = document.createElement("div");
                 summary.className = "duty-review-summary";
@@ -3176,6 +3232,14 @@
                     summary.appendChild(chip);
                 });
                 card.appendChild(summary);
+            } else {
+                const singleMessage = getSingleDutyReviewMessage(singleChange);
+                if (singleMessage) {
+                    const note = document.createElement("p");
+                    note.className = "calendar-subcopy";
+                    note.textContent = singleMessage;
+                    card.appendChild(note);
+                }
             }
 
             const list = document.createElement("div");
@@ -3216,7 +3280,7 @@
 
             const approveButton = document.createElement("button");
             approveButton.className = "secondary-button";
-            approveButton.textContent = isSingleEventReview ? "Approve event" : isScopedReview ? "Approve changes" : "Approve all";
+            approveButton.textContent = isSingleEventReview ? getSingleDutyReviewApproveLabel(singleChange) : isScopedReview ? "Approve changes" : "Approve all";
             approveButton.addEventListener("click", () => approveDutyReview(review, card));
 
             const ignoreButton = document.createElement("button");
@@ -3291,6 +3355,7 @@
             try {
                 const scoped = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
                 const singleScoped = scoped && review.scope_change_keys.length === 1;
+                setDutyReviewLoading(card, true, getDutyReviewApplyText(review, false));
                 const response = await fetch(scoped ? "/calendar/duty-sync/review/approve-scope" : "/calendar/duty-sync/review/approve", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -3320,6 +3385,7 @@
                 }
                 await refreshDutySyncStatus();
             } catch (error) {
+                setDutyReviewLoading(card, false);
                 appendAssistantMessage("Error: " + error, "error");
             }
         }
@@ -3327,6 +3393,7 @@
         async function ignoreDutyReview(review, card) {
             try {
                 const scoped = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
+                setDutyReviewLoading(card, true, getDutyReviewApplyText(review, true));
                 const response = await fetch(scoped ? "/calendar/duty-sync/review/ignore-scope" : "/calendar/duty-sync/review/ignore", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -3345,6 +3412,7 @@
                 }
                 await refreshDutySyncStatus();
             } catch (error) {
+                setDutyReviewLoading(card, false);
                 appendAssistantMessage("Error: " + error, "error");
             }
         }
@@ -4346,6 +4414,14 @@
                 const targetUrl = data.url || buildDutySyncDeepLinkPath();
                 dutySyncDebug("service worker message received", { targetUrl });
                 pendingDutySyncReviewDeepLink = true;
+                pendingDutySyncInlineReview = data.review || null;
+                if (pendingDutySyncInlineReview) {
+                    if (appMode !== "scheduling") {
+                        appMode = "scheduling";
+                        renderModeState();
+                    }
+                    appendDutyReviewCard(pendingDutySyncInlineReview);
+                }
                 window.location.href = targetUrl;
             });
         }

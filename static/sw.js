@@ -29,6 +29,7 @@ self.addEventListener("push", (event) => {
     tag: payload.tag || "duty-sync-review",
     data: {
       url: payload.url || "/?app_mode=scheduling&duty_sync_review=1",
+      review: payload.review || null,
     },
   };
   event.waitUntil(self.registration.showNotification(title, options));
@@ -37,6 +38,7 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const baseTargetUrl = (event.notification.data && event.notification.data.url) || "/?app_mode=scheduling&duty_sync_review=1";
+  const review = (event.notification.data && event.notification.data.review) || null;
   const traceId = `push-${Date.now()}`;
   self.__dutySyncDebug("notificationclick fired", { targetUrl: baseTargetUrl, traceId });
   event.waitUntil(
@@ -54,7 +56,7 @@ self.addEventListener("notificationclick", (event) => {
           return client.navigate(targetUrl).then((navigatedClient) => {
             const activeClient = navigatedClient || client;
             if (activeClient && "postMessage" in activeClient) {
-              activeClient.postMessage({ type: "duty-sync-open-review", url: targetUrl });
+              activeClient.postMessage({ type: "duty-sync-open-review", url: targetUrl, review });
             }
             if (activeClient && "focus" in activeClient) {
               return activeClient.focus();
@@ -63,7 +65,7 @@ self.addEventListener("notificationclick", (event) => {
           });
         }
         if ("postMessage" in client) {
-          client.postMessage({ type: "duty-sync-open-review", url: targetUrl });
+          client.postMessage({ type: "duty-sync-open-review", url: targetUrl, review });
         }
         if ("focus" in client) {
           self.__dutySyncDebug("navigation attempted", { via: "focus-only", targetUrl });

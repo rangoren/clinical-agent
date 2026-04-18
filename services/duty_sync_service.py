@@ -609,6 +609,26 @@ def _change_keys_set(change_keys):
     return {key for key in (change_keys or []) if key}
 
 
+def _format_shift_phrase(count):
+    return f"{count} shift was" if count == 1 else f"{count} shifts were"
+
+
+def _build_calendar_apply_reply(applied):
+    applied = applied or {}
+    parts = []
+    if applied.get("added"):
+        parts.append(f"{_format_shift_phrase(applied['added'])} added to your calendar")
+    if applied.get("changed"):
+        parts.append(f"{_format_shift_phrase(applied['changed'])} updated in your calendar")
+    if applied.get("removed"):
+        parts.append(f"{_format_shift_phrase(applied['removed'])} removed from your calendar")
+    if not parts:
+        return "Your calendar is already up to date."
+    if len(parts) == 1:
+        return parts[0][0].upper() + parts[0][1:]
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
 def _upsert_connection_state(session_id, payload):
     now = _utcnow()
     duty_sync_connections_collection.update_one(
@@ -873,14 +893,10 @@ def approve_pending_duty_review(session_id, review_id):
     if calendar_sync_result.get("status") != "synced":
         return calendar_sync_result
     duties_json = _apply_review_to_snapshot(session_id, review_doc)
-    included_count = sum(1 for item in (review_doc.get("detected_changes_json") or []) if item.get("included", True))
     applied = calendar_sync_result.get("applied") or {}
     return {
         "status": "approved",
-        "reply": (
-            f"Duty review approved. Applied {included_count} updates to Google Calendar "
-            f"({applied.get('added', 0)} added, {applied.get('changed', 0)} updated, {applied.get('removed', 0)} removed)."
-        ),
+        "reply": _build_calendar_apply_reply(applied),
         "approved_duty_count": len(duties_json),
     }
 
@@ -926,7 +942,7 @@ def approve_pending_duty_review_scope(session_id, review_id, change_keys):
         )
     return {
         "status": "approved",
-        "reply": "Duty review updates were applied.",
+        "reply": _build_calendar_apply_reply(calendar_sync_result.get("applied") or {}),
         "approved_duty_count": len(duties_json),
         "pending_review": _serialize_review_doc(duty_sync_pending_reviews_collection.find_one({"_id": review_doc["_id"]})) if remaining_changes else None,
     }
