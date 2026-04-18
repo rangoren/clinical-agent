@@ -872,7 +872,6 @@ def load_pending_duty_review(session_id, review_id, updated_at=None):
     if not pending_review or pending_review.get("review_id") != review_id:
         return {"status": "not_found", "reply": "No pending duty review was found."}
 
-    pending_payload = _serialize_review_doc(pending_review)
     connection = _connection_doc(session_id) or {}
     scoped_review = connection.get("last_push_review_scope")
     if (
@@ -880,12 +879,9 @@ def load_pending_duty_review(session_id, review_id, updated_at=None):
         and scoped_review.get("review_id") == review_id
         and (not updated_at or scoped_review.get("updated_at") == updated_at)
     ):
-        return {"status": "loaded", "review": scoped_review}
+        return {"status": "loaded", "review": scoped_review, "source": "push_scoped"}
 
-    if updated_at and pending_payload.get("updated_at") != updated_at:
-        return {"status": "stale", "reply": "Pending duty review changed before it could be opened.", "review": pending_payload}
-
-    return {"status": "loaded", "review": pending_payload}
+    return {"status": "stale", "reply": "Pending duty review changed before it could be opened."}
 
 
 def connect_duty_sheet(session_id, sheet_url=None, full_name=None):

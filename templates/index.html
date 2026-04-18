@@ -2583,7 +2583,7 @@
                 elapsedMs: Date.now() - startedAt
             });
             if (data && data.review && data.status === "loaded") {
-                return data.review;
+                return { review: data.review, source: data.source || "push_scoped" };
             }
             return null;
         }
@@ -2853,15 +2853,15 @@
                 appMode = "scheduling";
                 renderModeState();
             }
-            const review = await loadDutySyncReviewForDeepLink();
-            if (review) {
-                maybeOpenDutySyncReviewFromPayload(review, resumeStartedAt);
+            const loadedReview = await loadDutySyncReviewForDeepLink();
+            if (loadedReview && loadedReview.review) {
+                maybeOpenDutySyncReviewFromPayload(loadedReview.review, resumeStartedAt, loadedReview.source || "push_scoped");
                 refreshDutySyncStatus().catch(() => {});
                 return;
             }
             const inlineReview = getPendingDutySyncInlineReviewForDeepLink();
             if (inlineReview) {
-                maybeOpenDutySyncReviewFromPayload(inlineReview, resumeStartedAt);
+                maybeOpenDutySyncReviewFromPayload(inlineReview, resumeStartedAt, "push_scoped");
                 refreshDutySyncStatus().catch(() => {});
                 return;
             }
@@ -2878,6 +2878,14 @@
             const pendingReview = status && status.pending_review ? status.pending_review : null;
             const scopedReview = status && status.push_review_scope ? status.push_review_scope : null;
             if (!pendingReview) return null;
+            if (pendingDutySyncReviewId || pendingDutySyncReviewUpdatedAt) {
+                if (!scopedReview) return null;
+                if (scopedReview.review_id !== pendingReview.review_id) return null;
+                if ((scopedReview.review_type || "incremental") !== (pendingReview.review_type || "incremental")) return null;
+                if (pendingDutySyncReviewId && scopedReview.review_id !== pendingDutySyncReviewId) return null;
+                if (pendingDutySyncReviewUpdatedAt && scopedReview.updated_at !== pendingDutySyncReviewUpdatedAt) return null;
+                return scopedReview;
+            }
             if (!scopedReview) return pendingReview;
             if (scopedReview.review_id !== pendingReview.review_id) return pendingReview;
             if ((scopedReview.review_type || "incremental") !== (pendingReview.review_type || "incremental")) return pendingReview;
@@ -2890,7 +2898,10 @@
             if (!pendingDutySyncReviewDeepLink) return false;
             if (!status || !status.pending_review) return false;
             const resolvedReview = resolveDutyReviewScope(status);
-            if (!resolvedReview || !resolvedReview.review_id) return false;
+            if (!resolvedReview || !resolvedReview.review_id) {
+                persistDutySyncPushDebug("[App] review not opened: no scoped review match");
+                return false;
+            }
 
             let review = resolvedReview;
             if (
@@ -2917,7 +2928,7 @@
                 reviewId: status && status.pending_review ? status.pending_review.review_id : review.review_id,
                 scopedReviewId: status && status.push_review_scope ? status.push_review_scope.review_id : null
             });
-            appendDutyReviewCard(review);
+            appendDutyReviewCard(review, "push_scoped");
             const params = new URLSearchParams(window.location.search);
             params.delete("duty_sync_review");
             params.delete("duty_sync_review_id");
@@ -2930,7 +2941,7 @@
             return true;
         }
 
-        function maybeOpenDutySyncReviewFromPayload(review, resumeStartedAt = null) {
+        function maybeOpenDutySyncReviewFromPayload(review, resumeStartedAt = null, renderSource = "push_scoped") {
             if (!pendingDutySyncReviewDeepLink || !review || !review.review_id) return false;
             const openKey = `${review.review_id}:${review.updated_at || ""}`;
             if (lastOpenedDutySyncReviewKey === openKey) {
@@ -2943,9 +2954,9 @@
             dutySyncDebug("review open handler fired", {
                 reviewId: review.review_id,
                 scopedReviewId: review.review_id,
-                source: "push-payload"
+                source: renderSource
             });
-            appendDutyReviewCard(review);
+            appendDutyReviewCard(review, renderSource);
             if (resumeStartedAt) {
                 const renderedAt = Date.now();
                 persistDutySyncPushDebug(`[Timing] review rendered ${renderedAt}`);
@@ -3317,13 +3328,15 @@
             }
         }
 
-        function appendDutyReviewCard(review) {
+        function appendDutyReviewCard(review, renderSource = "generic_pending_review") {
             if (!review || !review.review_id) return;
             persistDutySyncPushDebug("[App] review rendered");
+            persistDutySyncPushDebug(`[App] review rendered source=${renderSource} review_id=${review.review_id} item_count=${(review.changes || []).length}`);
             dutySyncDebug("review rendered", {
                 reviewId: review.review_id,
                 reviewType: review.review_type,
-                changeCount: (review.changes || []).length
+                changeCount: (review.changes || []).length,
+                source: renderSource
             });
             activeDutyReview = review;
             removeExistingDutyReviewCard(review.review_id);
