@@ -2548,6 +2548,15 @@
             }
         }
 
+        function getPendingDutySyncInlineReviewForDeepLink() {
+            const review = pendingDutySyncInlineReview || loadPendingDutySyncInlineReview();
+            if (!review || !review.review_id) return null;
+            if (pendingDutySyncReviewId && review.review_id !== pendingDutySyncReviewId) return null;
+            if (pendingDutySyncReviewUpdatedAt && review.updated_at !== pendingDutySyncReviewUpdatedAt) return null;
+            pendingDutySyncInlineReview = review;
+            return review;
+        }
+
         function updateCalendarUi(status) {
             const label = document.getElementById("calendar-label");
             const action = document.getElementById("calendar-action");
@@ -2799,7 +2808,6 @@
             pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
             pendingDutySyncInlineReview = loadPendingDutySyncInlineReview();
             pendingDutySyncReviewDeepLink = true;
-            persistDutySyncPushDebug("[App] review open handler fired");
             dutySyncDebug("duty review open handler fired", {
                 reviewId: pendingDutySyncReviewId,
                 reviewUpdatedAt: pendingDutySyncReviewUpdatedAt,
@@ -2809,6 +2817,12 @@
             if (appMode !== "scheduling") {
                 appMode = "scheduling";
                 renderModeState();
+            }
+            const inlineReview = getPendingDutySyncInlineReviewForDeepLink();
+            if (inlineReview) {
+                maybeOpenDutySyncReviewFromPayload(inlineReview);
+                refreshDutySyncStatus().catch(() => {});
+                return;
             }
             await refreshDutySyncStatus();
         }
@@ -2855,6 +2869,34 @@
             dutySyncDebug("review open handler fired", {
                 reviewId: status && status.pending_review ? status.pending_review.review_id : review.review_id,
                 scopedReviewId: status && status.push_review_scope ? status.push_review_scope.review_id : null
+            });
+            appendDutyReviewCard(review);
+            const params = new URLSearchParams(window.location.search);
+            params.delete("duty_sync_review");
+            params.delete("duty_sync_review_id");
+            params.delete("duty_sync_review_updated_at");
+            params.delete("duty_sync_trace_id");
+            params.delete("duty_sync_trace_sw");
+            const nextQuery = params.toString();
+            const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
+            window.history.replaceState({}, document.title, nextUrl);
+            return true;
+        }
+
+        function maybeOpenDutySyncReviewFromPayload(review) {
+            if (!pendingDutySyncReviewDeepLink || !review || !review.review_id) return false;
+            const openKey = `${review.review_id}:${review.updated_at || ""}`;
+            if (lastOpenedDutySyncReviewKey === openKey) {
+                return false;
+            }
+            pendingDutySyncReviewDeepLink = false;
+            lastOpenedDutySyncReviewKey = openKey;
+            clearPendingDutySyncInlineReview();
+            persistDutySyncPushDebug("[App] review open handler fired");
+            dutySyncDebug("review open handler fired", {
+                reviewId: review.review_id,
+                scopedReviewId: review.review_id,
+                source: "push-payload"
             });
             appendDutyReviewCard(review);
             const params = new URLSearchParams(window.location.search);
