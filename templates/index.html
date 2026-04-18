@@ -2530,6 +2530,24 @@
             {% endif %}
         }
 
+        function loadPendingDutySyncInlineReview() {
+            try {
+                const raw = sessionStorage.getItem("duty-sync-inline-review");
+                return raw ? JSON.parse(raw) : null;
+            } catch (_error) {
+                return null;
+            }
+        }
+
+        function clearPendingDutySyncInlineReview() {
+            pendingDutySyncInlineReview = null;
+            try {
+                sessionStorage.removeItem("duty-sync-inline-review");
+            } catch (_error) {
+                return;
+            }
+        }
+
         function updateCalendarUi(status) {
             const label = document.getElementById("calendar-label");
             const action = document.getElementById("calendar-action");
@@ -2756,6 +2774,7 @@
             pendingDutySyncReviewId = params.get("duty_sync_review_id");
             pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
             dutySyncTraceId = params.get("duty_sync_trace_id");
+            pendingDutySyncInlineReview = loadPendingDutySyncInlineReview();
             const swTrace = (params.get("duty_sync_trace_sw") || "").split("|").filter(Boolean);
             dutySyncDebug("initial deep-link parsed", {
                 requestedMode,
@@ -2778,6 +2797,7 @@
             if (params.get("duty_sync_review") !== "1") return;
             pendingDutySyncReviewId = params.get("duty_sync_review_id");
             pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
+            pendingDutySyncInlineReview = loadPendingDutySyncInlineReview();
             pendingDutySyncReviewDeepLink = true;
             persistDutySyncPushDebug("[App] review open handler fired");
             dutySyncDebug("duty review open handler fired", {
@@ -2807,15 +2827,18 @@
         }
 
         function maybeOpenDutySyncReviewFromStatus(status) {
-            if (pendingDutySyncInlineReview && pendingDutySyncInlineReview.review_id) {
-                const inlineReview = pendingDutySyncInlineReview;
-                pendingDutySyncInlineReview = null;
-                pendingDutySyncReviewDeepLink = false;
-                appendDutyReviewCard(inlineReview);
-                return true;
+            if (!pendingDutySyncReviewDeepLink) return false;
+            let review = null;
+            if (
+                pendingDutySyncInlineReview &&
+                pendingDutySyncInlineReview.review_id &&
+                (!status || !status.pending_review || pendingDutySyncInlineReview.review_id === status.pending_review.review_id)
+            ) {
+                review = pendingDutySyncInlineReview;
             }
-            if (!pendingDutySyncReviewDeepLink || !status || !status.pending_review) return false;
-            const review = resolveDutyReviewScope(status);
+            if (!review && status && status.pending_review) {
+                review = resolveDutyReviewScope(status);
+            }
             if (!review || !review.review_id) return false;
             const openKey = `${review.review_id}:${review.updated_at || ""}`;
             if (lastOpenedDutySyncReviewKey === openKey) {
@@ -2823,9 +2846,10 @@
             }
             pendingDutySyncReviewDeepLink = false;
             lastOpenedDutySyncReviewKey = openKey;
+            clearPendingDutySyncInlineReview();
             dutySyncDebug("review open handler fired", {
-                reviewId: status.pending_review.review_id,
-                scopedReviewId: status.push_review_scope ? status.push_review_scope.review_id : null
+                reviewId: status && status.pending_review ? status.pending_review.review_id : review.review_id,
+                scopedReviewId: status && status.push_review_scope ? status.push_review_scope.review_id : null
             });
             appendDutyReviewCard(review);
             const params = new URLSearchParams(window.location.search);
@@ -4414,13 +4438,12 @@
                 const targetUrl = data.url || buildDutySyncDeepLinkPath();
                 dutySyncDebug("service worker message received", { targetUrl });
                 pendingDutySyncReviewDeepLink = true;
-                pendingDutySyncInlineReview = data.review || null;
-                if (pendingDutySyncInlineReview) {
-                    if (appMode !== "scheduling") {
-                        appMode = "scheduling";
-                        renderModeState();
+                if (data.review) {
+                    try {
+                        sessionStorage.setItem("duty-sync-inline-review", JSON.stringify(data.review));
+                    } catch (_error) {
+                        // Keep the push flow resilient even if storage is unavailable.
                     }
-                    appendDutyReviewCard(pendingDutySyncInlineReview);
                 }
                 window.location.href = targetUrl;
             });
