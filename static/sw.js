@@ -1,3 +1,18 @@
+self.__dutySyncDebug = (...args) => {
+  console.log("[DutySyncDebug][SW]", ...args);
+};
+
+function withDutySyncTrace(targetUrl, traceId, traceSteps) {
+  try {
+    const url = new URL(targetUrl, self.location.origin);
+    url.searchParams.set("duty_sync_trace_id", traceId);
+    url.searchParams.set("duty_sync_trace_sw", traceSteps.join("|"));
+    return url.toString();
+  } catch (_error) {
+    return targetUrl;
+  }
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
 });
@@ -21,11 +36,17 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = (event.notification.data && event.notification.data.url) || "/?app_mode=scheduling&duty_sync_review=1";
-  self.__dutySyncDebug("notificationclick fired", { targetUrl });
+  const baseTargetUrl = (event.notification.data && event.notification.data.url) || "/?app_mode=scheduling&duty_sync_review=1";
+  const traceId = `push-${Date.now()}`;
+  self.__dutySyncDebug("notificationclick fired", { targetUrl: baseTargetUrl, traceId });
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       if (clients && clients.length) {
+        const targetUrl = withDutySyncTrace(baseTargetUrl, traceId, [
+          "[SW] notificationclick fired",
+          "[SW] client found",
+          "[SW] navigate/openWindow attempted",
+        ]);
         const client = clients[0];
         self.__dutySyncDebug("client found", { clientCount: clients.length, targetUrl });
         if ("navigate" in client) {
@@ -50,6 +71,11 @@ self.addEventListener("notificationclick", (event) => {
         }
         return client;
       }
+      const targetUrl = withDutySyncTrace(baseTargetUrl, traceId, [
+        "[SW] notificationclick fired",
+        "[SW] no client found",
+        "[SW] navigate/openWindow attempted",
+      ]);
       self.__dutySyncDebug("no client found", { targetUrl });
       if (self.clients.openWindow) {
         self.__dutySyncDebug("navigation attempted", { via: "openWindow", targetUrl });
@@ -59,6 +85,3 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
-self.__dutySyncDebug = (...args) => {
-  console.log("[DutySyncDebug][SW]", ...args);
-};

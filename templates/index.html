@@ -1830,6 +1830,14 @@
                                 <button id="duty-sync-secondary-action" class="calendar-action secondary" onclick="disconnectDutySync()" hidden>Disconnect Sheet</button>
                                 <button id="duty-sync-push-action" class="calendar-action secondary" onclick="enableDutySyncNotifications()" hidden>Enable notifications</button>
                                 <button id="duty-sync-push-test-action" class="calendar-action secondary" onclick="sendDutySyncTestPush()" hidden>Send test push</button>
+                                {% if app_env != "production" %}
+                                <div class="settings-section">
+                                    <span class="settings-label">Push debug</span>
+                                    <div class="calendar-copy">
+                                        <span id="duty-sync-push-debug" class="calendar-subcopy">No push trace yet.</span>
+                                    </div>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -2474,10 +2482,49 @@
         let activeDutyReview = null;
         let pendingDutySyncReviewId = null;
         let pendingDutySyncReviewUpdatedAt = null;
+        let dutySyncTraceId = null;
 
         function dutySyncDebug(...args) {
             {% if app_env != "production" %}
             console.log("[DutySyncDebug][Client]", ...args);
+            {% endif %}
+        }
+
+        function renderDutySyncPushDebug() {
+            {% if app_env != "production" %}
+            const node = document.getElementById("duty-sync-push-debug");
+            if (!node) return;
+            try {
+                const raw = localStorage.getItem("duty-sync-push-debug");
+                if (!raw) {
+                    node.textContent = "No push trace yet.";
+                    return;
+                }
+                const parsed = JSON.parse(raw);
+                node.textContent = Array.isArray(parsed.lines) && parsed.lines.length ? parsed.lines.join(" | ") : "No push trace yet.";
+            } catch (_error) {
+                node.textContent = "No push trace yet.";
+            }
+            {% endif %}
+        }
+
+        function persistDutySyncPushDebug(line) {
+            {% if app_env != "production" %}
+            try {
+                const raw = localStorage.getItem("duty-sync-push-debug");
+                const parsed = raw ? JSON.parse(raw) : { traceId: dutySyncTraceId, lines: [] };
+                if (dutySyncTraceId && parsed.traceId !== dutySyncTraceId) {
+                    parsed.traceId = dutySyncTraceId;
+                    parsed.lines = [];
+                }
+                if (!parsed.lines.includes(line)) {
+                    parsed.lines.push(line);
+                }
+                localStorage.setItem("duty-sync-push-debug", JSON.stringify(parsed));
+                renderDutySyncPushDebug();
+            } catch (_error) {
+                return;
+            }
             {% endif %}
         }
 
@@ -2660,12 +2707,18 @@
             const reviewDeepLink = params.get("duty_sync_review");
             pendingDutySyncReviewId = params.get("duty_sync_review_id");
             pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
+            dutySyncTraceId = params.get("duty_sync_trace_id");
+            const swTrace = (params.get("duty_sync_trace_sw") || "").split("|").filter(Boolean);
             dutySyncDebug("initial deep-link parsed", {
                 requestedMode,
                 reviewDeepLink,
                 reviewId: pendingDutySyncReviewId,
                 reviewUpdatedAt: pendingDutySyncReviewUpdatedAt
             });
+            swTrace.forEach((line) => persistDutySyncPushDebug(line));
+            if (reviewDeepLink === "1") {
+                persistDutySyncPushDebug("[Client] deep-link parsed");
+            }
             if (requestedMode === "scheduling") {
                 appMode = "scheduling";
             }
@@ -2678,6 +2731,7 @@
             pendingDutySyncReviewId = params.get("duty_sync_review_id");
             pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
             pendingDutySyncReviewDeepLink = true;
+            persistDutySyncPushDebug("[App] review open handler fired");
             dutySyncDebug("duty review open handler fired", {
                 reviewId: pendingDutySyncReviewId,
                 reviewUpdatedAt: pendingDutySyncReviewUpdatedAt,
@@ -2773,6 +2827,8 @@
                 params.delete("duty_sync_review");
                 params.delete("duty_sync_review_id");
                 params.delete("duty_sync_review_updated_at");
+                params.delete("duty_sync_trace_id");
+                params.delete("duty_sync_trace_sw");
                 const nextQuery = params.toString();
                 const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
                 window.history.replaceState({}, document.title, nextUrl);
@@ -2833,6 +2889,11 @@
                     reviewId: data && data.pending_review ? data.pending_review.review_id : null,
                     scopedReviewId: data && data.push_review_scope ? data.push_review_scope.review_id : null
                 });
+                if (data && data.pending_review) {
+                    persistDutySyncPushDebug("[App] pending review loaded");
+                } else if (pendingDutySyncReviewDeepLink) {
+                    persistDutySyncPushDebug("[App] review not opened: pending review missing");
+                }
                 updateDutySyncUi(data);
             } catch (_error) {
                 updateDutySyncUi({ available: false, connected: false });
@@ -3065,6 +3126,7 @@
 
         function appendDutyReviewCard(review) {
             if (!review || !review.review_id) return;
+            persistDutySyncPushDebug("[App] review rendered");
             dutySyncDebug("review rendered", {
                 reviewId: review.review_id,
                 reviewType: review.review_type,
@@ -4274,11 +4336,13 @@
         }
         window.addEventListener("pageshow", () => {
             dutySyncDebug("pageshow fired", { href: window.location.href });
+            persistDutySyncPushDebug("[Client] app resumed");
             resumeDutySyncReviewFromDeepLink().catch(() => {});
         });
         document.addEventListener("visibilitychange", () => {
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
             if (document.visibilityState === "visible") {
+                persistDutySyncPushDebug("[Client] app resumed");
                 resumeDutySyncReviewFromDeepLink().catch(() => {});
             }
         });
