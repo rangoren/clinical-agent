@@ -2485,6 +2485,7 @@
         let dutySyncTraceId = null;
         let lastOpenedDutySyncReviewKey = null;
         let pendingDutySyncInlineReview = null;
+        let dutySyncReviewOpenPromise = null;
 
         function dutySyncDebug(...args) {
             {% if app_env != "production" %}
@@ -2832,6 +2833,8 @@
         }
 
         async function resumeDutySyncReviewFromDeepLink() {
+            if (dutySyncReviewOpenPromise) return dutySyncReviewOpenPromise;
+            dutySyncReviewOpenPromise = (async () => {
             const params = new URLSearchParams(window.location.search);
             if (params.get("duty_sync_review") !== "1") return;
             pendingDutySyncReviewId = params.get("duty_sync_review_id");
@@ -2863,6 +2866,12 @@
                 return;
             }
             await refreshDutySyncStatus();
+            })();
+            try {
+                return await dutySyncReviewOpenPromise;
+            } finally {
+                dutySyncReviewOpenPromise = null;
+            }
         }
 
         function resolveDutyReviewScope(status) {
@@ -4535,6 +4544,16 @@
                         // Keep the push flow resilient even if storage is unavailable.
                     }
                 }
+                try {
+                    const parsedUrl = new URL(targetUrl, window.location.origin);
+                    if (parsedUrl.origin === window.location.origin) {
+                        window.history.replaceState({}, document.title, `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
+                        await resumeDutySyncReviewFromDeepLink();
+                        return;
+                    }
+                } catch (_error) {
+                    // Fall back to regular navigation below.
+                }
                 window.location.href = targetUrl;
             });
         }
@@ -4550,6 +4569,9 @@
                 resumeDutySyncReviewFromDeepLink().catch(() => {});
             }
         });
+        if (pendingDutySyncReviewDeepLink) {
+            resumeDutySyncReviewFromDeepLink().catch(() => {});
+        }
         renderModeState();
         autoResizeInput();
         updateComposerState();
