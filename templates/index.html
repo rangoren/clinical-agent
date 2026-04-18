@@ -2483,6 +2483,7 @@
         let pendingDutySyncReviewId = null;
         let pendingDutySyncReviewUpdatedAt = null;
         let dutySyncTraceId = null;
+        let lastOpenedDutySyncReviewKey = null;
 
         function dutySyncDebug(...args) {
             {% if app_env != "production" %}
@@ -2742,7 +2743,8 @@
                 appMode = "scheduling";
                 renderModeState();
             }
-            await refreshDutySyncStatus();
+            const status = await refreshDutySyncStatus();
+            maybeOpenDutySyncReviewFromStatus(status);
         }
 
         function resolveDutyReviewScope(status) {
@@ -2755,6 +2757,33 @@
             if (pendingDutySyncReviewId && scopedReview.review_id !== pendingDutySyncReviewId) return pendingReview;
             if (pendingDutySyncReviewUpdatedAt && scopedReview.updated_at !== pendingDutySyncReviewUpdatedAt) return pendingReview;
             return scopedReview;
+        }
+
+        function maybeOpenDutySyncReviewFromStatus(status) {
+            if (!pendingDutySyncReviewDeepLink || !status || !status.pending_review) return false;
+            const review = resolveDutyReviewScope(status);
+            if (!review || !review.review_id) return false;
+            const openKey = `${review.review_id}:${review.updated_at || ""}`;
+            if (lastOpenedDutySyncReviewKey === openKey) {
+                return false;
+            }
+            pendingDutySyncReviewDeepLink = false;
+            lastOpenedDutySyncReviewKey = openKey;
+            dutySyncDebug("review open handler fired", {
+                reviewId: status.pending_review.review_id,
+                scopedReviewId: status.push_review_scope ? status.push_review_scope.review_id : null
+            });
+            appendDutyReviewCard(review);
+            const params = new URLSearchParams(window.location.search);
+            params.delete("duty_sync_review");
+            params.delete("duty_sync_review_id");
+            params.delete("duty_sync_review_updated_at");
+            params.delete("duty_sync_trace_id");
+            params.delete("duty_sync_trace_sw");
+            const nextQuery = params.toString();
+            const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
+            window.history.replaceState({}, document.title, nextUrl);
+            return true;
         }
 
         function updateDutySyncUi(status) {
@@ -2816,23 +2845,7 @@
             pushTestAction.hidden = false;
             scheduleDutySyncPolling();
 
-            if (pendingDutySyncReviewDeepLink && status.pending_review) {
-                pendingDutySyncReviewDeepLink = false;
-                dutySyncDebug("review open handler fired", {
-                    reviewId: status.pending_review.review_id,
-                    scopedReviewId: status.push_review_scope ? status.push_review_scope.review_id : null
-                });
-                appendDutyReviewCard(resolveDutyReviewScope(status));
-                const params = new URLSearchParams(window.location.search);
-                params.delete("duty_sync_review");
-                params.delete("duty_sync_review_id");
-                params.delete("duty_sync_review_updated_at");
-                params.delete("duty_sync_trace_id");
-                params.delete("duty_sync_trace_sw");
-                const nextQuery = params.toString();
-                const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
-                window.history.replaceState({}, document.title, nextUrl);
-            }
+            maybeOpenDutySyncReviewFromStatus(status);
             maybeShowDutyPushPrompt(status);
         }
 
@@ -2895,8 +2908,10 @@
                     persistDutySyncPushDebug("[App] review not opened: pending review missing");
                 }
                 updateDutySyncUi(data);
+                return data;
             } catch (_error) {
                 updateDutySyncUi({ available: false, connected: false });
+                return { available: false, connected: false };
             }
         }
 
