@@ -2736,7 +2736,9 @@
             if (!rawValue) return "";
             const parsed = new Date(rawValue);
             if (Number.isNaN(parsed.getTime())) return "";
-            return parsed.toLocaleString(undefined, { timeZone: "Asia/Jerusalem" });
+            const formatted = parsed.toLocaleString(undefined, { timeZone: "Asia/Jerusalem" });
+            dutySyncDebug(`[App] last_checked raw=${rawValue} formatted=${formatted} timezone=Asia/Jerusalem`);
+            return formatted;
         }
 
         function scheduleDutySyncPolling() {
@@ -3077,6 +3079,9 @@
                 requestedMode === "scheduling" &&
                 (reviewDeepLink === "1" || !!calendarStatus);
             appMode = shouldOpenSchedulingOnLoad ? "scheduling" : "clinical";
+            dutySyncDebug(
+                `[App] startup mode=${appMode} requested_mode=${requestedMode || "none"} scheduling_forced=${shouldOpenSchedulingOnLoad} clinical_default=${!shouldOpenSchedulingOnLoad}`
+            );
             pendingDutySyncReviewDeepLink = reviewDeepLink === "1";
         }
 
