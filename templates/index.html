@@ -2561,6 +2561,24 @@
             }
         }
 
+        function storeDutySyncPushContextFromUrl(urlValue, sourceLabel) {
+            try {
+                const parsedUrl = new URL(urlValue || window.location.href, window.location.origin);
+                if (parsedUrl.searchParams.get("duty_sync_review") !== "1") return false;
+                const reviewId = parsedUrl.searchParams.get("duty_sync_review_id") || "";
+                const updatedAt = parsedUrl.searchParams.get("duty_sync_review_updated_at") || "";
+                saveDutySyncPushContext({
+                    active: true,
+                    review_id: reviewId,
+                    updated_at: updatedAt,
+                    source: sourceLabel || "push_url"
+                });
+                return true;
+            } catch (_error) {
+                return false;
+            }
+        }
+
         function clearDutySyncPushContext() {
             try {
                 localStorage.removeItem("duty-sync-push-context");
@@ -4655,6 +4673,7 @@
             }
         });
 
+        storeDutySyncPushContextFromUrl(window.location.href, "startup_url");
         restoreDutySyncPushContextFromStorage();
         handleInitialDutySyncDeepLink();
         registerDutyPushServiceWorker().catch(() => {});
@@ -4666,17 +4685,7 @@
                 dutySyncDebug("service worker message received", { targetUrl });
                 pendingDutySyncReviewDeepLink = true;
                 setDutySyncPushRenderLock(true);
-                try {
-                    const parsedUrl = new URL(targetUrl, window.location.origin);
-                    saveDutySyncPushContext({
-                        active: true,
-                        review_id: parsedUrl.searchParams.get("duty_sync_review_id"),
-                        updated_at: parsedUrl.searchParams.get("duty_sync_review_updated_at"),
-                        source: "service_worker_message"
-                    });
-                } catch (_error) {
-                    // Keep push context restoration resilient even if URL parsing fails.
-                }
+                storeDutySyncPushContextFromUrl(targetUrl, "service_worker_message");
                 if (data.review) {
                     try {
                         sessionStorage.setItem("duty-sync-inline-review", JSON.stringify(data.review));
@@ -4701,6 +4710,7 @@
         window.addEventListener("pageshow", () => {
             dutySyncDebug("pageshow fired", { href: window.location.href });
             persistDutySyncPushDebug("[Client] app resumed");
+            storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
             restoreDutySyncPushContextFromStorage();
             resumeDutySyncReviewFromDeepLink().catch(() => {});
         });
@@ -4708,11 +4718,13 @@
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
             if (document.visibilityState === "visible") {
                 persistDutySyncPushDebug("[Client] app resumed");
+                storeDutySyncPushContextFromUrl(window.location.href, "visibilitychange_url");
                 restoreDutySyncPushContextFromStorage();
                 resumeDutySyncReviewFromDeepLink().catch(() => {});
             }
         });
         if (pendingDutySyncReviewDeepLink) {
+            storeDutySyncPushContextFromUrl(window.location.href, "pending_deeplink_url");
             restoreDutySyncPushContextFromStorage();
             resumeDutySyncReviewFromDeepLink().catch(() => {});
         }
