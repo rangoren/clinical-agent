@@ -4321,6 +4321,7 @@
         }
 
         async function bootstrapSession() {
+            restoreDutySyncPushContextFromStorage();
             studyCardsDismissed = false;
             cancelDeferredStudyCardsLoad();
             setComposerEnabled(false);
