@@ -2567,6 +2567,14 @@
             dutySyncPushRenderLock = !!active;
         }
 
+        function isDutySyncPushDeepLinkUrlActive() {
+            try {
+                return new URLSearchParams(window.location.search).get("duty_sync_review") === "1";
+            } catch (_error) {
+                return false;
+            }
+        }
+
         async function loadDutySyncReviewForDeepLink() {
             if (!pendingDutySyncReviewId) return null;
             const startedAt = Date.now();
@@ -3212,7 +3220,7 @@
                     appendAssistantMessage("Duty Sync checked the latest test sheet.", "system");
                 }
                 if (data.pending_review) {
-                    if (hasActiveDutySyncPushContext()) {
+                    if (hasActiveDutySyncPushContext() || isDutySyncPushDeepLinkUrlActive()) {
                         activeDutyReview = data.pending_review;
                         persistDutySyncPushDebug(`[App] connectDutySync skipped render during push context review_id=${data.pending_review.review_id}`);
                     } else {
