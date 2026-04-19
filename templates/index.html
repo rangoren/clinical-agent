@@ -2844,6 +2844,11 @@
                 appMode = "scheduling";
                 renderModeState();
             }
+            pendingDutySyncReviewDeepLink = false;
+            pendingDutySyncReviewId = null;
+            pendingDutySyncReviewUpdatedAt = null;
+            setDutySyncPushRenderLock(false);
+            clearDutySyncPushContext();
             const resolvedReview = review && review.review_id ? review : activeDutyReview;
             if (resolvedReview && resolvedReview.review_id) {
                 appendDutyReviewCard(resolvedReview, "generic_pending_review", "openDutySyncReviewContext");
@@ -2865,6 +2870,30 @@
                 if (data && data.current_status === "no_duties") {
                     appendAssistantMessage(data.details || "No shifts were found in the connected sheet.", "system");
                     return;
+                }
+                if (data && data.connected && !data.requires_google_reconnect) {
+                    const checkResponse = await fetch("/calendar/duty-sync/check", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ session_id: sessionId })
+                    });
+                    const checkData = await checkResponse.json();
+                    if (checkData && checkData.pending_review && checkData.pending_review.review_id) {
+                        activeDutyReview = checkData.pending_review;
+                        appendDutyReviewCard(checkData.pending_review, "generic_pending_review", "openDutySyncReviewContext.check");
+                        await refreshDutySyncStatus();
+                        return;
+                    }
+                    if (checkData && checkData.status === "no_duties") {
+                        appendAssistantMessage(checkData.reply || "No shifts were found in the connected sheet.", "system");
+                        await refreshDutySyncStatus();
+                        return;
+                    }
+                    if (checkData && checkData.reply) {
+                        appendAssistantMessage(checkData.reply, checkData.status === "error" ? "error" : "system");
+                        await refreshDutySyncStatus();
+                        return;
+                    }
                 }
                 appendAssistantMessage("No Duty Sync review is ready yet.", "system");
             } catch (error) {
