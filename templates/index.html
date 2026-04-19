@@ -2541,6 +2541,41 @@
             }
         }
 
+        function loadDutySyncPushContext() {
+            try {
+                const raw = sessionStorage.getItem("duty-sync-push-context");
+                return raw ? JSON.parse(raw) : null;
+            } catch (_error) {
+                return null;
+            }
+        }
+
+        function saveDutySyncPushContext(context) {
+            try {
+                sessionStorage.setItem("duty-sync-push-context", JSON.stringify(context || {}));
+            } catch (_error) {
+                return;
+            }
+        }
+
+        function clearDutySyncPushContext() {
+            try {
+                sessionStorage.removeItem("duty-sync-push-context");
+            } catch (_error) {
+                return;
+            }
+        }
+
+        function restoreDutySyncPushContextFromStorage() {
+            const context = loadDutySyncPushContext();
+            if (!context || !context.active) return false;
+            pendingDutySyncReviewDeepLink = true;
+            pendingDutySyncReviewId = context.review_id || pendingDutySyncReviewId;
+            pendingDutySyncReviewUpdatedAt = context.updated_at || pendingDutySyncReviewUpdatedAt;
+            setDutySyncPushRenderLock(true);
+            return true;
+        }
+
         function clearPendingDutySyncInlineReview() {
             pendingDutySyncInlineReview = null;
             try {
@@ -2560,7 +2595,14 @@
         }
 
         function hasActiveDutySyncPushContext() {
-            return !!(dutySyncPushRenderLock || pendingDutySyncReviewDeepLink || pendingDutySyncReviewId || pendingDutySyncReviewUpdatedAt);
+            const storedContext = loadDutySyncPushContext();
+            return !!(
+                dutySyncPushRenderLock ||
+                pendingDutySyncReviewDeepLink ||
+                pendingDutySyncReviewId ||
+                pendingDutySyncReviewUpdatedAt ||
+                (storedContext && storedContext.active)
+            );
         }
 
         function setDutySyncPushRenderLock(active) {
@@ -2843,7 +2885,15 @@
             swTrace.forEach((line) => persistDutySyncPushDebug(line));
             if (reviewDeepLink === "1") {
                 persistDutySyncPushDebug("[Client] deep-link parsed");
+                saveDutySyncPushContext({
+                    active: true,
+                    review_id: pendingDutySyncReviewId,
+                    updated_at: pendingDutySyncReviewUpdatedAt,
+                    source: "push_deep_link"
+                });
                 setDutySyncPushRenderLock(true);
+            } else {
+                restoreDutySyncPushContextFromStorage();
             }
             if (requestedMode === "scheduling") {
                 appMode = "scheduling";
@@ -2855,9 +2905,16 @@
             if (dutySyncReviewOpenPromise) return dutySyncReviewOpenPromise;
             dutySyncReviewOpenPromise = (async () => {
             const params = new URLSearchParams(window.location.search);
-            if (params.get("duty_sync_review") !== "1") return;
+            if (params.get("duty_sync_review") !== "1" && !restoreDutySyncPushContextFromStorage()) return;
             pendingDutySyncReviewId = params.get("duty_sync_review_id");
             pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
+            if (!pendingDutySyncReviewId || !pendingDutySyncReviewUpdatedAt) {
+                const storedContext = loadDutySyncPushContext();
+                if (storedContext && storedContext.active) {
+                    pendingDutySyncReviewId = pendingDutySyncReviewId || storedContext.review_id || null;
+                    pendingDutySyncReviewUpdatedAt = pendingDutySyncReviewUpdatedAt || storedContext.updated_at || null;
+                }
+            }
             pendingDutySyncInlineReview = loadPendingDutySyncInlineReview();
             pendingDutySyncReviewDeepLink = true;
             setDutySyncPushRenderLock(true);
@@ -2943,6 +3000,7 @@
             }
             pendingDutySyncReviewDeepLink = false;
             setDutySyncPushRenderLock(false);
+            clearDutySyncPushContext();
             lastOpenedDutySyncReviewKey = openKey;
             clearPendingDutySyncInlineReview();
             dutySyncDebug("review open handler fired", {
@@ -2970,6 +3028,7 @@
             }
             pendingDutySyncReviewDeepLink = false;
             setDutySyncPushRenderLock(false);
+            clearDutySyncPushContext();
             lastOpenedDutySyncReviewKey = openKey;
             clearPendingDutySyncInlineReview();
             persistDutySyncPushDebug("[App] review open handler fired");
@@ -4596,6 +4655,17 @@
                 dutySyncDebug("service worker message received", { targetUrl });
                 pendingDutySyncReviewDeepLink = true;
                 setDutySyncPushRenderLock(true);
+                try {
+                    const parsedUrl = new URL(targetUrl, window.location.origin);
+                    saveDutySyncPushContext({
+                        active: true,
+                        review_id: parsedUrl.searchParams.get("duty_sync_review_id"),
+                        updated_at: parsedUrl.searchParams.get("duty_sync_review_updated_at"),
+                        source: "service_worker_message"
+                    });
+                } catch (_error) {
+                    // Keep push context restoration resilient even if URL parsing fails.
+                }
                 if (data.review) {
                     try {
                         sessionStorage.setItem("duty-sync-inline-review", JSON.stringify(data.review));
