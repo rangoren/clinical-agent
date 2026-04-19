@@ -2473,7 +2473,7 @@
             if (appMode !== "scheduling") {
                 closeSettingsMenu();
             }
-            maybeShowDutyPushPrompt();
+            renderDutySyncPrimaryBanner();
             updateComposerState();
         }
 
@@ -2720,9 +2720,10 @@
             if (!status || status.available === false) {
                 googleCalendarConnected = false;
                 label.textContent = "Calendar Sync: Not configured";
-                action.textContent = "Connect calendar";
+                action.textContent = "Connect Google Calendar";
                 action.disabled = false;
                 action.dataset.unavailable = "true";
+                renderDutySyncPrimaryBanner();
                 return;
             }
 
@@ -2731,11 +2732,12 @@
             action.disabled = false;
             if (status.connected) {
                 label.textContent = "Calendar Sync: Connected";
-                action.textContent = "Disconnect";
+                action.textContent = "Disconnect Calendar";
             } else {
                 label.textContent = "Calendar Sync: Not connected";
-                action.textContent = "Connect Google";
+                action.textContent = "Connect Google Calendar";
             }
+            renderDutySyncPrimaryBanner();
         }
 
         function formatDutySyncTimestamp(rawValue) {
@@ -2825,6 +2827,7 @@
                     pushAction.hidden = true;
                 }
                 await refreshDutySyncStatus();
+                renderDutySyncPrimaryBanner();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
@@ -2869,16 +2872,82 @@
             };
         }
 
-        function maybeShowDutyPushPrompt(status) {
-            if (appMode !== "scheduling") return;
-            if (!("Notification" in window)) return;
-            if (Notification.permission === "granted" || Notification.permission === "denied") {
-                return;
+        function shouldShowDutySyncNotificationPrompt() {
+            return ("Notification" in window) && Notification.permission === "default";
+        }
+
+        function renderDutySyncPrimaryBanner() {
+            if (shouldShowDutySyncNotificationPrompt()) {
+                if (appMode === "scheduling") {
+                    if (!googleCalendarConnected) {
+                        showSessionBanner(
+                            "Turn on notifications and connect Google Calendar to start Duty Sync.",
+                            `<button class="secondary-button" onclick="enableDutySyncNotifications()">Enable notifications</button><button class="ghost-button" onclick="toggleGoogleCalendarConnection()">Connect Google Calendar</button>`
+                        );
+                        return true;
+                    }
+                    if (dutySyncNeedsReconnect) {
+                        showSessionBanner(
+                            "Turn on notifications and reconnect Google Calendar to keep Duty Sync working.",
+                            `<button class="secondary-button" onclick="enableDutySyncNotifications()">Enable notifications</button><button class="ghost-button" onclick="toggleGoogleCalendarConnection()">Reconnect Google Calendar</button>`
+                        );
+                        return true;
+                    }
+                    if (!dutySyncConnected) {
+                        showSessionBanner(
+                            "Turn on notifications and connect your duty sheet to finish setup.",
+                            `<button class="secondary-button" onclick="enableDutySyncNotifications()">Enable notifications</button><button class="ghost-button" onclick="connectDutySync(false)">Connect Sheet</button>`
+                        );
+                        return true;
+                    }
+                } else {
+                    showSessionBanner(
+                        "Turn on notifications so Duty Sync updates reach you right away.",
+                        `<button class="secondary-button" onclick="enableDutySyncNotifications()">Enable notifications</button><button class="ghost-button" onclick="switchAppMode('scheduling')">Open Scheduling</button>`
+                    );
+                    return true;
+                }
             }
-            showSessionBanner(
-                "Turn on notifications to hear about personal Duty Sync changes right away.",
-                `<button class="secondary-button" onclick="enableDutySyncNotifications()">Enable notifications</button>`
-            );
+
+            if (appMode !== "scheduling") {
+                hideSessionBanner();
+                return false;
+            }
+
+            if (!googleCalendarConnected) {
+                showSessionBanner(
+                    "Step 1: Connect Google Calendar to start scheduling and Duty Sync.",
+                    `<button class="secondary-button" onclick="toggleGoogleCalendarConnection()">Connect Google Calendar</button>`
+                );
+                return true;
+            }
+
+            if (dutySyncNeedsReconnect) {
+                showSessionBanner(
+                    "Reconnect Google Calendar to keep Duty Sync working.",
+                    `<button class="secondary-button" onclick="toggleGoogleCalendarConnection()">Reconnect Google Calendar</button><button class="ghost-button" onclick="disconnectDutySync()">Disconnect Sheet</button>`
+                );
+                return true;
+            }
+
+            if (!dutySyncConnected) {
+                showSessionBanner(
+                    "Step 2: Connect your duty sheet to finish setup.",
+                    `<button class="secondary-button" onclick="connectDutySync(false)">Connect Sheet</button>`
+                );
+                return true;
+            }
+
+            if (activeDutyReview) {
+                showSessionBanner(
+                    "Duty Sync found updates that need review.",
+                    `<button class="secondary-button" onclick="openDutySyncReviewContext(activeDutyReview)">Review updates</button><button class="ghost-button" onclick="disconnectDutySync()">Disconnect Sheet</button>`
+                );
+                return true;
+            }
+
+            hideSessionBanner();
+            return false;
         }
 
         function appendDutySyncInAppNotice(replyText) {
@@ -2959,9 +3028,7 @@
             } else {
                 restoreDutySyncPushContextFromStorage();
             }
-            if (requestedMode === "scheduling") {
-                appMode = "scheduling";
-            }
+            appMode = requestedMode === "scheduling" ? "scheduling" : "clinical";
             pendingDutySyncReviewDeepLink = reviewDeepLink === "1";
         }
 
@@ -3137,33 +3204,39 @@
                 details.textContent = "Duty Sync is not configured in this environment.";
                 action.textContent = "Connect Sheet";
                 action.disabled = true;
+                action.hidden = false;
                 secondaryAction.hidden = true;
                 pushAction.hidden = true;
                 pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
+                renderDutySyncPrimaryBanner();
                 return;
             }
 
             action.disabled = false;
             if (dutySyncNeedsReconnect) {
                 label.textContent = "Duty schedule: Google reconnect required";
-                details.textContent = buildDutySyncDetails(status, status.details || "Reconnect Google once to allow Duty Sync to read the test sheet.");
-                action.textContent = "Reconnect Google";
+                details.textContent = buildDutySyncDetails(status, status.details || "Reconnect Google Calendar to keep Duty Sync connected.");
+                action.textContent = "Reconnect Google Calendar";
+                action.hidden = false;
                 secondaryAction.hidden = true;
                 pushAction.hidden = true;
                 pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
+                renderDutySyncPrimaryBanner();
                 return;
             }
 
             if (!dutySyncConnected) {
                 label.textContent = status.label || "Duty schedule: Not connected";
-                details.textContent = buildDutySyncDetails(status, status.details || "Connect the test duty sheet once from Settings.");
+                details.textContent = buildDutySyncDetails(status, status.details || "Connect your duty sheet to turn on automatic sync.");
                 action.textContent = "Connect Sheet";
+                action.hidden = false;
                 secondaryAction.hidden = true;
                 pushAction.hidden = true;
                 pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
+                renderDutySyncPrimaryBanner();
                 return;
             }
 
@@ -3172,14 +3245,14 @@
             const detailText = status.details || "Duty schedule connected.";
             const baseText = lastChecked ? `${detailText} Last checked: ${lastChecked}` : detailText;
             details.textContent = buildDutySyncDetails(status, baseText);
-            action.textContent = status.current_status === "pending_review" ? "Review updates" : "Check now";
+            action.hidden = true;
             secondaryAction.hidden = false;
-            pushAction.hidden = !("Notification" in window) || Notification.permission === "granted";
-            pushTestAction.hidden = false;
+            pushAction.hidden = true;
+            pushTestAction.hidden = true;
             scheduleDutySyncPolling();
 
             maybeOpenDutySyncReviewFromStatus(status);
-            maybeShowDutyPushPrompt(status);
+            renderDutySyncPrimaryBanner();
         }
 
         function buildDutySyncDetails(status, baseText) {
