@@ -2,6 +2,42 @@ self.__dutySyncDebug = (...args) => {
   console.log("[DutySyncDebug][SW]", ...args);
 };
 
+const DUTY_SYNC_PUSH_DB_NAME = "duty-sync-push";
+const DUTY_SYNC_PUSH_STORE_NAME = "context";
+
+function openDutySyncPushDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
+        db.createObjectStore(DUTY_SYNC_PUSH_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function saveDutySyncPushContext(context) {
+  return openDutySyncPushDb().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const transaction = db.transaction(DUTY_SYNC_PUSH_STORE_NAME, "readwrite");
+        const store = transaction.objectStore(DUTY_SYNC_PUSH_STORE_NAME);
+        store.put(context, "latest");
+        transaction.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          db.close();
+          reject(transaction.error);
+        };
+      })
+  );
+}
+
 function withDutySyncTrace(targetUrl, traceId, traceSteps) {
   try {
     const url = new URL(targetUrl, self.location.origin);
@@ -41,11 +77,26 @@ self.addEventListener("notificationclick", (event) => {
   const review = (event.notification.data && event.notification.data.review) || null;
   const traceId = `push-${Date.now()}`;
   self.__dutySyncDebug("notificationclick fired", { targetUrl: baseTargetUrl, traceId });
+  let storedTraceLine = "";
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    Promise.resolve()
+      .then(() => {
+        const parsedUrl = new URL(baseTargetUrl, self.location.origin);
+        const context = {
+          active: true,
+          review_id: parsedUrl.searchParams.get("duty_sync_review_id") || "",
+          updated_at: parsedUrl.searchParams.get("duty_sync_review_updated_at") || "",
+          source: "service_worker_notificationclick",
+        };
+        storedTraceLine = `[SW/App] stored push context review_id=${context.review_id} updated_at=${context.updated_at}`;
+        return saveDutySyncPushContext(context);
+      })
+      .then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true }))
+      .then((clients) => {
       if (clients && clients.length) {
         const targetUrl = withDutySyncTrace(baseTargetUrl, traceId, [
           "[SW] notificationclick fired",
+          storedTraceLine,
           "[SW] client found",
           "[SW] navigate/openWindow attempted",
         ]);
@@ -75,6 +126,7 @@ self.addEventListener("notificationclick", (event) => {
       }
       const targetUrl = withDutySyncTrace(baseTargetUrl, traceId, [
         "[SW] notificationclick fired",
+        storedTraceLine,
         "[SW] no client found",
         "[SW] navigate/openWindow attempted",
       ]);

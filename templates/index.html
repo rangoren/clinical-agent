@@ -2487,6 +2487,8 @@
         let pendingDutySyncInlineReview = null;
         let dutySyncReviewOpenPromise = null;
         let dutySyncPushRenderLock = false;
+        const DUTY_SYNC_PUSH_DB_NAME = "duty-sync-push";
+        const DUTY_SYNC_PUSH_STORE_NAME = "context";
 
         function dutySyncDebug(...args) {
             {% if app_env != "production" %}
@@ -2552,6 +2554,38 @@
             }
         }
 
+        function loadDutySyncPushContextFromIndexedDb() {
+            return new Promise((resolve) => {
+                try {
+                    const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 1);
+                    request.onupgradeneeded = () => {
+                        const db = request.result;
+                        if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
+                            db.createObjectStore(DUTY_SYNC_PUSH_STORE_NAME);
+                        }
+                    };
+                    request.onerror = () => resolve(null);
+                    request.onsuccess = () => {
+                        const db = request.result;
+                        const transaction = db.transaction(DUTY_SYNC_PUSH_STORE_NAME, "readonly");
+                        const store = transaction.objectStore(DUTY_SYNC_PUSH_STORE_NAME);
+                        const getRequest = store.get("latest");
+                        getRequest.onerror = () => {
+                            db.close();
+                            resolve(null);
+                        };
+                        getRequest.onsuccess = () => {
+                            const value = getRequest.result || null;
+                            db.close();
+                            resolve(value);
+                        };
+                    };
+                } catch (_error) {
+                    resolve(null);
+                }
+            });
+        }
+
         function saveDutySyncPushContext(context) {
             try {
                 localStorage.setItem("duty-sync-push-context", JSON.stringify(context || {}));
@@ -2587,9 +2621,13 @@
             }
         }
 
-        function restoreDutySyncPushContextFromStorage() {
+        async function restoreDutySyncPushContextFromStorage() {
             persistDutySyncPushDebug("[App] restore called");
-            const context = loadDutySyncPushContext();
+            let context = loadDutySyncPushContext();
+            if (!context || !context.active) {
+                context = await loadDutySyncPushContextFromIndexedDb();
+                persistDutySyncPushDebug(`[App] restore storage raw=${context ? JSON.stringify(context) : "null"}`);
+            }
             if (!context || !context.active) {
                 persistDutySyncPushDebug("[App] no stored push context found");
                 return false;
@@ -4347,7 +4385,7 @@
 
         async function bootstrapSession() {
             persistDutySyncPushDebug("[App] bootstrapSession entered");
-            restoreDutySyncPushContextFromStorage();
+            await restoreDutySyncPushContextFromStorage();
             studyCardsDismissed = false;
             cancelDeferredStudyCardsLoad();
             setComposerEnabled(false);
@@ -4674,7 +4712,7 @@
         });
 
         storeDutySyncPushContextFromUrl(window.location.href, "startup_url");
-        restoreDutySyncPushContextFromStorage();
+        restoreDutySyncPushContextFromStorage().catch(() => {});
         handleInitialDutySyncDeepLink();
         registerDutyPushServiceWorker().catch(() => {});
         if ("serviceWorker" in navigator) {
@@ -4693,7 +4731,7 @@
                         // Keep the push flow resilient even if storage is unavailable.
                     }
                 }
-                restoreDutySyncPushContextFromStorage();
+                await restoreDutySyncPushContextFromStorage();
                 try {
                     const parsedUrl = new URL(targetUrl, window.location.origin);
                     if (parsedUrl.origin === window.location.origin) {
@@ -4711,7 +4749,7 @@
             dutySyncDebug("pageshow fired", { href: window.location.href });
             persistDutySyncPushDebug("[Client] app resumed");
             storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
-            restoreDutySyncPushContextFromStorage();
+            restoreDutySyncPushContextFromStorage().catch(() => {});
             resumeDutySyncReviewFromDeepLink().catch(() => {});
         });
         document.addEventListener("visibilitychange", () => {
@@ -4719,13 +4757,13 @@
             if (document.visibilityState === "visible") {
                 persistDutySyncPushDebug("[Client] app resumed");
                 storeDutySyncPushContextFromUrl(window.location.href, "visibilitychange_url");
-                restoreDutySyncPushContextFromStorage();
+                restoreDutySyncPushContextFromStorage().catch(() => {});
                 resumeDutySyncReviewFromDeepLink().catch(() => {});
             }
         });
         if (pendingDutySyncReviewDeepLink) {
             storeDutySyncPushContextFromUrl(window.location.href, "pending_deeplink_url");
-            restoreDutySyncPushContextFromStorage();
+            restoreDutySyncPushContextFromStorage().catch(() => {});
             resumeDutySyncReviewFromDeepLink().catch(() => {});
         }
         renderModeState();
