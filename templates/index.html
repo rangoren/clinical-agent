@@ -2544,8 +2544,10 @@
         function loadDutySyncPushContext() {
             try {
                 const raw = localStorage.getItem("duty-sync-push-context");
+                persistDutySyncPushDebug(`[App] restore storage raw=${raw || "null"}`);
                 return raw ? JSON.parse(raw) : null;
             } catch (_error) {
+                persistDutySyncPushDebug("[App] restore storage raw=error");
                 return null;
             }
         }
@@ -2553,6 +2555,7 @@
         function saveDutySyncPushContext(context) {
             try {
                 localStorage.setItem("duty-sync-push-context", JSON.stringify(context || {}));
+                persistDutySyncPushDebug(`[SW/App] stored push context review_id=${(context || {}).review_id || ""} updated_at=${(context || {}).updated_at || ""}`);
             } catch (_error) {
                 return;
             }
@@ -2567,8 +2570,12 @@
         }
 
         function restoreDutySyncPushContextFromStorage() {
+            persistDutySyncPushDebug("[App] restore called");
             const context = loadDutySyncPushContext();
-            if (!context || !context.active) return false;
+            if (!context || !context.active) {
+                persistDutySyncPushDebug("[App] no stored push context found");
+                return false;
+            }
             pendingDutySyncReviewDeepLink = true;
             pendingDutySyncReviewId = context.review_id || pendingDutySyncReviewId;
             pendingDutySyncReviewUpdatedAt = context.updated_at || pendingDutySyncReviewUpdatedAt;
