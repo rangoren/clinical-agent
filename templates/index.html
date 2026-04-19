@@ -3212,7 +3212,12 @@
                     appendAssistantMessage("Duty Sync checked the latest test sheet.", "system");
                 }
                 if (data.pending_review) {
-                    appendDutyReviewCard(data.pending_review, "generic_pending_review", "connectDutySync");
+                    if (hasActiveDutySyncPushContext()) {
+                        activeDutyReview = data.pending_review;
+                        persistDutySyncPushDebug(`[App] connectDutySync skipped render during push context review_id=${data.pending_review.review_id}`);
+                    } else {
+                        appendDutyReviewCard(data.pending_review, "generic_pending_review", "connectDutySync");
+                    }
                 }
                 await refreshDutySyncStatus();
             } catch (error) {
