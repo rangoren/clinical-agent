@@ -2543,7 +2543,7 @@
 
         function loadDutySyncPushContext() {
             try {
-                const raw = sessionStorage.getItem("duty-sync-push-context");
+                const raw = localStorage.getItem("duty-sync-push-context");
                 return raw ? JSON.parse(raw) : null;
             } catch (_error) {
                 return null;
@@ -2552,7 +2552,7 @@
 
         function saveDutySyncPushContext(context) {
             try {
-                sessionStorage.setItem("duty-sync-push-context", JSON.stringify(context || {}));
+                localStorage.setItem("duty-sync-push-context", JSON.stringify(context || {}));
             } catch (_error) {
                 return;
             }
@@ -2560,7 +2560,7 @@
 
         function clearDutySyncPushContext() {
             try {
-                sessionStorage.removeItem("duty-sync-push-context");
+                localStorage.removeItem("duty-sync-push-context");
             } catch (_error) {
                 return;
             }
@@ -2573,6 +2573,7 @@
             pendingDutySyncReviewId = context.review_id || pendingDutySyncReviewId;
             pendingDutySyncReviewUpdatedAt = context.updated_at || pendingDutySyncReviewUpdatedAt;
             setDutySyncPushRenderLock(true);
+            persistDutySyncPushDebug(`[App] restored push context source=storage origin=${context.source || "unknown"} review_id=${pendingDutySyncReviewId || ""} updated_at=${pendingDutySyncReviewUpdatedAt || ""}`);
             return true;
         }
 
@@ -4645,6 +4646,7 @@
             }
         });
 
+        restoreDutySyncPushContextFromStorage();
         handleInitialDutySyncDeepLink();
         registerDutyPushServiceWorker().catch(() => {});
         if ("serviceWorker" in navigator) {
