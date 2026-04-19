@@ -1830,6 +1830,14 @@
                                 <button id="duty-sync-secondary-action" class="calendar-action secondary" onclick="disconnectDutySync()" hidden>Disconnect Sheet</button>
                                 <button id="duty-sync-push-action" class="calendar-action secondary" onclick="enableDutySyncNotifications()" hidden>Enable notifications</button>
                                 <button id="duty-sync-push-test-action" class="calendar-action secondary" onclick="sendDutySyncTestPush()" hidden>Send test push</button>
+                                {% if app_env != "production" %}
+                                <div class="settings-section">
+                                    <span class="settings-label">Runtime debug</span>
+                                    <div class="calendar-copy">
+                                        <span id="duty-sync-runtime-debug" class="calendar-subcopy">No runtime debug yet.</span>
+                                    </div>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -1923,6 +1931,8 @@
         let dutySyncPollTimer = null;
         let pendingDutySyncReviewDeepLink = false;
         let dutyPushRegistration = null;
+        let dutySyncStartupDebugLine = "No startup decision yet.";
+        let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
         const studyCardsCacheKey = "entry_study_cards_v1";
@@ -2488,6 +2498,14 @@
             {% endif %}
         }
 
+        function renderDutySyncRuntimeDebug() {
+            {% if app_env != "production" %}
+            const node = document.getElementById("duty-sync-runtime-debug");
+            if (!node) return;
+            node.textContent = `${dutySyncStartupDebugLine} | ${dutySyncLastCheckedDebugLine}`;
+            {% endif %}
+        }
+
         function renderDutySyncPushDebug() {
             {% if app_env != "production" %}
             const node = document.getElementById("duty-sync-push-debug");
@@ -2733,11 +2751,21 @@
         }
 
         function formatDutySyncTimestamp(rawValue) {
-            if (!rawValue) return "";
+            if (!rawValue) {
+                dutySyncLastCheckedDebugLine = "[App] last_checked raw=empty formatted=empty timezone=Asia/Jerusalem";
+                renderDutySyncRuntimeDebug();
+                return "";
+            }
             const parsed = new Date(rawValue);
-            if (Number.isNaN(parsed.getTime())) return "";
+            if (Number.isNaN(parsed.getTime())) {
+                dutySyncLastCheckedDebugLine = `[App] last_checked raw=${rawValue} formatted=invalid timezone=Asia/Jerusalem`;
+                renderDutySyncRuntimeDebug();
+                return "";
+            }
             const formatted = parsed.toLocaleString(undefined, { timeZone: "Asia/Jerusalem" });
+            dutySyncLastCheckedDebugLine = `[App] last_checked raw=${rawValue} formatted=${formatted} timezone=Asia/Jerusalem`;
             dutySyncDebug(`[App] last_checked raw=${rawValue} formatted=${formatted} timezone=Asia/Jerusalem`);
+            renderDutySyncRuntimeDebug();
             return formatted;
         }
 
@@ -3079,9 +3107,11 @@
                 requestedMode === "scheduling" &&
                 (reviewDeepLink === "1" || !!calendarStatus);
             appMode = shouldOpenSchedulingOnLoad ? "scheduling" : "clinical";
+            dutySyncStartupDebugLine = `[App] startup mode=${appMode} requested_mode=${requestedMode || "none"} scheduling_forced=${shouldOpenSchedulingOnLoad} clinical_default=${!shouldOpenSchedulingOnLoad}`;
             dutySyncDebug(
-                `[App] startup mode=${appMode} requested_mode=${requestedMode || "none"} scheduling_forced=${shouldOpenSchedulingOnLoad} clinical_default=${!shouldOpenSchedulingOnLoad}`
+                dutySyncStartupDebugLine
             );
+            renderDutySyncRuntimeDebug();
             pendingDutySyncReviewDeepLink = reviewDeepLink === "1";
         }
 
