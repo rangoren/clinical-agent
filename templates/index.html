@@ -3220,10 +3220,15 @@
                     appendAssistantMessage("Duty Sync checked the latest test sheet.", "system");
                 }
                 if (data.pending_review) {
-                    if (hasActiveDutySyncPushContext() || isDutySyncPushDeepLinkUrlActive()) {
+                    const hasActivePushContext = hasActiveDutySyncPushContext();
+                    const hasPushDeepLinkUrl = isDutySyncPushDeepLinkUrlActive();
+                    persistDutySyncPushDebug(`[App] connectDutySync push_check hasActive=${hasActivePushContext} deepLink=${hasPushDeepLinkUrl} url=${window.location.href} review_id=${data.pending_review.review_id}`);
+                    if (hasActivePushContext || hasPushDeepLinkUrl) {
+                        persistDutySyncPushDebug("[App] connectDutySync branch=skip_render");
                         activeDutyReview = data.pending_review;
                         persistDutySyncPushDebug(`[App] connectDutySync skipped render during push context review_id=${data.pending_review.review_id}`);
                     } else {
+                        persistDutySyncPushDebug("[App] connectDutySync branch=render_generic");
                         appendDutyReviewCard(data.pending_review, "generic_pending_review", "connectDutySync");
                     }
                 }
