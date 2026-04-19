@@ -1830,14 +1830,6 @@
                                 <button id="duty-sync-secondary-action" class="calendar-action secondary" onclick="disconnectDutySync()" hidden>Disconnect Sheet</button>
                                 <button id="duty-sync-push-action" class="calendar-action secondary" onclick="enableDutySyncNotifications()" hidden>Enable notifications</button>
                                 <button id="duty-sync-push-test-action" class="calendar-action secondary" onclick="sendDutySyncTestPush()" hidden>Send test push</button>
-                                {% if app_env != "production" %}
-                                <div class="settings-section">
-                                    <span class="settings-label">Push debug</span>
-                                    <div class="calendar-copy">
-                                        <span id="duty-sync-push-debug" class="calendar-subcopy">No push trace yet.</span>
-                                    </div>
-                                </div>
-                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -2847,13 +2839,36 @@
             }
         }
 
-        function openDutySyncReviewContext(review) {
+        async function openDutySyncReviewContext(review) {
             if (appMode !== "scheduling") {
                 appMode = "scheduling";
                 renderModeState();
             }
-            if (review) {
-                appendDutyReviewCard(review, "generic_pending_review", "openDutySyncReviewContext");
+            const resolvedReview = review && review.review_id ? review : activeDutyReview;
+            if (resolvedReview && resolvedReview.review_id) {
+                appendDutyReviewCard(resolvedReview, "generic_pending_review", "openDutySyncReviewContext");
+                return;
+            }
+
+            try {
+                const response = await fetch("/calendar/duty-sync/status", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+                const data = await response.json();
+                updateDutySyncUi(data);
+                if (data && data.pending_review && data.pending_review.review_id) {
+                    appendDutyReviewCard(data.pending_review, "generic_pending_review", "openDutySyncReviewContext.status");
+                    return;
+                }
+                if (data && data.current_status === "no_duties") {
+                    appendAssistantMessage(data.details || "No shifts were found in the connected sheet.", "system");
+                    return;
+                }
+                appendAssistantMessage("No Duty Sync review is ready yet.", "system");
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
             }
         }
 
@@ -3382,7 +3397,7 @@
             closeSettingsMenu();
             if (activeDutyReview && dutySyncConnected && !dutySyncNeedsReconnect) {
                 setDutySyncPushRenderLock(false);
-                appendDutyReviewCard(activeDutyReview, "generic_pending_review", "handleDutySyncPrimaryAction");
+                await openDutySyncReviewContext(activeDutyReview);
                 return;
             }
             if (dutySyncConnected && !dutySyncNeedsReconnect) {
