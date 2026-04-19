@@ -2095,9 +2095,6 @@ def _format_shift_summary_line_from_duty(duty):
         date_label = datetime.strptime(duty_date, "%Y-%m-%d").strftime("%a %d %b")
     except ValueError:
         date_label = duty_date or "Unknown date"
-    start_at = _parse_duty_snapshot_datetime(duty.get("start_datetime"))
-    if start_at:
-        return f"- {date_label} · {start_at.strftime('%H:%M')} · {title}"
     return f"- {date_label} · {title}"
 
 
