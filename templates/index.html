@@ -2786,6 +2786,10 @@
             return "/?app_mode=scheduling&duty_sync_review=1";
         }
 
+        function shouldResumeDutySyncReviewOnLifecycleEvent() {
+            return pendingDutySyncReviewDeepLink || isDutySyncPushDeepLinkUrlActive();
+        }
+
         async function registerDutyPushServiceWorker() {
             if (!("serviceWorker" in navigator)) {
                 return null;
@@ -4906,7 +4910,9 @@
             persistDutySyncPushDebug("[Client] app resumed");
             storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
             restoreDutySyncPushContextFromStorage().catch(() => {});
-            resumeDutySyncReviewFromDeepLink().catch(() => {});
+            if (shouldResumeDutySyncReviewOnLifecycleEvent()) {
+                resumeDutySyncReviewFromDeepLink().catch(() => {});
+            }
         });
         document.addEventListener("visibilitychange", () => {
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
@@ -4914,7 +4920,9 @@
                 persistDutySyncPushDebug("[Client] app resumed");
                 storeDutySyncPushContextFromUrl(window.location.href, "visibilitychange_url");
                 restoreDutySyncPushContextFromStorage().catch(() => {});
-                resumeDutySyncReviewFromDeepLink().catch(() => {});
+                if (shouldResumeDutySyncReviewOnLifecycleEvent()) {
+                    resumeDutySyncReviewFromDeepLink().catch(() => {});
+                }
             }
         });
         if (pendingDutySyncReviewDeepLink) {
