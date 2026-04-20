@@ -83,6 +83,13 @@ def _parse_iso_datetime(raw_value):
         return None
 
 
+def _normalized_review_updated_at(raw_value):
+    parsed = _parse_iso_datetime(raw_value)
+    if parsed is not None:
+        return parsed.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return raw_value or None
+
+
 def _managed_event_doc(session_id, duty_key):
     if not duty_key:
         return None
@@ -884,11 +891,14 @@ def load_pending_duty_review(session_id, review_id, updated_at=None):
     if (
         scoped_review
         and scoped_review.get("review_id") == review_id
-        and (not updated_at or scoped_review.get("updated_at") == updated_at)
+        and (
+            not updated_at
+            or _normalized_review_updated_at(scoped_review.get("updated_at")) == _normalized_review_updated_at(updated_at)
+        )
     ):
         return {"status": "loaded", "review": scoped_review, "source": "push_scoped"}
 
-    if updated_at and pending_payload.get("updated_at") != updated_at:
+    if updated_at and _normalized_review_updated_at(pending_payload.get("updated_at")) != _normalized_review_updated_at(updated_at):
         return {"status": "stale", "reply": "Pending duty review changed before it could be opened."}
 
     return {"status": "loaded", "review": pending_payload, "source": "pending_review"}

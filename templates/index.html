@@ -2579,6 +2579,7 @@
         let pendingDutySyncInlineReview = null;
         let dutySyncReviewOpenPromise = null;
         let dutySyncPushRenderLock = false;
+        let pendingDutySyncStatusRecovery = false;
         const DUTY_SYNC_PUSH_DB_NAME = "duty-sync-push";
         const DUTY_SYNC_PUSH_STORE_NAME = "context";
 
@@ -2602,6 +2603,48 @@
 
         function generateDutySyncTraceId() {
             return `ds-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        }
+
+        function normalizeDutySyncReviewUpdatedAt(value) {
+            if (!value) return null;
+            try {
+                const normalized = new Date(value);
+                if (Number.isNaN(normalized.getTime())) {
+                    return String(value);
+                }
+                return normalized.toISOString();
+            } catch (_error) {
+                return String(value);
+            }
+        }
+
+        function getDutySyncReviewIdentityKey(reviewOrId, updatedAt = null) {
+            if (!reviewOrId) return null;
+            const reviewId = typeof reviewOrId === "string" ? reviewOrId : (reviewOrId.review_id || null);
+            if (!reviewId) return null;
+            const normalizedUpdatedAt = normalizeDutySyncReviewUpdatedAt(
+                typeof reviewOrId === "string" ? updatedAt : reviewOrId.updated_at
+            ) || "";
+            return `${reviewId}:${normalizedUpdatedAt}`;
+        }
+
+        function dutySyncReviewIdentityMatches(leftReview, rightReview) {
+            if (!leftReview || !rightReview) return false;
+            const leftReviewId = typeof leftReview === "string" ? leftReview : leftReview.review_id;
+            const rightReviewId = typeof rightReview === "string" ? rightReview : rightReview.review_id;
+            if (!leftReviewId || !rightReviewId || leftReviewId !== rightReviewId) {
+                return false;
+            }
+            const leftUpdatedAt = normalizeDutySyncReviewUpdatedAt(
+                typeof leftReview === "string" ? null : leftReview.updated_at
+            );
+            const rightUpdatedAt = normalizeDutySyncReviewUpdatedAt(
+                typeof rightReview === "string" ? null : rightReview.updated_at
+            );
+            if (!leftUpdatedAt || !rightUpdatedAt) {
+                return true;
+            }
+            return leftUpdatedAt === rightUpdatedAt;
         }
 
         function getDutySyncLogReviewContext(payload = null) {
@@ -3080,6 +3123,7 @@
                 logDutySyncRuntime("restoreDutySyncPushContextFromStorage failure", { payload: context });
                 return false;
             }
+            pendingDutySyncStatusRecovery = false;
             pendingDutySyncReviewDeepLink = true;
             pendingDutySyncReviewId = context.review_id || pendingDutySyncReviewId;
             pendingDutySyncReviewUpdatedAt = context.updated_at || pendingDutySyncReviewUpdatedAt;
@@ -3106,7 +3150,10 @@
             const review = pendingDutySyncInlineReview || loadPendingDutySyncInlineReview();
             if (!review || !review.review_id) return null;
             if (pendingDutySyncReviewId && review.review_id !== pendingDutySyncReviewId) return null;
-            if (pendingDutySyncReviewUpdatedAt && review.updated_at !== pendingDutySyncReviewUpdatedAt) return null;
+            if (
+                pendingDutySyncReviewUpdatedAt
+                && normalizeDutySyncReviewUpdatedAt(review.updated_at) !== normalizeDutySyncReviewUpdatedAt(pendingDutySyncReviewUpdatedAt)
+            ) return null;
             pendingDutySyncInlineReview = review;
             return review;
         }
@@ -3479,7 +3526,11 @@
             const activeReviewMatches =
                 activeDutyReview &&
                 activeDutyReview.review_id === reviewId &&
-                (!updatedAt || !activeDutyReview.updated_at || activeDutyReview.updated_at === updatedAt);
+                (
+                    !updatedAt
+                    || !activeDutyReview.updated_at
+                    || normalizeDutySyncReviewUpdatedAt(activeDutyReview.updated_at) === normalizeDutySyncReviewUpdatedAt(updatedAt)
+                );
             if (activeReviewMatches) {
                 await openDutySyncReviewContext(activeDutyReview);
                 return;
@@ -3838,32 +3889,50 @@
                 updated_at: pendingDutySyncReviewUpdatedAt || null,
             });
             logDutySyncRuntime("restorePushContextAndResumeDutySyncReview start", { href: window.location.href });
-            await restoreDutySyncPushContextFromStorage();
+            const restored = await restoreDutySyncPushContextFromStorage();
             const shouldResume = shouldResumeDutySyncReviewOnLifecycleEvent();
             if (shouldResume) {
+                pendingDutySyncStatusRecovery = false;
                 logDutySyncRuntime("FLOW_RESUME_ATTEMPT", { source: "resume" });
                 await resumeDutySyncReviewFromDeepLink();
                 logDutySyncRuntime("restorePushContextAndResumeDutySyncReview exit", { reason: "resumed" });
                 return;
             }
+            pendingDutySyncStatusRecovery = !restored;
             logDutySyncRuntime("FLOW_RESUME_SKIPPED", { source: "resume", reason: "no_resume" });
             logDutySyncRuntime("restorePushContextAndResumeDutySyncReview exit", { reason: "no_resume" });
         }
 
         function resolveDutyReviewScope(status) {
+            const pushScopedReview = status && status.push_review_scope ? status.push_review_scope : null;
             const pendingReview = status && status.pending_review ? status.pending_review : null;
+            if (pushScopedReview && pushScopedReview.review_id) {
+                if (pendingDutySyncReviewId && pushScopedReview.review_id !== pendingDutySyncReviewId) return null;
+                if (
+                    pendingDutySyncReviewUpdatedAt
+                    && normalizeDutySyncReviewUpdatedAt(pushScopedReview.updated_at) !== normalizeDutySyncReviewUpdatedAt(pendingDutySyncReviewUpdatedAt)
+                ) return null;
+                return pushScopedReview;
+            }
             if (!pendingReview) return null;
             if (pendingDutySyncReviewId || pendingDutySyncReviewUpdatedAt) {
                 if (pendingDutySyncReviewId && pendingReview.review_id !== pendingDutySyncReviewId) return null;
-                if (pendingDutySyncReviewUpdatedAt && pendingReview.updated_at !== pendingDutySyncReviewUpdatedAt) return null;
+                if (
+                    pendingDutySyncReviewUpdatedAt
+                    && normalizeDutySyncReviewUpdatedAt(pendingReview.updated_at) !== normalizeDutySyncReviewUpdatedAt(pendingDutySyncReviewUpdatedAt)
+                ) return null;
                 return pendingReview;
+            }
+            if (pendingDutySyncStatusRecovery && pushScopedReview && pushScopedReview.review_id) {
+                return pushScopedReview;
             }
             return pendingReview;
         }
 
         function maybeOpenDutySyncReviewFromStatus(status) {
-            if (!pendingDutySyncReviewDeepLink) return false;
-            if (!status || !status.pending_review) return false;
+            const shouldRecoverFromStatus = pendingDutySyncStatusRecovery && !!(status && status.push_review_scope && status.push_review_scope.review_id);
+            if (!pendingDutySyncReviewDeepLink && !shouldRecoverFromStatus) return false;
+            if (!status || (!status.pending_review && !status.push_review_scope)) return false;
             const resolvedReview = resolveDutyReviewScope(status);
             if (!resolvedReview || !resolvedReview.review_id) {
                 persistDutySyncPushDebug("[App] review not opened: no scoped review match");
@@ -3878,22 +3947,25 @@
             let review = resolvedReview;
             if (
                 pendingDutySyncInlineReview &&
-                pendingDutySyncInlineReview.review_id === resolvedReview.review_id &&
+                dutySyncReviewIdentityMatches(pendingDutySyncInlineReview, resolvedReview) &&
                 (
                     !pendingDutySyncReviewUpdatedAt ||
-                    pendingDutySyncInlineReview.updated_at === pendingDutySyncReviewUpdatedAt ||
-                    resolvedReview.updated_at === pendingDutySyncReviewUpdatedAt
+                    normalizeDutySyncReviewUpdatedAt(pendingDutySyncInlineReview.updated_at) === normalizeDutySyncReviewUpdatedAt(pendingDutySyncReviewUpdatedAt) ||
+                    normalizeDutySyncReviewUpdatedAt(resolvedReview.updated_at) === normalizeDutySyncReviewUpdatedAt(pendingDutySyncReviewUpdatedAt)
                 )
             ) {
                 review = pendingDutySyncInlineReview;
             }
 
             if (!review || !review.review_id) return false;
-            const openKey = `${review.review_id}:${review.updated_at || ""}`;
+            const openKey = getDutySyncReviewIdentityKey(review);
             if (lastOpenedDutySyncReviewKey === openKey) {
                 return false;
             }
+            pendingDutySyncStatusRecovery = false;
             pendingDutySyncReviewDeepLink = false;
+            pendingDutySyncReviewId = null;
+            pendingDutySyncReviewUpdatedAt = null;
             setDutySyncPushRenderLock(false);
             clearDutySyncPushContext();
             lastOpenedDutySyncReviewKey = openKey;
@@ -3922,11 +3994,14 @@
 
         function maybeOpenDutySyncReviewFromPayload(review, resumeStartedAt = null, renderSource = "push_scoped") {
             if (!pendingDutySyncReviewDeepLink || !review || !review.review_id) return false;
-            const openKey = `${review.review_id}:${review.updated_at || ""}`;
+            const openKey = getDutySyncReviewIdentityKey(review);
             if (lastOpenedDutySyncReviewKey === openKey) {
                 return false;
             }
+            pendingDutySyncStatusRecovery = false;
             pendingDutySyncReviewDeepLink = false;
+            pendingDutySyncReviewId = null;
+            pendingDutySyncReviewUpdatedAt = null;
             setDutySyncPushRenderLock(false);
             clearDutySyncPushContext();
             lastOpenedDutySyncReviewKey = openKey;
@@ -3959,23 +4034,23 @@
             return true;
         }
 
-        function resolveAuthoritativeDutyReview(nextPendingReview) {
-            if (!nextPendingReview || !nextPendingReview.review_id) {
+        function resolveAuthoritativeDutyReview(nextPendingReview, pushScopedReview = null) {
+            const preferredReview = pushScopedReview && pushScopedReview.review_id ? pushScopedReview : nextPendingReview;
+            if (!preferredReview || !preferredReview.review_id) {
                 return null;
             }
             if (
                 activeDutyReview &&
-                activeDutyReview.review_id === nextPendingReview.review_id &&
-                (!activeDutyReview.updated_at || !nextPendingReview.updated_at || activeDutyReview.updated_at === nextPendingReview.updated_at)
+                dutySyncReviewIdentityMatches(activeDutyReview, preferredReview)
             ) {
                 const activeChangeCount = Array.isArray(activeDutyReview.changes) ? activeDutyReview.changes.length : 0;
-                const nextChangeCount = Array.isArray(nextPendingReview.changes) ? nextPendingReview.changes.length : 0;
+                const nextChangeCount = Array.isArray(preferredReview.changes) ? preferredReview.changes.length : 0;
                 const activeIsScoped = Array.isArray(activeDutyReview.scope_change_keys) && activeDutyReview.scope_change_keys.length > 0;
                 if (activeIsScoped || (activeChangeCount > 0 && activeChangeCount < nextChangeCount)) {
                     return activeDutyReview;
                 }
             }
-            return nextPendingReview;
+            return preferredReview;
         }
 
         function updateDutySyncUi(status) {
@@ -3988,13 +4063,17 @@
             if (appMode !== "scheduling") return;
             logDutySyncRuntime("updateDutySyncUi", {
                 pending_review: summarizeDutyReview(status && status.pending_review ? status.pending_review : null),
+                push_review_scope: summarizeDutyReview(status && status.push_review_scope ? status.push_review_scope : null),
                 current_active_review: summarizeDutyReview(activeDutyReview),
                 current_status: status && status.current_status ? status.current_status : null,
             });
             dutySyncConnected = !!(status && status.connected);
             dutySyncNeedsReconnect = !!(status && status.requires_google_reconnect);
             setActiveDutyReview(
-                resolveAuthoritativeDutyReview(status && status.pending_review ? status.pending_review : null),
+                resolveAuthoritativeDutyReview(
+                    status && status.pending_review ? status.pending_review : null,
+                    status && status.push_review_scope ? status.push_review_scope : null
+                ),
                 "updateDutySyncUi"
             );
 
@@ -4050,7 +4129,10 @@
             pushTestAction.hidden = true;
             scheduleDutySyncPolling();
 
-            maybeOpenDutySyncReviewFromStatus(status);
+            const openedFromStatus = maybeOpenDutySyncReviewFromStatus(status);
+            if (!openedFromStatus && pendingDutySyncStatusRecovery && !(status && status.push_review_scope && status.push_review_scope.review_id)) {
+                pendingDutySyncStatusRecovery = false;
+            }
             renderDutySyncPrimaryBanner();
         }
 
