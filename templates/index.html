@@ -4720,6 +4720,9 @@
             title.textContent = `Duty review · ${renderReview.source_month || "latest roster"}`;
             card.appendChild(title);
 
+            const visibleChanges = buildDutyReviewVisibleChanges(renderReview);
+            const visibleSummaryValues = buildDutyReviewSummary(visibleChanges);
+            const visibleChangeCount = visibleChanges.length;
             {% if app_env != "production" %}
             const finalDebugBlock = document.createElement("pre");
             finalDebugBlock.className = "calendar-subcopy";
@@ -4731,13 +4734,11 @@
                 `approval_change_keys: ${JSON.stringify(buildDutySyncApprovalChangeKeys(renderReview))}`,
                 `render_input_change_count: ${(review.changes || []).length}`,
                 `render_input_change_keys: ${JSON.stringify((review.changes || []).map((change) => change.change_key).filter(Boolean))}`,
+                `visible_row_count: ${visibleChangeCount}`,
+                `visible_row_types: ${JSON.stringify(visibleChanges.map((change) => change.change_type).filter(Boolean))}`,
             ].join("\n");
             card.appendChild(finalDebugBlock);
             {% endif %}
-
-            const visibleChanges = buildDutyReviewVisibleChanges(renderReview);
-            const visibleSummaryValues = buildDutyReviewSummary(visibleChanges);
-            const visibleChangeCount = visibleChanges.length;
             const isSingleEventReview = visibleChangeCount === 1 && renderReview.review_type !== "monthly_rollover";
             const reviewMode = isSingleEventReview ? "single" : (renderReview.review_mode === "individual" ? "individual" : "group");
             const singleChange = getSingleDutyReviewChange(renderReview);
