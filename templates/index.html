@@ -4083,19 +4083,7 @@
                 return false;
             }
 
-            let review = resolvedReview;
-            if (
-                pendingDutySyncInlineReview &&
-                dutySyncReviewIdentityMatches(pendingDutySyncInlineReview, resolvedReview) &&
-                (
-                    !pendingDutySyncReviewUpdatedAt ||
-                    normalizeDutySyncReviewUpdatedAt(pendingDutySyncInlineReview.updated_at) === normalizeDutySyncReviewUpdatedAt(pendingDutySyncReviewUpdatedAt) ||
-                    normalizeDutySyncReviewUpdatedAt(resolvedReview.updated_at) === normalizeDutySyncReviewUpdatedAt(pendingDutySyncReviewUpdatedAt)
-                )
-            ) {
-                review = pendingDutySyncInlineReview;
-            }
-
+            const review = resolvedReview;
             if (!review || !review.review_id) return false;
             const openKey = getDutySyncReviewIdentityKey(review);
             if (lastOpenedDutySyncReviewKey === openKey) {
@@ -4187,8 +4175,9 @@
                 const activeChangeCount = Array.isArray(activeDutyReview.changes) ? activeDutyReview.changes.length : 0;
                 const nextChangeCount = Array.isArray(preferredReview.changes) ? preferredReview.changes.length : 0;
                 const activeIsScoped = Array.isArray(activeDutyReview.scope_change_keys) && activeDutyReview.scope_change_keys.length > 0;
-                if (activeIsScoped || (activeChangeCount > 0 && activeChangeCount < nextChangeCount)) {
-                    return activeDutyReview;
+                const nextIsScoped = Array.isArray(preferredReview.scope_change_keys) && preferredReview.scope_change_keys.length > 0;
+                if (!nextIsScoped && (activeIsScoped || (activeChangeCount > 0 && activeChangeCount < nextChangeCount))) {
+                    return preferredReview;
                 }
             }
             return preferredReview;
