@@ -3275,6 +3275,14 @@
         function getPendingDutySyncInlineReviewForDeepLink() {
             const review = pendingDutySyncInlineReview || loadPendingDutySyncInlineReview();
             if (!review || !review.review_id) return null;
+            const isScopedSubset =
+                review.review_type !== "monthly_rollover" &&
+                Array.isArray(review.scope_change_keys) &&
+                review.scope_change_keys.length > 0;
+            if (isScopedSubset) {
+                clearPendingDutySyncInlineReview();
+                return null;
+            }
             if (pendingDutySyncReviewId && review.review_id !== pendingDutySyncReviewId) return null;
             if (
                 pendingDutySyncReviewUpdatedAt
@@ -5881,10 +5889,18 @@
                 setDutySyncPushRenderLock(true);
                 storeDutySyncPushContextFromUrl(targetUrl, "service_worker_message");
                 if (data.review) {
-                    try {
-                        sessionStorage.setItem("duty-sync-inline-review", JSON.stringify(data.review));
-                    } catch (_error) {
-                        // Keep the push flow resilient even if storage is unavailable.
+                    const isScopedSubset =
+                        data.review.review_type !== "monthly_rollover" &&
+                        Array.isArray(data.review.scope_change_keys) &&
+                        data.review.scope_change_keys.length > 0;
+                    if (isScopedSubset) {
+                        clearPendingDutySyncInlineReview();
+                    } else {
+                        try {
+                            sessionStorage.setItem("duty-sync-inline-review", JSON.stringify(data.review));
+                        } catch (_error) {
+                            // Keep the push flow resilient even if storage is unavailable.
+                        }
                     }
                 }
                 await restoreDutySyncPushContextFromStorage();
