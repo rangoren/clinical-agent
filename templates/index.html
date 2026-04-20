@@ -4101,6 +4101,12 @@
             logDutySyncRuntime("restorePushContextAndResumeDutySyncReview start", { href: window.location.href });
             const restored = await restoreDutySyncPushContextFromStorage();
             const shouldResume = shouldResumeDutySyncReviewOnLifecycleEvent();
+            const hasRealPushContext =
+                !!restored ||
+                pendingDutySyncReviewDeepLink ||
+                !!pendingDutySyncReviewId ||
+                !!pendingDutySyncReviewUpdatedAt ||
+                isDutySyncPushDeepLinkUrlActive();
             if (shouldResume) {
                 pendingDutySyncStatusRecovery = false;
                 logDutySyncRuntime("FLOW_RESUME_ATTEMPT", { source: "resume" });
@@ -4108,7 +4114,7 @@
                 logDutySyncRuntime("restorePushContextAndResumeDutySyncReview exit", { reason: "resumed" });
                 return;
             }
-            pendingDutySyncStatusRecovery = !restored;
+            pendingDutySyncStatusRecovery = !restored && hasRealPushContext;
             logDutySyncRuntime("FLOW_RESUME_SKIPPED", { source: "resume", reason: "no_resume" });
             if (pendingDutySyncStatusRecovery) {
                 if (appMode !== "scheduling") {
