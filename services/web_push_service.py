@@ -131,6 +131,8 @@ def send_web_push_message(session_id, title, body, tag="duty-sync-review", url=N
     }
     if review:
         payload["review"] = review
+        payload["review_id"] = review.get("review_id") or ""
+        payload["updated_at"] = review.get("updated_at") or ""
     sent_count = 0
     for doc in push_subscriptions_collection.find({"session_id": session_id}):
         if _send_notification_to_subscription(doc.get("subscription") or {}, payload):

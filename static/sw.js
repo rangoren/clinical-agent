@@ -82,6 +82,8 @@ self.addEventListener("push", (event) => {
     tag: payload.tag || "duty-sync-review",
     data: {
       url: payload.url || "/?app_mode=scheduling&duty_sync_review=1",
+      review_id: payload.review_id || "",
+      updated_at: payload.updated_at || "",
       review: payload.review || null,
     },
   };
@@ -91,8 +93,13 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const baseTargetUrl = (event.notification.data && event.notification.data.url) || "/?app_mode=scheduling&duty_sync_review=1";
-  const review = (event.notification.data && event.notification.data.review) || null;
-  const resolvedTargetUrl = withDutySyncReviewIdentity(baseTargetUrl, review);
+  const notificationData = event.notification.data || {};
+  const review = notificationData.review || null;
+  const reviewIdentity = {
+    review_id: notificationData.review_id || (review && review.review_id) || "",
+    updated_at: notificationData.updated_at || (review && review.updated_at) || "",
+  };
+  const resolvedTargetUrl = withDutySyncReviewIdentity(baseTargetUrl, reviewIdentity);
   const traceId = `push-${Date.now()}`;
   self.__dutySyncDebug("notificationclick fired", { targetUrl: resolvedTargetUrl, traceId });
   let storedTraceLine = "";
@@ -102,8 +109,8 @@ self.addEventListener("notificationclick", (event) => {
         const parsedUrl = new URL(resolvedTargetUrl, self.location.origin);
         const context = {
           active: true,
-          review_id: (review && review.review_id) || parsedUrl.searchParams.get("duty_sync_review_id") || "",
-          updated_at: (review && review.updated_at) || parsedUrl.searchParams.get("duty_sync_review_updated_at") || "",
+          review_id: reviewIdentity.review_id || parsedUrl.searchParams.get("duty_sync_review_id") || "",
+          updated_at: reviewIdentity.updated_at || parsedUrl.searchParams.get("duty_sync_review_updated_at") || "",
           source: "service_worker_notificationclick",
         };
         storedTraceLine = `[SW/App] stored push context review_id=${context.review_id} updated_at=${context.updated_at}`;
