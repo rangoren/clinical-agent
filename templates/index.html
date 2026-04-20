@@ -3267,7 +3267,10 @@
             if (dutySyncReviewOpenPromise) return dutySyncReviewOpenPromise;
             dutySyncReviewOpenPromise = (async () => {
             const params = new URLSearchParams(window.location.search);
-            if (params.get("duty_sync_review") !== "1" && !restoreDutySyncPushContextFromStorage()) return;
+            if (params.get("duty_sync_review") !== "1") {
+                const restored = await restoreDutySyncPushContextFromStorage();
+                if (!restored) return;
+            }
             pendingDutySyncReviewId = params.get("duty_sync_review_id");
             pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
             if (!pendingDutySyncReviewId || !pendingDutySyncReviewUpdatedAt) {
@@ -3310,6 +3313,13 @@
                 return await dutySyncReviewOpenPromise;
             } finally {
                 dutySyncReviewOpenPromise = null;
+            }
+        }
+
+        async function restorePushContextAndResumeDutySyncReview() {
+            await restoreDutySyncPushContextFromStorage();
+            if (shouldResumeDutySyncReviewOnLifecycleEvent()) {
+                await resumeDutySyncReviewFromDeepLink();
             }
         }
 
@@ -5078,26 +5088,19 @@
             dutySyncDebug("pageshow fired", { href: window.location.href });
             persistDutySyncPushDebug("[Client] app resumed");
             storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
-            restoreDutySyncPushContextFromStorage().catch(() => {});
-            if (shouldResumeDutySyncReviewOnLifecycleEvent()) {
-                resumeDutySyncReviewFromDeepLink().catch(() => {});
-            }
+            restorePushContextAndResumeDutySyncReview().catch(() => {});
         });
         document.addEventListener("visibilitychange", () => {
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
             if (document.visibilityState === "visible") {
                 persistDutySyncPushDebug("[Client] app resumed");
                 storeDutySyncPushContextFromUrl(window.location.href, "visibilitychange_url");
-                restoreDutySyncPushContextFromStorage().catch(() => {});
-                if (shouldResumeDutySyncReviewOnLifecycleEvent()) {
-                    resumeDutySyncReviewFromDeepLink().catch(() => {});
-                }
+                restorePushContextAndResumeDutySyncReview().catch(() => {});
             }
         });
         if (pendingDutySyncReviewDeepLink) {
             storeDutySyncPushContextFromUrl(window.location.href, "pending_deeplink_url");
-            restoreDutySyncPushContextFromStorage().catch(() => {});
-            resumeDutySyncReviewFromDeepLink().catch(() => {});
+            restorePushContextAndResumeDutySyncReview().catch(() => {});
         }
         renderModeState();
         autoResizeInput();
