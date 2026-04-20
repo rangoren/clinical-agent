@@ -2798,7 +2798,11 @@
             const visibleChanges = [];
             changes.forEach((change) => {
                 if (!change) return;
-                if (change.change_type !== "moved") {
+                const isMovedChange =
+                    change.change_type === "moved" ||
+                    change.change_hint === "moved" ||
+                    (typeof change.change_key === "string" && change.change_key.startsWith("moved:"));
+                if (!isMovedChange) {
                     visibleChanges.push(change);
                     return;
                 }
