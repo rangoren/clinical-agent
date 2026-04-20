@@ -2019,6 +2019,7 @@
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
         let dutySyncDebugPanelOpen = false;
+        let dutySyncFlowTraceId = null;
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
         const studyCardsCacheKey = "entry_study_cards_v1";
@@ -2597,6 +2598,47 @@
             };
         }
 
+        function generateDutySyncTraceId() {
+            return `ds-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        }
+
+        function getDutySyncLogReviewContext(payload = null) {
+            const review = payload && payload.review ? payload.review : null;
+            const summarizedReview = summarizeDutyReview(review);
+            return {
+                review_id:
+                    (payload && Object.prototype.hasOwnProperty.call(payload, "review_id") ? payload.review_id : null)
+                    || (payload && Object.prototype.hasOwnProperty.call(payload, "pending_review") ? ((payload.pending_review || {}).review_id || null) : null)
+                    || (payload && Object.prototype.hasOwnProperty.call(payload, "current_active_review") ? ((payload.current_active_review || {}).review_id || null) : null)
+                    || (payload && Object.prototype.hasOwnProperty.call(payload, "authoritative_review") ? ((payload.authoritative_review || {}).review_id || null) : null)
+                    || (summarizedReview ? summarizedReview.review_id : null)
+                    || pendingDutySyncReviewId
+                    || ((activeDutyReview || {}).review_id || null),
+                updated_at:
+                    (payload && Object.prototype.hasOwnProperty.call(payload, "updated_at") ? payload.updated_at : null)
+                    || (payload && Object.prototype.hasOwnProperty.call(payload, "pending_review") ? ((payload.pending_review || {}).updated_at || null) : null)
+                    || (payload && Object.prototype.hasOwnProperty.call(payload, "current_active_review") ? ((payload.current_active_review || {}).updated_at || null) : null)
+                    || (payload && Object.prototype.hasOwnProperty.call(payload, "authoritative_review") ? ((payload.authoritative_review || {}).updated_at || null) : null)
+                    || (summarizedReview ? summarizedReview.updated_at : null)
+                    || pendingDutySyncReviewUpdatedAt
+                    || ((activeDutyReview || {}).updated_at || null),
+                source: (payload && payload.source) || "unknown",
+            };
+        }
+
+        function ensureDutySyncFlowTraceId(source = "unknown", payload = null, forceNew = false) {
+            if (!dutySyncFlowTraceId || forceNew) {
+                dutySyncFlowTraceId = dutySyncTraceId || generateDutySyncTraceId();
+                const reviewContext = getDutySyncLogReviewContext(payload);
+                logDutySyncRuntime("FLOW_START", {
+                    source,
+                    review_id: reviewContext.review_id,
+                    updated_at: reviewContext.updated_at,
+                }, dutySyncFlowTraceId);
+            }
+            return dutySyncFlowTraceId;
+        }
+
         function readDutySyncDebugEntries() {
             {% if app_env != "production" %}
             try {
@@ -2634,18 +2676,26 @@
             {% endif %}
         }
 
-        function logDutySyncRuntime(message, payload = null) {
+        function logDutySyncRuntime(message, payload = null, overrideTraceId = null) {
             {% if app_env != "production" %}
+            const reviewContext = getDutySyncLogReviewContext(payload);
+            const traceId = overrideTraceId || dutySyncFlowTraceId || dutySyncTraceId || "none";
             const entry = {
                 ts: new Date().toISOString(),
-                message: `[DutySyncDebug] ${message}`,
-                payload
+                message: `[DutySyncDebug][trace_id=${traceId}] ${message}`,
+                payload: {
+                    trace_id: traceId,
+                    review_id: reviewContext.review_id,
+                    updated_at: reviewContext.updated_at,
+                    source: reviewContext.source,
+                    ...(payload || {})
+                }
             };
             const entries = readDutySyncDebugEntries();
             entries.push(entry);
             writeDutySyncDebugEntries(entries);
             renderDutySyncDebugConsole();
-            console.log(entry.message, payload || {});
+            console.log(entry.message, entry.payload || {});
             {% endif %}
         }
 
@@ -2687,11 +2737,38 @@
         function setActiveDutyReview(nextReview, source) {
             const previousReview = activeDutyReview;
             activeDutyReview = nextReview || null;
+            const previousSummary = summarizeDutyReview(previousReview);
+            const nextSummary = summarizeDutyReview(activeDutyReview);
             logDutySyncRuntime("activeDutyReview assigned", {
                 source: source || "unknown",
-                previous: summarizeDutyReview(previousReview),
-                next: summarizeDutyReview(activeDutyReview),
+                previous: previousSummary,
+                next: nextSummary,
+                review_id: nextSummary ? nextSummary.review_id : null,
+                updated_at: nextSummary ? nextSummary.updated_at : null,
             });
+            if (
+                previousSummary
+                && nextSummary
+                && (
+                    previousSummary.review_id !== nextSummary.review_id
+                    || previousSummary.updated_at !== nextSummary.updated_at
+                )
+            ) {
+                logDutySyncRuntime("FLOW_OVERWRITE", {
+                    source: source || "unknown",
+                    previous: previousSummary,
+                    next: nextSummary,
+                    review_id: nextSummary.review_id,
+                    updated_at: nextSummary.updated_at,
+                });
+            }
+            if (!previousSummary && nextSummary) {
+                logDutySyncRuntime("FLOW_REVIEW_LOADED", {
+                    source: source || "unknown",
+                    review_id: nextSummary.review_id,
+                    updated_at: nextSummary.updated_at,
+                });
+            }
             return activeDutyReview;
         }
 
@@ -2933,6 +3010,10 @@
             });
             persistDutySyncPushDebug(`[App] review fetch result status=${data && data.status ? data.status : "unknown"} source=${data && data.source ? data.source : "none"}`);
             if (data && data.review && data.status === "loaded") {
+                logDutySyncRuntime("FLOW_REVIEW_LOADED", {
+                    source: data.source || "push_scoped",
+                    review: summarizeDutyReview(data.review),
+                });
                 logDutySyncRuntime("loadDutySyncReviewForDeepLink loaded", {
                     source: data.source || "push_scoped",
                     review: summarizeDutyReview(data.review),
@@ -3456,6 +3537,11 @@
             dutySyncTraceId = params.get("duty_sync_trace_id");
             pendingDutySyncInlineReview = loadPendingDutySyncInlineReview();
             const swTrace = (params.get("duty_sync_trace_sw") || "").split("|").filter(Boolean);
+            ensureDutySyncFlowTraceId("push", {
+                source: "push",
+                review_id: pendingDutySyncReviewId || null,
+                updated_at: pendingDutySyncReviewUpdatedAt || null,
+            }, reviewDeepLink === "1");
             logDutySyncRuntime("push/deep-link entry received", {
                 requested_mode: requestedMode || null,
                 review_deep_link: reviewDeepLink || null,
@@ -3498,6 +3584,11 @@
             if (dutySyncReviewOpenPromise) return dutySyncReviewOpenPromise;
             dutySyncReviewOpenPromise = (async () => {
             const params = new URLSearchParams(window.location.search);
+            ensureDutySyncFlowTraceId("resume", {
+                source: "resume",
+                review_id: params.get("duty_sync_review_id"),
+                updated_at: params.get("duty_sync_review_updated_at"),
+            });
             logDutySyncRuntime("resumeDutySyncReviewFromDeepLink start", {
                 href: window.location.href,
                 review_id: params.get("duty_sync_review_id"),
@@ -3506,6 +3597,8 @@
             if (params.get("duty_sync_review") !== "1") {
                 const restored = await restoreDutySyncPushContextFromStorage();
                 if (!restored) {
+                    logDutySyncRuntime("FLOW_RESUME_SKIPPED", { source: "resume", reason: "restore_failed" });
+                    logDutySyncRuntime("FLOW_END", { source: "resume", reason: "restore_failed" });
                     logDutySyncRuntime("resumeDutySyncReviewFromDeepLink exit", { reason: "restore_failed" });
                     return;
                 }
@@ -3543,6 +3636,11 @@
                     review: summarizeDutyReview(loadedReview.review),
                     source: loadedReview.source || "push_scoped",
                 });
+                logDutySyncRuntime("FLOW_END", {
+                    source: loadedReview.source || "push_scoped",
+                    reason: "loaded_review_rendered",
+                    review: summarizeDutyReview(loadedReview.review),
+                });
                 return;
             }
             const inlineReview = getPendingDutySyncInlineReviewForDeepLink();
@@ -3553,10 +3651,16 @@
                     reason: "inline_review_rendered",
                     review: summarizeDutyReview(inlineReview),
                 });
+                logDutySyncRuntime("FLOW_END", {
+                    source: "push_scoped",
+                    reason: "inline_review_rendered",
+                    review: summarizeDutyReview(inlineReview),
+                });
                 return;
             }
             await refreshDutySyncStatus();
             logDutySyncRuntime("resumeDutySyncReviewFromDeepLink exit", { reason: "status_refresh_fallback" });
+            logDutySyncRuntime("FLOW_END", { source: "status", reason: "status_refresh_fallback" });
             })();
             try {
                 return await dutySyncReviewOpenPromise;
@@ -3566,14 +3670,21 @@
         }
 
         async function restorePushContextAndResumeDutySyncReview() {
+            ensureDutySyncFlowTraceId("resume", {
+                source: "resume",
+                review_id: pendingDutySyncReviewId || null,
+                updated_at: pendingDutySyncReviewUpdatedAt || null,
+            });
             logDutySyncRuntime("restorePushContextAndResumeDutySyncReview start", { href: window.location.href });
             await restoreDutySyncPushContextFromStorage();
             const shouldResume = shouldResumeDutySyncReviewOnLifecycleEvent();
             if (shouldResume) {
+                logDutySyncRuntime("FLOW_RESUME_ATTEMPT", { source: "resume" });
                 await resumeDutySyncReviewFromDeepLink();
                 logDutySyncRuntime("restorePushContextAndResumeDutySyncReview exit", { reason: "resumed" });
                 return;
             }
+            logDutySyncRuntime("FLOW_RESUME_SKIPPED", { source: "resume", reason: "no_resume" });
             logDutySyncRuntime("restorePushContextAndResumeDutySyncReview exit", { reason: "no_resume" });
         }
 
@@ -3819,6 +3930,7 @@
         async function refreshDutySyncStatus() {
             if (appMode !== "scheduling") return;
             try {
+                logDutySyncRuntime("FLOW_STATUS_REFRESH", { source: "status", phase: "start" });
                 logDutySyncRuntime("refreshDutySyncStatus start", { app_mode: appMode });
                 const response = await fetch("/calendar/duty-sync/status", {
                     method: "POST",
@@ -3844,10 +3956,16 @@
                     pending_review: summarizeDutyReview(data && data.pending_review ? data.pending_review : null),
                     push_review_scope: summarizeDutyReview(data && data.push_review_scope ? data.push_review_scope : null),
                 });
+                logDutySyncRuntime("FLOW_STATUS_REFRESH", {
+                    source: "status",
+                    phase: "complete",
+                    pending_review: summarizeDutyReview(data && data.pending_review ? data.pending_review : null),
+                });
                 updateDutySyncUi(data);
                 return data;
             } catch (_error) {
                 logDutySyncRuntime("refreshDutySyncStatus complete", { error: "request_failed" });
+                logDutySyncRuntime("FLOW_STATUS_REFRESH", { source: "status", phase: "failed" });
                 updateDutySyncUi({ available: false, connected: false });
                 return { available: false, connected: false };
             }
@@ -4093,6 +4211,11 @@
         function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown") {
             if (!review || !review.review_id) return;
             logDutySyncRuntime("appendDutyReviewCard", {
+                review: summarizeDutyReview(review),
+                source: renderSource,
+                caller: renderCaller,
+            });
+            logDutySyncRuntime("FLOW_REVIEW_RENDERED", {
                 review: summarizeDutyReview(review),
                 source: renderSource,
                 caller: renderCaller,
@@ -5347,6 +5470,10 @@
                 const data = event.data || {};
                 if (data.type !== "duty-sync-open-review") return;
                 const targetUrl = data.url || buildDutySyncDeepLinkPath();
+                ensureDutySyncFlowTraceId("push", {
+                    source: "push",
+                    review: data.review || null,
+                }, true);
                 logDutySyncRuntime("push/deep-link entry received", {
                     source: "service_worker_message",
                     target_url: targetUrl,
@@ -5380,6 +5507,7 @@
         window.addEventListener("pageshow", () => {
             dutySyncDebug("pageshow fired", { href: window.location.href });
             persistDutySyncPushDebug("[Client] app resumed");
+            ensureDutySyncFlowTraceId("resume", { source: "resume" }, true);
             logDutySyncRuntime("push/deep-link entry received", { source: "pageshow", href: window.location.href });
             storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
             restorePushContextAndResumeDutySyncReview().catch(() => {});
@@ -5388,6 +5516,7 @@
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
             if (document.visibilityState === "visible") {
                 persistDutySyncPushDebug("[Client] app resumed");
+                ensureDutySyncFlowTraceId("resume", { source: "resume" }, true);
                 logDutySyncRuntime("push/deep-link entry received", { source: "visibilitychange", href: window.location.href });
                 storeDutySyncPushContextFromUrl(window.location.href, "visibilitychange_url");
                 restorePushContextAndResumeDutySyncReview().catch(() => {});
