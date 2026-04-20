@@ -2919,7 +2919,7 @@
                 .map((entry) => `${entry.ts} ${entry.message}${entry.payload ? ` ${JSON.stringify(entry.payload)}` : ""}`)
                 .join("\n");
             try {
-                await navigator.clipboard.writeText(text);
+                await copyDutySyncText(text);
                 logDutySyncRuntime("debug console copied");
             } catch (error) {
                 logDutySyncRuntime("debug console copy failed", { error: String(error) });
@@ -2935,11 +2935,47 @@
                 .map((entry) => `${entry.ts} ${entry.message}${entry.payload ? ` ${JSON.stringify(entry.payload)}` : ""}`)
                 .join("\n");
             try {
-                await navigator.clipboard.writeText(text);
+                await copyDutySyncText(text);
                 logDutySyncRuntime("render debug console copied");
             } catch (error) {
                 logDutySyncRuntime("render debug console copy failed", { error: String(error) });
             }
+            {% endif %}
+        }
+
+        async function copyDutySyncText(text) {
+            {% if app_env != "production" %}
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch (_error) {
+                    // Fall through to the legacy copy path below.
+                }
+            }
+            const textarea = document.createElement("textarea");
+            textarea.value = text || "";
+            textarea.setAttribute("readonly", "");
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+            textarea.style.pointerEvents = "none";
+            textarea.style.top = "0";
+            textarea.style.left = "0";
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            textarea.setSelectionRange(0, textarea.value.length);
+            try {
+                const copied = document.execCommand("copy");
+                if (!copied) {
+                    throw new Error("execCommand copy failed");
+                }
+                return true;
+            } finally {
+                textarea.remove();
+            }
+            {% else %}
+            return false;
             {% endif %}
         }
 
