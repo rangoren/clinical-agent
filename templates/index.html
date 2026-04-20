@@ -1837,6 +1837,12 @@
                                         <span id="duty-sync-runtime-debug" class="calendar-subcopy">No runtime debug yet.</span>
                                     </div>
                                 </div>
+                                <div class="settings-section">
+                                    <span class="settings-label">Push debug</span>
+                                    <div class="calendar-copy">
+                                        <span id="duty-sync-push-debug" class="calendar-subcopy">No push trace yet.</span>
+                                    </div>
+                                </div>
                                 {% endif %}
                             </div>
                         </div>
@@ -5015,6 +5021,7 @@
         storeDutySyncPushContextFromUrl(window.location.href, "startup_url");
         restoreDutySyncPushContextFromStorage().catch(() => {});
         handleInitialDutySyncDeepLink();
+        renderDutySyncPushDebug();
         registerDutyPushServiceWorker().catch(() => {});
         syncExistingDutySyncPushSubscription().catch(() => {});
         if ("serviceWorker" in navigator) {
