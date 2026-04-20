@@ -3923,7 +3923,7 @@
                     pendingDutySyncReviewUpdatedAt
                     && normalizeDutySyncReviewUpdatedAt(pushScopedReview.updated_at) !== normalizeDutySyncReviewUpdatedAt(pendingDutySyncReviewUpdatedAt)
                 ) return null;
-                return pushScopedReview;
+                return pendingReview || pushScopedReview;
             }
             if (!pendingReview) return null;
             if (pendingDutySyncReviewId || pendingDutySyncReviewUpdatedAt) {
@@ -4046,7 +4046,9 @@
         }
 
         function resolveAuthoritativeDutyReview(nextPendingReview, pushScopedReview = null) {
-            const preferredReview = pushScopedReview && pushScopedReview.review_id ? pushScopedReview : nextPendingReview;
+            const preferredReview = nextPendingReview && nextPendingReview.review_id
+                ? nextPendingReview
+                : ((pushScopedReview && pushScopedReview.review_id) ? pushScopedReview : null);
             if (!preferredReview || !preferredReview.review_id) {
                 return null;
             }
