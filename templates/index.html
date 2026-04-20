@@ -2679,6 +2679,14 @@
             );
         }
 
+        function isDutySyncPushRenderContextActive() {
+            return !!(
+                dutySyncPushRenderLock ||
+                pendingDutySyncReviewDeepLink ||
+                isDutySyncPushDeepLinkUrlActive()
+            );
+        }
+
         function setDutySyncPushRenderLock(active) {
             dutySyncPushRenderLock = !!active;
         }
@@ -3012,6 +3020,15 @@
                 showSessionBanner(
                     "Step 2: Connect your duty sheet to finish setup.",
                     `<button class="secondary-button" onclick="connectDutySync(false)">Connect Sheet</button>`
+                );
+                return true;
+            }
+
+            if (activeDutyReview && activeDutyReview.review_id) {
+                const pendingCount = activeDutyReview.included_count || (activeDutyReview.changes || []).length || 0;
+                showSessionBanner(
+                    `Duty Sync found ${pendingCount} updates pending review.`,
+                    `<button class="secondary-button" onclick="openDutySyncReviewContext()">Review updates</button>`
                 );
                 return true;
             }
@@ -3513,7 +3530,7 @@
                     appendAssistantMessage("Duty Sync checked the latest test sheet.", "system");
                 }
                 if (data.pending_review) {
-                    const hasActivePushContext = hasActiveDutySyncPushContext();
+                    const hasActivePushContext = isDutySyncPushRenderContextActive();
                     const hasPushDeepLinkUrl = isDutySyncPushDeepLinkUrlActive();
                     persistDutySyncPushDebug(`[App] connectDutySync push_check hasActive=${hasActivePushContext} deepLink=${hasPushDeepLinkUrl} url=${window.location.href} review_id=${data.pending_review.review_id}`);
                     if (hasActivePushContext || hasPushDeepLinkUrl) {
@@ -3658,7 +3675,7 @@
         function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown") {
             if (!review || !review.review_id) return;
             persistDutySyncPushDebug(`[App] render attempt caller=${renderCaller} source=${renderSource} review_id=${review.review_id} item_count=${(review.changes || []).length}`);
-            if (hasActiveDutySyncPushContext() && renderSource !== "push_scoped") {
+            if (isDutySyncPushRenderContextActive() && renderSource !== "push_scoped") {
                 persistDutySyncPushDebug(`[App] blocked review render caller=${renderCaller} source=${renderSource} review_id=${review.review_id}`);
                 dutySyncDebug("blocked review render during push context", {
                     reviewId: review.review_id,
