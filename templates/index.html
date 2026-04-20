@@ -1992,6 +1992,7 @@
                 <button type="button" onclick="toggleDutySyncDebugPanel(false)">Close</button>
                 <button type="button" onclick="clearDutySyncDebugLogs()">Clear logs</button>
                 <button type="button" onclick="copyDutySyncDebugLogs()">Copy all logs</button>
+                <button type="button" onclick="copyDutySyncRenderDebugLogs()">Copy render debug logs only</button>
             </div>
             <div id="duty-sync-debug-log" class="duty-sync-debug-log">No logs yet.</div>
         </div>
@@ -2747,6 +2748,29 @@
             {% endif %}
         }
 
+        function persistDutySyncRenderDebugEntries(entries) {
+            {% if app_env != "production" %}
+            const normalized = (Array.isArray(entries) ? entries : []).map((entry) => ({
+                id: entry.id || `render-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                ts: entry.ts || new Date().toISOString(),
+                origin: entry.origin || "server",
+                message: entry.message || "[DutySyncRenderDebug] unknown",
+                payload: entry.payload || {},
+            })).filter((entry) => String(entry.message || "").startsWith("[DutySyncRenderDebug]"));
+            if (!normalized.length) return;
+            const existing = readDutySyncDebugEntries();
+            writeDutySyncDebugEntries(mergeDutySyncDebugEntries([...existing, ...normalized]));
+            renderDutySyncDebugConsole();
+            {% endif %}
+        }
+
+        function ingestDutySyncRenderDebug(data) {
+            {% if app_env != "production" %}
+            if (!data || !Array.isArray(data.render_debug) || !data.render_debug.length) return;
+            persistDutySyncRenderDebugEntries(data.render_debug);
+            {% endif %}
+        }
+
         function readDutySyncSwDebugEntries() {
             {% if app_env != "production" %}
             return new Promise((resolve) => {
@@ -2899,6 +2923,22 @@
                 logDutySyncRuntime("debug console copied");
             } catch (error) {
                 logDutySyncRuntime("debug console copy failed", { error: String(error) });
+            }
+            {% endif %}
+        }
+
+        async function copyDutySyncRenderDebugLogs() {
+            {% if app_env != "production" %}
+            const mergedEntries = await getMergedDutySyncDebugEntries();
+            const text = mergedEntries
+                .filter((entry) => String(entry.message || "").startsWith("[DutySyncRenderDebug]"))
+                .map((entry) => `${entry.ts} ${entry.message}${entry.payload ? ` ${JSON.stringify(entry.payload)}` : ""}`)
+                .join("\n");
+            try {
+                await navigator.clipboard.writeText(text);
+                logDutySyncRuntime("render debug console copied");
+            } catch (error) {
+                logDutySyncRuntime("render debug console copy failed", { error: String(error) });
             }
             {% endif %}
         }
@@ -3213,6 +3253,7 @@
                 })
             });
             const data = await response.json();
+            ingestDutySyncRenderDebug(data);
             dutySyncDebug("review fetch finished", {
                 reviewId: pendingDutySyncReviewId,
                 status: data && data.status,
@@ -3480,6 +3521,7 @@
                     body: JSON.stringify({ session_id: sessionId })
                 });
                 const data = await response.json();
+                ingestDutySyncRenderDebug(data);
                 updateDutySyncUi(data);
                 if (data && data.pending_review && data.pending_review.review_id) {
                     appendDutyReviewCard(data.pending_review, "generic_pending_review", "openDutySyncReviewContext.status");
@@ -3496,6 +3538,7 @@
                         body: JSON.stringify({ session_id: sessionId })
                     });
                     const checkData = await checkResponse.json();
+                    ingestDutySyncRenderDebug(checkData);
                     if (checkData && checkData.pending_review && checkData.pending_review.review_id) {
                         setActiveDutyReview(checkData.pending_review, "openDutySyncReviewContext.check");
                         appendDutyReviewCard(checkData.pending_review, "generic_pending_review", "openDutySyncReviewContext.check");
@@ -4203,6 +4246,7 @@
                         })
                     });
                     const data = await response.json();
+                    ingestDutySyncRenderDebug(data);
                     dutySyncDebug("pending review loaded", {
                         hasPendingReview: !!(data && data.pending_review),
                         reviewId: data && data.pending_review ? data.pending_review.review_id : null,
@@ -4320,6 +4364,7 @@
                     })
                 });
                 const data = await response.json();
+                ingestDutySyncRenderDebug(data);
                 if (data.auth_url) {
                     closeSettingsMenu();
                     window.location.href = data.auth_url;
@@ -4361,6 +4406,7 @@
                     })
                 });
                 const data = await response.json();
+                ingestDutySyncRenderDebug(data);
                 if (data.auth_url) {
                     if (!isBackground) {
                         closeSettingsMenu();
@@ -4475,6 +4521,19 @@
 
         function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown") {
             if (!review || !review.review_id) return;
+            persistDutySyncRenderDebugEntries([{
+                ts: new Date().toISOString(),
+                origin: "app",
+                message: "[DutySyncRenderDebug] review rendered in UI",
+                payload: {
+                    review_id: review.review_id,
+                    rendered_change_count: Array.isArray(review.changes) ? review.changes.length : 0,
+                    rendered_change_types: (review.changes || []).map((change) => change.change_type).filter(Boolean),
+                    rendered_change_keys: (review.changes || []).map((change) => change.change_key).filter(Boolean),
+                    source: renderSource,
+                    caller: renderCaller,
+                },
+            }]);
             logDutySyncRuntime("appendDutyReviewCard", {
                 review: summarizeDutyReview(review),
                 source: renderSource,
@@ -4681,6 +4740,7 @@
                     })
                 });
                 const data = await response.json();
+                ingestDutySyncRenderDebug(data);
                 const isApproved = data.status === "approved";
                 if (isApproved && card) card.remove();
                 if (isApproved) {

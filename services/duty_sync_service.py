@@ -447,6 +447,61 @@ def _serialize_review_doc(review_doc):
     }
 
 
+def _review_change_keys(review):
+    return [item.get("change_key") for item in (review or {}).get("changes") or [] if item.get("change_key")]
+
+
+def _review_change_types(review):
+    return [item.get("change_type") for item in (review or {}).get("changes") or [] if item.get("change_type")]
+
+
+def _render_debug_entry(message, review=None, extra=None):
+    payload = {
+        "review_id": (review or {}).get("review_id"),
+        "change_count": len((review or {}).get("changes") or []),
+        "change_types": _review_change_types(review),
+        "change_keys": _review_change_keys(review),
+    }
+    if extra:
+        payload.update(extra)
+    return {
+        "ts": as_iso(_utcnow()),
+        "origin": "server",
+        "message": f"[DutySyncRenderDebug] {message}",
+        "payload": payload,
+    }
+
+
+def _render_scope_debug_entries(pending_review, scoped_review):
+    if not _is_debug_env():
+        return []
+    entries = []
+    if pending_review and pending_review.get("review_id"):
+        entries.append(_render_debug_entry("pending review prepared for UI/status", pending_review))
+    if scoped_review and scoped_review.get("review_id"):
+        pending_keys = set(_review_change_keys(pending_review))
+        scoped_keys = set(_review_change_keys(scoped_review))
+        entries.append(
+            _render_debug_entry(
+                "visible review scope built",
+                scoped_review,
+                {
+                    "excluded_change_keys": sorted(list(pending_keys - scoped_keys)),
+                },
+            )
+        )
+    return entries
+
+
+def _attach_render_debug(result, entries):
+    if not _is_debug_env():
+        return result
+    normalized_entries = [entry for entry in (entries or []) if entry]
+    if normalized_entries:
+        result["render_debug"] = normalized_entries
+    return result
+
+
 def _replace_pending_review(session_id, source_tab_name, source_month, changes, review_type="incremental"):
     now = _utcnow()
     existing = _active_pending_review(session_id)
@@ -765,6 +820,14 @@ def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=F
             result["polling_minutes"] = DEFAULT_DUTY_SYNC_POLLING_MINUTES
             result["has_new_pending_review"] = has_new_pending
             result["deep_link_path"] = "/?app_mode=scheduling&duty_sync_review=1"
+        if review_payload:
+            return _attach_render_debug(
+                result,
+                [
+                    _render_debug_entry("pending review prepared for UI/status", review_payload),
+                    _render_debug_entry("review payload sent to UI", review_payload, {"payload_kind": "full"}),
+                ],
+            )
         return result
     except DutySyncStructuralError as exc:
         debug_payload = _debug_payload(exc)
@@ -838,6 +901,7 @@ def get_duty_sync_status(session_id):
     pending_review = _active_pending_review(session_id)
     if pending_review:
         pending_payload = _serialize_review_doc(pending_review)
+        push_review_scope = doc.get("last_push_review_scope")
         result = {
             "available": True,
             "connected": True,
@@ -848,9 +912,15 @@ def get_duty_sync_status(session_id):
             "details": f"{pending_payload.get('included_count', 0)} updates pending review.",
             "last_checked_at": last_checked_at,
             "pending_review": pending_payload,
-            "push_review_scope": doc.get("last_push_review_scope"),
+            "push_review_scope": push_review_scope,
         }
-        return result
+        return _attach_render_debug(
+            result,
+            [
+                *_render_scope_debug_entries(pending_payload, push_review_scope),
+                _render_debug_entry("review payload sent to UI", pending_payload, {"payload_kind": "full"}),
+            ],
+        )
 
     details = {
         "connected": "Duty schedule connected",
@@ -896,12 +966,24 @@ def load_pending_duty_review(session_id, review_id, updated_at=None):
             or _normalized_review_updated_at(scoped_review.get("updated_at")) == _normalized_review_updated_at(updated_at)
         )
     ):
-        return {"status": "loaded", "review": pending_payload, "source": "push_scoped"}
+        return _attach_render_debug(
+            {"status": "loaded", "review": pending_payload, "source": "push_scoped"},
+            [
+                *_render_scope_debug_entries(pending_payload, scoped_review),
+                _render_debug_entry("review payload sent to UI", pending_payload, {"payload_kind": "full", "source": "push_scoped"}),
+            ],
+        )
 
     if updated_at and _normalized_review_updated_at(pending_payload.get("updated_at")) != _normalized_review_updated_at(updated_at):
         return {"status": "stale", "reply": "Pending duty review changed before it could be opened."}
 
-    return {"status": "loaded", "review": pending_payload, "source": "pending_review"}
+    return _attach_render_debug(
+        {"status": "loaded", "review": pending_payload, "source": "pending_review"},
+        [
+            _render_debug_entry("pending review prepared for UI/status", pending_payload),
+            _render_debug_entry("review payload sent to UI", pending_payload, {"payload_kind": "full", "source": "pending_review"}),
+        ],
+    )
 
 
 def connect_duty_sheet(session_id, sheet_url=None, full_name=None):
@@ -928,16 +1010,19 @@ def approve_pending_duty_review(session_id, review_id):
     )
     if not review_doc:
         return {"status": "not_found", "reply": "No pending duty review was found."}
+    pending_payload = _serialize_review_doc(review_doc)
     calendar_sync_result = _apply_review_to_calendar(session_id, review_doc)
     if calendar_sync_result.get("status") != "synced":
         return calendar_sync_result
     duties_json = _apply_review_to_snapshot(session_id, review_doc)
     applied = calendar_sync_result.get("applied") or {}
-    return {
+    return _attach_render_debug({
         "status": "approved",
         "reply": _build_calendar_apply_reply(applied),
         "approved_duty_count": len(duties_json),
-    }
+    }, [
+        _render_debug_entry("approval executing", pending_payload),
+    ])
 
 
 def approve_pending_duty_review_scope(session_id, review_id, change_keys):
@@ -950,6 +1035,7 @@ def approve_pending_duty_review_scope(session_id, review_id, change_keys):
     selected_changes = [item for item in (review_doc.get("detected_changes_json") or []) if item.get("change_key") in selected_keys]
     if not selected_changes:
         return {"status": "not_found", "reply": "No matching duty review items were found."}
+    scoped_payload = _serialize_review_doc({**review_doc, "detected_changes_json": selected_changes})
     calendar_sync_result = _apply_review_to_calendar(session_id, {**review_doc, "detected_changes_json": selected_changes})
     if calendar_sync_result.get("status") != "synced":
         return calendar_sync_result
@@ -979,12 +1065,14 @@ def approve_pending_duty_review_scope(session_id, review_id, change_keys):
             {"session_id": session_id},
             {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
         )
-    return {
+    return _attach_render_debug({
         "status": "approved",
         "reply": _build_calendar_apply_reply(calendar_sync_result.get("applied") or {}),
         "approved_duty_count": len(duties_json),
         "pending_review": _serialize_review_doc(duty_sync_pending_reviews_collection.find_one({"_id": review_doc["_id"]})) if remaining_changes else None,
-    }
+    }, [
+        _render_debug_entry("approval executing", scoped_payload),
+    ])
 
 
 def ignore_pending_duty_review(session_id, review_id):
