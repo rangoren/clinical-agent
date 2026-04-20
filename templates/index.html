@@ -2578,6 +2578,7 @@
         let lastOpenedDutySyncReviewKey = null;
         let pendingDutySyncInlineReview = null;
         let dutySyncReviewOpenPromise = null;
+        let dutySyncStatusRefreshPromise = null;
         let dutySyncPushRenderLock = false;
         let pendingDutySyncStatusRecovery = false;
         const DUTY_SYNC_PUSH_DB_NAME = "duty-sync-push";
@@ -3900,6 +3901,16 @@
             }
             pendingDutySyncStatusRecovery = !restored;
             logDutySyncRuntime("FLOW_RESUME_SKIPPED", { source: "resume", reason: "no_resume" });
+            if (pendingDutySyncStatusRecovery) {
+                if (appMode !== "scheduling") {
+                    appMode = "scheduling";
+                    renderModeState();
+                }
+                logDutySyncRuntime("restorePushContextAndResumeDutySyncReview recovery_refresh", { reason: "missing_push_context" });
+                await refreshDutySyncStatus();
+                logDutySyncRuntime("restorePushContextAndResumeDutySyncReview exit", { reason: "recovery_refresh" });
+                return;
+            }
             logDutySyncRuntime("restorePushContextAndResumeDutySyncReview exit", { reason: "no_resume" });
         }
 
@@ -4173,46 +4184,54 @@
 
         async function refreshDutySyncStatus() {
             if (appMode !== "scheduling") return;
-            try {
-                logDutySyncRuntime("FLOW_STATUS_REFRESH", { source: "status", phase: "start" });
-                logDutySyncRuntime("refreshDutySyncStatus start", { app_mode: appMode });
-                const response = await fetch("/calendar/duty-sync/status", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        session_id: sessionId
-                    })
-                });
-                const data = await response.json();
-                dutySyncDebug("pending review loaded", {
-                    hasPendingReview: !!(data && data.pending_review),
-                    reviewId: data && data.pending_review ? data.pending_review.review_id : null,
-                    scopedReviewId: data && data.push_review_scope ? data.push_review_scope.review_id : null
-                });
-                if (data && data.pending_review) {
-                    persistDutySyncPushDebug("[App] pending review loaded");
-                } else if (pendingDutySyncReviewDeepLink) {
-                    persistDutySyncPushDebug("[App] review not opened: pending review missing");
-                }
-                logDutySyncRuntime("refreshDutySyncStatus complete", {
-                    pending_review: summarizeDutyReview(data && data.pending_review ? data.pending_review : null),
-                    push_review_scope: summarizeDutyReview(data && data.push_review_scope ? data.push_review_scope : null),
-                });
-                logDutySyncRuntime("FLOW_STATUS_REFRESH", {
-                    source: "status",
-                    phase: "complete",
-                    pending_review: summarizeDutyReview(data && data.pending_review ? data.pending_review : null),
-                });
-                updateDutySyncUi(data);
-                return data;
-            } catch (_error) {
-                logDutySyncRuntime("refreshDutySyncStatus complete", { error: "request_failed" });
-                logDutySyncRuntime("FLOW_STATUS_REFRESH", { source: "status", phase: "failed" });
-                updateDutySyncUi({ available: false, connected: false });
-                return { available: false, connected: false };
+            if (dutySyncStatusRefreshPromise) {
+                return dutySyncStatusRefreshPromise;
             }
+            dutySyncStatusRefreshPromise = (async () => {
+                try {
+                    logDutySyncRuntime("FLOW_STATUS_REFRESH", { source: "status", phase: "start" });
+                    logDutySyncRuntime("refreshDutySyncStatus start", { app_mode: appMode });
+                    const response = await fetch("/calendar/duty-sync/status", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            session_id: sessionId
+                        })
+                    });
+                    const data = await response.json();
+                    dutySyncDebug("pending review loaded", {
+                        hasPendingReview: !!(data && data.pending_review),
+                        reviewId: data && data.pending_review ? data.pending_review.review_id : null,
+                        scopedReviewId: data && data.push_review_scope ? data.push_review_scope.review_id : null
+                    });
+                    if (data && data.pending_review) {
+                        persistDutySyncPushDebug("[App] pending review loaded");
+                    } else if (pendingDutySyncReviewDeepLink || pendingDutySyncStatusRecovery) {
+                        persistDutySyncPushDebug("[App] review not opened: pending review missing");
+                    }
+                    logDutySyncRuntime("refreshDutySyncStatus complete", {
+                        pending_review: summarizeDutyReview(data && data.pending_review ? data.pending_review : null),
+                        push_review_scope: summarizeDutyReview(data && data.push_review_scope ? data.push_review_scope : null),
+                    });
+                    logDutySyncRuntime("FLOW_STATUS_REFRESH", {
+                        source: "status",
+                        phase: "complete",
+                        pending_review: summarizeDutyReview(data && data.pending_review ? data.pending_review : null),
+                    });
+                    updateDutySyncUi(data);
+                    return data;
+                } catch (_error) {
+                    logDutySyncRuntime("refreshDutySyncStatus complete", { error: "request_failed" });
+                    logDutySyncRuntime("FLOW_STATUS_REFRESH", { source: "status", phase: "failed" });
+                    updateDutySyncUi({ available: false, connected: false });
+                    return { available: false, connected: false };
+                } finally {
+                    dutySyncStatusRefreshPromise = null;
+                }
+            })();
+            return dutySyncStatusRefreshPromise;
         }
 
         async function toggleGoogleCalendarConnection() {
