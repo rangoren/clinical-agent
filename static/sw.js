@@ -4,14 +4,18 @@ self.__dutySyncDebug = (...args) => {
 
 const DUTY_SYNC_PUSH_DB_NAME = "duty-sync-push";
 const DUTY_SYNC_PUSH_STORE_NAME = "context";
+const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
 
 function openDutySyncPushDb() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 1);
+    const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 2);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
         db.createObjectStore(DUTY_SYNC_PUSH_STORE_NAME);
+      }
+      if (!db.objectStoreNames.contains(DUTY_SYNC_DEBUG_STORE_NAME)) {
+        db.createObjectStore(DUTY_SYNC_DEBUG_STORE_NAME, { keyPath: "id" });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -34,6 +38,38 @@ function saveDutySyncPushContext(context) {
           db.close();
           reject(transaction.error);
         };
+      })
+  );
+}
+
+function writeDutySyncSwDebug(message, payload = null) {
+  const entry = {
+    id: `sw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    source: "sw",
+    message: `[DutySyncSWDebug] ${message}`,
+    payload: payload || {},
+  };
+  self.__dutySyncDebug(entry.message, entry.payload);
+  return openDutySyncPushDb().then(
+    (db) =>
+      new Promise((resolve) => {
+        try {
+          const transaction = db.transaction(DUTY_SYNC_DEBUG_STORE_NAME, "readwrite");
+          const store = transaction.objectStore(DUTY_SYNC_DEBUG_STORE_NAME);
+          store.put(entry);
+          transaction.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          transaction.onerror = () => {
+            db.close();
+            resolve();
+          };
+        } catch (_error) {
+          db.close();
+          resolve();
+        }
       })
   );
 }
@@ -77,17 +113,35 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("push", (event) => {
   const payload = event.data ? event.data.json() : {};
   const title = payload.title || "Duty Sync update";
+  const targetUrl = payload.url || "/?app_mode=scheduling&duty_sync_review=1";
   const options = {
     body: payload.body || "Duty Sync found personal schedule changes.",
     tag: payload.tag || "duty-sync-review",
     data: {
-      url: payload.url || "/?app_mode=scheduling&duty_sync_review=1",
+      url: targetUrl,
       review_id: payload.review_id || "",
       updated_at: payload.updated_at || "",
       review: payload.review || null,
     },
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    writeDutySyncSwDebug("push event received", {
+      payload_keys: Object.keys(payload || {}),
+      has_review_id: !!payload.review_id,
+      has_updated_at: !!payload.updated_at,
+      title,
+      body: options.body,
+      target_url_before_enrichment: targetUrl,
+    })
+      .then(() =>
+        writeDutySyncSwDebug("notification data created", {
+          notification_data: options.data,
+          review_id: options.data.review_id || null,
+          updated_at: options.data.updated_at || null,
+        })
+      )
+      .then(() => self.registration.showNotification(title, options))
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -104,7 +158,14 @@ self.addEventListener("notificationclick", (event) => {
   self.__dutySyncDebug("notificationclick fired", { targetUrl: resolvedTargetUrl, traceId });
   let storedTraceLine = "";
   event.waitUntil(
-    Promise.resolve()
+    writeDutySyncSwDebug("notificationclick start", {
+      notification_data: notificationData,
+      review_id: reviewIdentity.review_id || null,
+      updated_at: reviewIdentity.updated_at || null,
+      target_url_raw: baseTargetUrl,
+      target_url_enriched: resolvedTargetUrl,
+      trace_id: traceId,
+    })
       .then(() => {
         const parsedUrl = new URL(resolvedTargetUrl, self.location.origin);
         const context = {
@@ -114,10 +175,28 @@ self.addEventListener("notificationclick", (event) => {
           source: "service_worker_notificationclick",
         };
         storedTraceLine = `[SW/App] stored push context review_id=${context.review_id} updated_at=${context.updated_at}`;
-        return saveDutySyncPushContext(context);
+        return writeDutySyncSwDebug("storage write attempt", {
+          storage_key: "latest",
+          context,
+        }).then(() => saveDutySyncPushContext(context))
+          .then(() => writeDutySyncSwDebug("storage write success", {
+            storage_key: "latest",
+            context,
+          }))
+          .catch((error) => writeDutySyncSwDebug("storage write failure", {
+            storage_key: "latest",
+            context,
+            error: String(error),
+          }));
       })
       .then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true }))
       .then((clients) => {
+      const client = clients && clients.length ? clients[0] : null;
+      writeDutySyncSwDebug("existing client detection", {
+        client_count: clients ? clients.length : 0,
+        chosen_client_url: client && client.url ? client.url : null,
+        client_navigate_exists: !!(client && "navigate" in client),
+      });
       if (clients && clients.length) {
         const targetUrl = withDutySyncTrace(resolvedTargetUrl, traceId, [
           "[SW] notificationclick fired",
@@ -125,10 +204,13 @@ self.addEventListener("notificationclick", (event) => {
           "[SW] client found",
           "[SW] navigate/openWindow attempted",
         ]);
-        const client = clients[0];
         self.__dutySyncDebug("client found", { clientCount: clients.length, targetUrl });
         if ("navigate" in client) {
           self.__dutySyncDebug("navigation attempted", { via: "client.navigate", targetUrl });
+          writeDutySyncSwDebug("navigation action", {
+            branch: "client.navigate",
+            target_url: targetUrl,
+          });
           return client.navigate(targetUrl).then((navigatedClient) => {
             const activeClient = navigatedClient || client;
             if (activeClient && "postMessage" in activeClient) {
@@ -142,8 +224,16 @@ self.addEventListener("notificationclick", (event) => {
         }
         if (self.clients.openWindow) {
           self.__dutySyncDebug("navigation attempted", { via: "openWindow-existing-client", targetUrl });
+          writeDutySyncSwDebug("navigation action", {
+            branch: "openWindow-existing-client",
+            target_url: targetUrl,
+          });
           return self.clients.openWindow(targetUrl);
         }
+        writeDutySyncSwDebug("navigation action", {
+          branch: "existing-client-no-navigation",
+          target_url: targetUrl,
+        });
         return client;
       }
       const targetUrl = withDutySyncTrace(resolvedTargetUrl, traceId, [
@@ -155,8 +245,16 @@ self.addEventListener("notificationclick", (event) => {
       self.__dutySyncDebug("no client found", { targetUrl });
       if (self.clients.openWindow) {
         self.__dutySyncDebug("navigation attempted", { via: "openWindow", targetUrl });
+        writeDutySyncSwDebug("navigation action", {
+          branch: "openWindow",
+          target_url: targetUrl,
+        });
         return self.clients.openWindow(targetUrl);
       }
+      writeDutySyncSwDebug("navigation action", {
+        branch: "no-client-no-openWindow",
+        target_url: targetUrl,
+      });
       return undefined;
     })
   );

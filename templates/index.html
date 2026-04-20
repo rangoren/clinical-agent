@@ -2025,6 +2025,7 @@
         const studyCardsCacheKey = "entry_study_cards_v1";
         const dutySyncPollingIntervalMs = "{{ app_env }}" === "production" ? 45 * 60 * 1000 : 5 * 60 * 1000;
         const dutySyncDevLogStorageKey = "duty-sync-dev-console";
+        const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -2663,11 +2664,105 @@
             {% endif %}
         }
 
-        function renderDutySyncDebugConsole() {
+        function readDutySyncSwDebugEntries() {
+            {% if app_env != "production" %}
+            return new Promise((resolve) => {
+                try {
+                    const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 2);
+                    request.onupgradeneeded = () => {
+                        const db = request.result;
+                        if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
+                            db.createObjectStore(DUTY_SYNC_PUSH_STORE_NAME);
+                        }
+                        if (!db.objectStoreNames.contains(DUTY_SYNC_DEBUG_STORE_NAME)) {
+                            db.createObjectStore(DUTY_SYNC_DEBUG_STORE_NAME, { keyPath: "id" });
+                        }
+                    };
+                    request.onerror = () => resolve([]);
+                    request.onsuccess = () => {
+                        const db = request.result;
+                        if (!db.objectStoreNames.contains(DUTY_SYNC_DEBUG_STORE_NAME)) {
+                            db.close();
+                            resolve([]);
+                            return;
+                        }
+                        const transaction = db.transaction(DUTY_SYNC_DEBUG_STORE_NAME, "readonly");
+                        const store = transaction.objectStore(DUTY_SYNC_DEBUG_STORE_NAME);
+                        const getAllRequest = store.getAll();
+                        getAllRequest.onerror = () => {
+                            db.close();
+                            resolve([]);
+                        };
+                        getAllRequest.onsuccess = () => {
+                            const value = Array.isArray(getAllRequest.result) ? getAllRequest.result : [];
+                            db.close();
+                            resolve(value);
+                        };
+                    };
+                } catch (_error) {
+                    resolve([]);
+                }
+            });
+            {% else %}
+            return Promise.resolve([]);
+            {% endif %}
+        }
+
+        function clearDutySyncSwDebugEntries() {
+            {% if app_env != "production" %}
+            return new Promise((resolve) => {
+                try {
+                    const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 2);
+                    request.onupgradeneeded = () => {
+                        const db = request.result;
+                        if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
+                            db.createObjectStore(DUTY_SYNC_PUSH_STORE_NAME);
+                        }
+                        if (!db.objectStoreNames.contains(DUTY_SYNC_DEBUG_STORE_NAME)) {
+                            db.createObjectStore(DUTY_SYNC_DEBUG_STORE_NAME, { keyPath: "id" });
+                        }
+                    };
+                    request.onerror = () => resolve();
+                    request.onsuccess = () => {
+                        const db = request.result;
+                        if (!db.objectStoreNames.contains(DUTY_SYNC_DEBUG_STORE_NAME)) {
+                            db.close();
+                            resolve();
+                            return;
+                        }
+                        const transaction = db.transaction(DUTY_SYNC_DEBUG_STORE_NAME, "readwrite");
+                        const store = transaction.objectStore(DUTY_SYNC_DEBUG_STORE_NAME);
+                        const clearRequest = store.clear();
+                        clearRequest.onerror = () => {
+                            db.close();
+                            resolve();
+                        };
+                        clearRequest.onsuccess = () => {
+                            db.close();
+                            resolve();
+                        };
+                    };
+                } catch (_error) {
+                    resolve();
+                }
+            });
+            {% else %}
+            return Promise.resolve();
+            {% endif %}
+        }
+
+        async function getMergedDutySyncDebugEntries() {
+            const appEntries = readDutySyncDebugEntries().map((entry) => ({ ...entry, origin: entry.origin || "app" }));
+            const swEntries = (await readDutySyncSwDebugEntries()).map((entry) => ({ ...entry, origin: entry.origin || "sw" }));
+            return [...appEntries, ...swEntries].sort((a, b) => String(a.ts || "").localeCompare(String(b.ts || "")));
+        }
+
+        async function renderDutySyncDebugConsole() {
             {% if app_env != "production" %}
             const node = document.getElementById("duty-sync-debug-log");
             if (!node) return;
-            const lines = readDutySyncDebugEntries().map((entry) => {
+            const entries = await getMergedDutySyncDebugEntries();
+            const lines = entries.map((entry) => {
                 const payload = entry.payload ? ` ${JSON.stringify(entry.payload)}` : "";
                 return `${entry.ts} ${entry.message}${payload}`;
             });
@@ -2682,6 +2777,7 @@
             const traceId = overrideTraceId || dutySyncFlowTraceId || dutySyncTraceId || "none";
             const entry = {
                 ts: new Date().toISOString(),
+                origin: "app",
                 message: `[DutySyncDebug][trace_id=${traceId}] ${message}`,
                 payload: {
                     trace_id: traceId,
@@ -2702,14 +2798,17 @@
         function clearDutySyncDebugLogs() {
             {% if app_env != "production" %}
             writeDutySyncDebugEntries([]);
-            renderDutySyncDebugConsole();
-            logDutySyncRuntime("debug console cleared");
+            clearDutySyncSwDebugEntries().then(() => {
+                renderDutySyncDebugConsole();
+                logDutySyncRuntime("debug console cleared");
+            });
             {% endif %}
         }
 
         async function copyDutySyncDebugLogs() {
             {% if app_env != "production" %}
-            const text = readDutySyncDebugEntries()
+            const mergedEntries = await getMergedDutySyncDebugEntries();
+            const text = mergedEntries
                 .map((entry) => `${entry.ts} ${entry.message}${entry.payload ? ` ${JSON.stringify(entry.payload)}` : ""}`)
                 .join("\n");
             try {
