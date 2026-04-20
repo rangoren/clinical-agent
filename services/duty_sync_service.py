@@ -444,6 +444,13 @@ def _replace_pending_review(session_id, source_tab_name, source_month, changes, 
     now = _utcnow()
     existing = _active_pending_review(session_id)
     if existing:
+        if (
+            existing.get("source_tab_name") == source_tab_name
+            and existing.get("source_month") == source_month
+            and existing.get("review_type", "incremental") == review_type
+            and (existing.get("detected_changes_json") or []) == (changes or [])
+        ):
+            return existing
         duty_sync_pending_reviews_collection.update_one(
             {"_id": existing["_id"]},
             {
@@ -872,9 +879,6 @@ def load_pending_duty_review(session_id, review_id, updated_at=None):
     if not pending_review or pending_review.get("review_id") != review_id:
         return {"status": "not_found", "reply": "No pending duty review was found."}
     pending_payload = _serialize_review_doc(pending_review)
-    if updated_at and pending_payload.get("updated_at") != updated_at:
-        return {"status": "stale", "reply": "Pending duty review changed before it could be opened."}
-
     connection = _connection_doc(session_id) or {}
     scoped_review = connection.get("last_push_review_scope")
     if (
@@ -882,7 +886,10 @@ def load_pending_duty_review(session_id, review_id, updated_at=None):
         and scoped_review.get("review_id") == review_id
         and (not updated_at or scoped_review.get("updated_at") == updated_at)
     ):
-        return {"status": "loaded", "review": pending_payload, "source": "push_scoped"}
+        return {"status": "loaded", "review": scoped_review, "source": "push_scoped"}
+
+    if updated_at and pending_payload.get("updated_at") != updated_at:
+        return {"status": "stale", "reply": "Pending duty review changed before it could be opened."}
 
     return {"status": "loaded", "review": pending_payload, "source": "pending_review"}
 
