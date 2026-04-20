@@ -3802,6 +3802,7 @@
                 caller: renderCaller
             });
             activeDutyReview = review;
+            renderDutySyncPrimaryBanner();
             removeExistingDutyReviewCard(review.review_id);
 
             const chat = document.getElementById("chat");
