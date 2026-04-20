@@ -443,6 +443,9 @@ def _serialize_review_doc(review_doc):
         "summary": review_doc.get("summary") or _review_summary(changes),
         "included_count": included_count,
         "updated_at": as_iso(review_doc.get("updated_at")) if review_doc.get("updated_at") else None,
+        "approval_change_count": len(changes),
+        "approval_change_keys": [item.get("change_key") for item in changes if item.get("change_key")],
+        "approval_changes": changes,
         "changes": changes,
     }
 

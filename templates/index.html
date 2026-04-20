@@ -2773,10 +2773,43 @@
 
         function buildDutySyncApprovalChangeKeys(review) {
             if (!review) return [];
+            if (Array.isArray(review.approval_change_keys) && review.approval_change_keys.length) {
+                return review.approval_change_keys.filter(Boolean);
+            }
             if (Array.isArray(review.scope_change_keys) && review.scope_change_keys.length) {
                 return review.scope_change_keys.filter(Boolean);
             }
             return (review.changes || []).map((change) => change.change_key).filter(Boolean);
+        }
+
+        function buildDutyReviewSummary(changes) {
+            const summary = { added: 0, changed: 0, removed: 0 };
+            (Array.isArray(changes) ? changes : []).forEach((change) => {
+                if (!change || !change.change_type) return;
+                if (Object.prototype.hasOwnProperty.call(summary, change.change_type)) {
+                    summary[change.change_type] += 1;
+                }
+            });
+            return summary;
+        }
+
+        function normalizeDutyReviewForRender(review) {
+            if (!review || !review.review_id) return review;
+            const isExplicitScoped =
+                review.review_type !== "monthly_rollover" &&
+                Array.isArray(review.scope_change_keys) &&
+                review.scope_change_keys.length > 0;
+            const approvalChanges = Array.isArray(review.approval_changes) ? review.approval_changes : [];
+            const renderInputChanges = Array.isArray(review.changes) ? review.changes : [];
+            if (isExplicitScoped || !approvalChanges.length || approvalChanges.length <= renderInputChanges.length) {
+                return review;
+            }
+            return {
+                ...review,
+                changes: approvalChanges,
+                included_count: approvalChanges.filter((change) => change && change.included !== false).length,
+                summary: buildDutyReviewSummary(approvalChanges),
+            };
         }
 
         function buildDutySyncRenderSnapshot(review, source, caller) {
@@ -4603,6 +4636,7 @@
 
         function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown") {
             if (!review || !review.review_id) return;
+            const renderReview = normalizeDutyReviewForRender(review);
             const renderSnapshot = buildDutySyncRenderSnapshot(review, renderSource, renderCaller);
             if (renderSnapshot) {
                 persistDutySyncRenderDebugEntries([renderSnapshot]);
@@ -4617,7 +4651,7 @@
                 source: renderSource,
                 caller: renderCaller,
             });
-            persistDutySyncPushDebug(`[App] render attempt caller=${renderCaller} source=${renderSource} review_id=${review.review_id} item_count=${(review.changes || []).length}`);
+            persistDutySyncPushDebug(`[App] render attempt caller=${renderCaller} source=${renderSource} review_id=${review.review_id} item_count=${(renderReview.changes || []).length}`);
             if (isDutySyncPushRenderContextActive() && renderSource !== "push_scoped") {
                 persistDutySyncPushDebug(`[App] blocked review render caller=${renderCaller} source=${renderSource} review_id=${review.review_id}`);
                 dutySyncDebug("blocked review render during push context", {
@@ -4628,37 +4662,52 @@
                 return;
             }
             persistDutySyncPushDebug("[App] review rendered");
-            persistDutySyncPushDebug(`[App] review rendered source=${renderSource} review_id=${review.review_id} item_count=${(review.changes || []).length}`);
+            persistDutySyncPushDebug(`[App] review rendered source=${renderSource} review_id=${review.review_id} item_count=${(renderReview.changes || []).length}`);
             dutySyncDebug("review rendered", {
                 reviewId: review.review_id,
-                reviewType: review.review_type,
-                changeCount: (review.changes || []).length,
+                reviewType: renderReview.review_type,
+                changeCount: (renderReview.changes || []).length,
                 source: renderSource,
                 caller: renderCaller
             });
-            setActiveDutyReview(review, "appendDutyReviewCard");
+            setActiveDutyReview(renderReview, "appendDutyReviewCard");
             renderDutySyncPrimaryBanner();
-            removeExistingDutyReviewCard(review.review_id);
+            removeExistingDutyReviewCard(renderReview.review_id);
 
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
             card.className = "duty-review-card";
-            card.id = `duty-review-${review.review_id}`;
+            card.id = `duty-review-${renderReview.review_id}`;
 
             const title = document.createElement("p");
             title.className = "draft-title";
-            title.textContent = `Duty review · ${review.source_month || "latest roster"}`;
+            title.textContent = `Duty review · ${renderReview.source_month || "latest roster"}`;
             card.appendChild(title);
 
-            const isSingleEventReview = Array.isArray(review.changes) && review.changes.length === 1 && review.review_type !== "monthly_rollover";
-            const reviewMode = isSingleEventReview ? "single" : (review.review_mode === "individual" ? "individual" : "group");
-            const singleChange = getSingleDutyReviewChange(review);
+            {% if app_env != "production" %}
+            const finalDebugBlock = document.createElement("pre");
+            finalDebugBlock.className = "calendar-subcopy";
+            finalDebugBlock.style.whiteSpace = "pre-wrap";
+            finalDebugBlock.textContent = [
+                "[DutySyncFinalDebug]",
+                `review_id: ${renderReview.review_id || "-"}`,
+                `approval_change_count: ${renderReview.approval_change_count || buildDutySyncApprovalChangeKeys(renderReview).length}`,
+                `approval_change_keys: ${JSON.stringify(buildDutySyncApprovalChangeKeys(renderReview))}`,
+                `render_input_change_count: ${(review.changes || []).length}`,
+                `render_input_change_keys: ${JSON.stringify((review.changes || []).map((change) => change.change_key).filter(Boolean))}`,
+            ].join("\n");
+            card.appendChild(finalDebugBlock);
+            {% endif %}
+
+            const isSingleEventReview = Array.isArray(renderReview.changes) && renderReview.changes.length === 1 && renderReview.review_type !== "monthly_rollover";
+            const reviewMode = isSingleEventReview ? "single" : (renderReview.review_mode === "individual" ? "individual" : "group");
+            const singleChange = getSingleDutyReviewChange(renderReview);
             if (!isSingleEventReview) {
                 const summary = document.createElement("div");
                 summary.className = "duty-review-summary";
-                const summaryValues = review.summary || {};
+                const summaryValues = renderReview.summary || {};
                 [
-                    `Duty: ${review.included_count || 0}`,
+                    `Duty: ${renderReview.included_count || 0}`,
                     `Changed: ${summaryValues.changed || 0}`,
                 ].forEach((text) => {
                     const chip = document.createElement("span");
@@ -4679,7 +4728,7 @@
 
             const list = document.createElement("div");
             list.className = "duty-review-list";
-            (review.changes || []).forEach((change) => {
+            (renderReview.changes || []).forEach((change) => {
                 const item = document.createElement("div");
                 item.className = `duty-review-item${change.included === false ? " excluded" : ""}`;
 
@@ -4691,7 +4740,7 @@
                 actions.className = "duty-review-item-actions";
 
                 if (reviewMode === "individual") {
-                    const scopedReview = buildScopedDutyReview(review, change);
+                    const scopedReview = buildScopedDutyReview(renderReview, change);
 
                     const approveItemButton = document.createElement("button");
                     approveItemButton.className = "secondary-button";
@@ -4719,19 +4768,19 @@
 
             const approveButton = document.createElement("button");
             approveButton.className = "secondary-button";
-            approveButton.textContent = isSingleEventReview ? getSingleDutyReviewApproveLabel(singleChange) : getDutyReviewGroupApproveLabel(review);
-            approveButton.addEventListener("click", () => approveDutyReview(review, card));
+            approveButton.textContent = isSingleEventReview ? getSingleDutyReviewApproveLabel(singleChange) : getDutyReviewGroupApproveLabel(renderReview);
+            approveButton.addEventListener("click", () => approveDutyReview(renderReview, card));
 
             const ignoreButton = document.createElement("button");
             ignoreButton.className = "ghost-button";
             if (isSingleEventReview) {
                 ignoreButton.textContent = "Ignore event";
-                ignoreButton.addEventListener("click", () => ignoreDutyReview(review, card));
+                ignoreButton.addEventListener("click", () => ignoreDutyReview(renderReview, card));
             } else {
                 ignoreButton.textContent = reviewMode === "individual" ? "Back to summary" : "Review individually";
                 ignoreButton.addEventListener("click", () => {
                     if (card) card.remove();
-                    appendDutyReviewCard({ ...review, review_mode: reviewMode === "individual" ? "group" : "individual" }, renderSource, renderCaller);
+                    appendDutyReviewCard({ ...renderReview, review_mode: reviewMode === "individual" ? "group" : "individual" }, renderSource, renderCaller);
                 });
             }
 
