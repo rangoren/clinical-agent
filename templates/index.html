@@ -2793,6 +2793,37 @@
             return summary;
         }
 
+        function buildDutyReviewVisibleChanges(review) {
+            const changes = Array.isArray((review || {}).changes) ? review.changes : [];
+            const visibleChanges = [];
+            changes.forEach((change) => {
+                if (!change) return;
+                if (change.change_type !== "moved") {
+                    visibleChanges.push(change);
+                    return;
+                }
+                if (change.old_duty) {
+                    visibleChanges.push({
+                        ...change,
+                        change_type: "removed",
+                        new_duty: null,
+                        __visual_source_change_type: "moved",
+                        __visual_row_kind: "removed",
+                    });
+                }
+                if (change.new_duty) {
+                    visibleChanges.push({
+                        ...change,
+                        change_type: "added",
+                        old_duty: null,
+                        __visual_source_change_type: "moved",
+                        __visual_row_kind: "added",
+                    });
+                }
+            });
+            return visibleChanges;
+        }
+
         function normalizeDutyReviewForRender(review) {
             if (!review || !review.review_id) return review;
             const isExplicitScoped =
@@ -2810,6 +2841,10 @@
                 included_count: approvalChanges.filter((change) => change && change.included !== false).length,
                 summary: buildDutyReviewSummary(approvalChanges),
             };
+        }
+
+        function getDutyReviewVisibleCount(review) {
+            return buildDutyReviewVisibleChanges(review).length;
         }
 
         function buildDutySyncRenderSnapshot(review, source, caller) {
@@ -3819,7 +3854,7 @@
             }
 
             if (activeDutyReview && activeDutyReview.review_id) {
-                const pendingCount = activeDutyReview.included_count || (activeDutyReview.changes || []).length || 0;
+                const pendingCount = getDutyReviewVisibleCount(activeDutyReview) || activeDutyReview.included_count || (activeDutyReview.changes || []).length || 0;
                 const reviewId = escapeHtml(activeDutyReview.review_id || "");
                 const reviewUpdatedAt = escapeHtml(activeDutyReview.updated_at || "");
                 showSessionBanner(
@@ -3838,8 +3873,9 @@
         }
 
         function getSingleDutyReviewChange(review) {
-            if (!review || !Array.isArray(review.changes) || review.changes.length !== 1) return null;
-            return review.changes[0];
+            const visibleChanges = buildDutyReviewVisibleChanges(review);
+            if (visibleChanges.length !== 1) return null;
+            return visibleChanges[0];
         }
 
         function getDutyReviewApplyText(review, isIgnore = false) {
@@ -3866,7 +3902,7 @@
         }
 
         function getDutyReviewGroupApproveLabel(review) {
-            const count = Array.isArray(review && review.changes) ? review.changes.length : 0;
+            const count = getDutyReviewVisibleCount(review);
             return `Update calendar (${count} change${count === 1 ? "" : "s"})`;
         }
 
@@ -4699,16 +4735,18 @@
             card.appendChild(finalDebugBlock);
             {% endif %}
 
-            const isSingleEventReview = Array.isArray(renderReview.changes) && renderReview.changes.length === 1 && renderReview.review_type !== "monthly_rollover";
+            const visibleChanges = buildDutyReviewVisibleChanges(renderReview);
+            const visibleSummaryValues = buildDutyReviewSummary(visibleChanges);
+            const visibleChangeCount = visibleChanges.length;
+            const isSingleEventReview = visibleChangeCount === 1 && renderReview.review_type !== "monthly_rollover";
             const reviewMode = isSingleEventReview ? "single" : (renderReview.review_mode === "individual" ? "individual" : "group");
             const singleChange = getSingleDutyReviewChange(renderReview);
             if (!isSingleEventReview) {
                 const summary = document.createElement("div");
                 summary.className = "duty-review-summary";
-                const summaryValues = renderReview.summary || {};
                 [
-                    `Duty: ${renderReview.included_count || 0}`,
-                    `Changed: ${summaryValues.changed || 0}`,
+                    `Duty: ${visibleChangeCount || 0}`,
+                    `Changed: ${visibleSummaryValues.changed || 0}`,
                 ].forEach((text) => {
                     const chip = document.createElement("span");
                     chip.className = "duty-review-chip";
@@ -4728,7 +4766,7 @@
 
             const list = document.createElement("div");
             list.className = "duty-review-list";
-            (renderReview.changes || []).forEach((change) => {
+            visibleChanges.forEach((change) => {
                 const item = document.createElement("div");
                 item.className = `duty-review-item${change.included === false ? " excluded" : ""}`;
 
@@ -4739,7 +4777,7 @@
                 const actions = document.createElement("div");
                 actions.className = "duty-review-item-actions";
 
-                if (reviewMode === "individual") {
+                if (reviewMode === "individual" && change.__visual_source_change_type !== "moved") {
                     const scopedReview = buildScopedDutyReview(renderReview, change);
 
                     const approveItemButton = document.createElement("button");
