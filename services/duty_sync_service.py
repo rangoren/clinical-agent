@@ -96,6 +96,17 @@ def _managed_event_doc(session_id, duty_key):
     return duty_sync_managed_events_collection.find_one({"session_id": session_id, "duty_key": duty_key})
 
 
+def _duty_source_month(duty):
+    duty = duty or {}
+    raw_date = str(duty.get("date") or "")
+    if len(raw_date) >= 7:
+        return raw_date[:7]
+    parsed_start = _parse_iso_datetime(duty.get("start_datetime"))
+    if parsed_start is not None:
+        return parsed_start.strftime("%Y-%m")
+    return None
+
+
 def _build_managed_event_payload(session_id, duty):
     start_at = _parse_iso_datetime(duty.get("start_datetime"))
     end_at = _parse_iso_datetime(duty.get("end_datetime"))
@@ -569,7 +580,11 @@ def _clear_pending_review_if_unchanged(session_id):
 def _build_review_payload(session_id, source_tab_name, source_month, detected_duties):
     snapshot = _latest_approved_snapshot(session_id)
     pending_review = _active_pending_review(session_id)
-    approved_duties = (snapshot or {}).get("duties_json") or []
+    approved_duties = [
+        item
+        for item in ((snapshot or {}).get("duties_json") or [])
+        if _duty_source_month(item) == source_month
+    ]
     same_month_pending_review = bool(pending_review and pending_review.get("source_month") == source_month)
     previous_source_month = None
     if pending_review and pending_review.get("source_month"):
