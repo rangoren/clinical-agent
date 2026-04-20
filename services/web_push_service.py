@@ -130,7 +130,6 @@ def send_web_push_message(session_id, title, body, tag="duty-sync-review", url=N
         "url": url or (f"{APP_BASE_URL}/?app_mode=scheduling&duty_sync_review=1" if APP_BASE_URL else "/?app_mode=scheduling&duty_sync_review=1"),
     }
     if review:
-        payload["review"] = review
         payload["review_id"] = review.get("review_id") or ""
         payload["updated_at"] = review.get("updated_at") or ""
     sent_count = 0
