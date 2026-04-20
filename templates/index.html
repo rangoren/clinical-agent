@@ -3408,6 +3408,25 @@
             return true;
         }
 
+        function resolveAuthoritativeDutyReview(nextPendingReview) {
+            if (!nextPendingReview || !nextPendingReview.review_id) {
+                return null;
+            }
+            if (
+                activeDutyReview &&
+                activeDutyReview.review_id === nextPendingReview.review_id &&
+                (!activeDutyReview.updated_at || !nextPendingReview.updated_at || activeDutyReview.updated_at === nextPendingReview.updated_at)
+            ) {
+                const activeChangeCount = Array.isArray(activeDutyReview.changes) ? activeDutyReview.changes.length : 0;
+                const nextChangeCount = Array.isArray(nextPendingReview.changes) ? nextPendingReview.changes.length : 0;
+                const activeIsScoped = Array.isArray(activeDutyReview.scope_change_keys) && activeDutyReview.scope_change_keys.length > 0;
+                if (activeIsScoped || (activeChangeCount > 0 && activeChangeCount < nextChangeCount)) {
+                    return activeDutyReview;
+                }
+            }
+            return nextPendingReview;
+        }
+
         function updateDutySyncUi(status) {
             const label = document.getElementById("duty-sync-label");
             const details = document.getElementById("duty-sync-details");
@@ -3419,7 +3438,7 @@
 
             dutySyncConnected = !!(status && status.connected);
             dutySyncNeedsReconnect = !!(status && status.requires_google_reconnect);
-            activeDutyReview = status && status.pending_review ? status.pending_review : null;
+            activeDutyReview = resolveAuthoritativeDutyReview(status && status.pending_review ? status.pending_review : null);
 
             if (!status || status.available === false) {
                 label.textContent = "Duty schedule: Not available";
