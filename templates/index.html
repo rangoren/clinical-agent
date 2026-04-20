@@ -1991,8 +1991,7 @@
             <div class="duty-sync-debug-actions">
                 <button type="button" onclick="toggleDutySyncDebugPanel(false)">Close</button>
                 <button type="button" onclick="clearDutySyncDebugLogs()">Clear logs</button>
-                <button type="button" onclick="copyDutySyncDebugLogs()">Copy all logs</button>
-                <button type="button" onclick="copyDutySyncRenderDebugLogs()">Copy render debug logs only</button>
+                <button type="button" onclick="copyLatestDutySyncRenderSnapshot()">Copy latest render snapshot</button>
             </div>
             <div id="duty-sync-debug-log" class="duty-sync-debug-log">No logs yet.</div>
         </div>
@@ -2028,6 +2027,7 @@
         const dutySyncDevLogStorageKey = "duty-sync-dev-console";
         const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
         const dutySyncSwBridgeMarker = "[DutySyncSWDebug] BRIDGE_OK";
+        const dutySyncRenderSnapshotPrefix = "[DutySyncRenderDebugSnapshot]";
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -2771,6 +2771,55 @@
             {% endif %}
         }
 
+        function buildDutySyncApprovalChangeKeys(review) {
+            if (!review) return [];
+            if (Array.isArray(review.scope_change_keys) && review.scope_change_keys.length) {
+                return review.scope_change_keys.filter(Boolean);
+            }
+            return (review.changes || []).map((change) => change.change_key).filter(Boolean);
+        }
+
+        function buildDutySyncRenderSnapshot(review, source, caller) {
+            if (!review || !review.review_id) return null;
+            const uiPayloadChangeKeys = (review.changes || []).map((change) => change.change_key).filter(Boolean);
+            const approvalChangeKeys = buildDutySyncApprovalChangeKeys(review);
+            return {
+                id: `render-snapshot-${review.review_id}-${Date.now()}`,
+                ts: new Date().toISOString(),
+                origin: "app",
+                message: `${dutySyncRenderSnapshotPrefix} latest`,
+                payload: {
+                    review_id: review.review_id,
+                    approval_change_count: approvalChangeKeys.length,
+                    approval_change_keys: approvalChangeKeys,
+                    ui_payload_change_count: (review.changes || []).length,
+                    ui_payload_change_keys: uiPayloadChangeKeys,
+                    rendered_change_count: (review.changes || []).length,
+                    rendered_change_keys: uiPayloadChangeKeys,
+                    source: source || "unknown",
+                    caller: caller || "unknown",
+                },
+            };
+        }
+
+        function getDutySyncRenderSnapshotEntries(entries) {
+            return (Array.isArray(entries) ? entries : []).filter((entry) => String(entry.message || "").startsWith(dutySyncRenderSnapshotPrefix));
+        }
+
+        function formatDutySyncRenderSnapshot(entry) {
+            const payload = entry && entry.payload ? entry.payload : {};
+            return [
+                `${entry.ts || ""} ${entry.message || dutySyncRenderSnapshotPrefix}`,
+                `review_id: ${payload.review_id || ""}`,
+                `approval_change_count: ${payload.approval_change_count || 0}`,
+                `approval_change_keys: ${(payload.approval_change_keys || []).join(", ") || "-"}`,
+                `ui_payload_change_count: ${payload.ui_payload_change_count || 0}`,
+                `ui_payload_change_keys: ${(payload.ui_payload_change_keys || []).join(", ") || "-"}`,
+                `rendered_change_count: ${payload.rendered_change_count || 0}`,
+                `rendered_change_keys: ${(payload.rendered_change_keys || []).join(", ") || "-"}`,
+            ].join("\n");
+        }
+
         function readDutySyncSwDebugEntries() {
             {% if app_env != "production" %}
             return new Promise((resolve) => {
@@ -2869,11 +2918,9 @@
             const node = document.getElementById("duty-sync-debug-log");
             if (!node) return;
             const entries = await getMergedDutySyncDebugEntries();
-            const lines = entries.map((entry) => {
-                const payload = entry.payload ? ` ${JSON.stringify(entry.payload)}` : "";
-                return `${entry.ts} ${entry.message}${payload}`;
-            });
-            node.textContent = lines.length ? lines.join("\n") : "No logs yet.";
+            const snapshots = getDutySyncRenderSnapshotEntries(entries);
+            const blocks = snapshots.map((entry) => formatDutySyncRenderSnapshot(entry));
+            node.textContent = blocks.length ? blocks.join("\n\n--------------------\n\n") : "No render snapshots yet.";
             node.scrollTop = node.scrollHeight;
             {% endif %}
         }
@@ -2927,18 +2974,20 @@
             {% endif %}
         }
 
-        async function copyDutySyncRenderDebugLogs() {
+        async function copyLatestDutySyncRenderSnapshot() {
             {% if app_env != "production" %}
             const mergedEntries = await getMergedDutySyncDebugEntries();
-            const text = mergedEntries
-                .filter((entry) => String(entry.message || "").startsWith("[DutySyncRenderDebug]"))
-                .map((entry) => `${entry.ts} ${entry.message}${entry.payload ? ` ${JSON.stringify(entry.payload)}` : ""}`)
-                .join("\n");
+            const snapshots = getDutySyncRenderSnapshotEntries(mergedEntries);
+            const latestSnapshot = snapshots.length ? snapshots[snapshots.length - 1] : null;
+            const text = latestSnapshot ? formatDutySyncRenderSnapshot(latestSnapshot) : "";
             try {
+                if (!text) {
+                    throw new Error("No render snapshot available");
+                }
                 await copyDutySyncText(text);
-                logDutySyncRuntime("render debug console copied");
+                logDutySyncRuntime("render snapshot copied");
             } catch (error) {
-                logDutySyncRuntime("render debug console copy failed", { error: String(error) });
+                logDutySyncRuntime("render snapshot copy failed", { error: String(error) });
             }
             {% endif %}
         }
@@ -4557,19 +4606,10 @@
 
         function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown") {
             if (!review || !review.review_id) return;
-            persistDutySyncRenderDebugEntries([{
-                ts: new Date().toISOString(),
-                origin: "app",
-                message: "[DutySyncRenderDebug] review rendered in UI",
-                payload: {
-                    review_id: review.review_id,
-                    rendered_change_count: Array.isArray(review.changes) ? review.changes.length : 0,
-                    rendered_change_types: (review.changes || []).map((change) => change.change_type).filter(Boolean),
-                    rendered_change_keys: (review.changes || []).map((change) => change.change_key).filter(Boolean),
-                    source: renderSource,
-                    caller: renderCaller,
-                },
-            }]);
+            const renderSnapshot = buildDutySyncRenderSnapshot(review, renderSource, renderCaller);
+            if (renderSnapshot) {
+                persistDutySyncRenderDebugEntries([renderSnapshot]);
+            }
             logDutySyncRuntime("appendDutyReviewCard", {
                 review: summarizeDutyReview(review),
                 source: renderSource,
