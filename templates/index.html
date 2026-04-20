@@ -2026,6 +2026,7 @@
         const dutySyncPollingIntervalMs = "{{ app_env }}" === "production" ? 45 * 60 * 1000 : 5 * 60 * 1000;
         const dutySyncDevLogStorageKey = "duty-sync-dev-console";
         const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
+        const dutySyncSwBridgeMarker = "[DutySyncSWDebug] BRIDGE_OK";
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -2664,6 +2665,44 @@
             {% endif %}
         }
 
+        function mergeDutySyncDebugEntries(entries) {
+            const map = new Map();
+            (Array.isArray(entries) ? entries : []).forEach((entry) => {
+                if (!entry || !entry.message) return;
+                const key = entry.id || `${entry.origin || "unknown"}:${entry.ts || ""}:${entry.message}`;
+                map.set(key, {
+                    ...entry,
+                    origin: entry.origin || "app",
+                });
+            });
+            return Array.from(map.values()).sort((a, b) => String(a.ts || "").localeCompare(String(b.ts || "")));
+        }
+
+        function persistDutySyncSwDebugEntries(entries) {
+            {% if app_env != "production" %}
+            const normalized = (Array.isArray(entries) ? entries : []).map((entry) => ({
+                id: entry.id || `sw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                ts: entry.ts || new Date().toISOString(),
+                origin: "sw",
+                message: entry.message || "[DutySyncSWDebug] unknown",
+                payload: entry.payload || {},
+            }));
+            const existing = readDutySyncDebugEntries();
+            const merged = mergeDutySyncDebugEntries([
+                ...existing,
+                ...normalized,
+                {
+                    id: `sw-bridge-ok-${Date.now()}`,
+                    ts: new Date().toISOString(),
+                    origin: "sw",
+                    message: dutySyncSwBridgeMarker,
+                    payload: { source: "app_bridge", entry_count: normalized.length },
+                },
+            ]);
+            writeDutySyncDebugEntries(merged);
+            {% endif %}
+        }
+
         function readDutySyncSwDebugEntries() {
             {% if app_env != "production" %}
             return new Promise((resolve) => {
@@ -2754,7 +2793,7 @@
         async function getMergedDutySyncDebugEntries() {
             const appEntries = readDutySyncDebugEntries().map((entry) => ({ ...entry, origin: entry.origin || "app" }));
             const swEntries = (await readDutySyncSwDebugEntries()).map((entry) => ({ ...entry, origin: entry.origin || "sw" }));
-            return [...appEntries, ...swEntries].sort((a, b) => String(a.ts || "").localeCompare(String(b.ts || "")));
+            return mergeDutySyncDebugEntries([...appEntries, ...swEntries]);
         }
 
         async function renderDutySyncDebugConsole() {
@@ -2817,6 +2856,30 @@
             } catch (error) {
                 logDutySyncRuntime("debug console copy failed", { error: String(error) });
             }
+            {% endif %}
+        }
+
+        async function requestDutySyncSwDebugBridge() {
+            {% if app_env != "production" %}
+            if (!("serviceWorker" in navigator)) {
+                return false;
+            }
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                const target =
+                    navigator.serviceWorker.controller
+                    || (registration && (registration.active || registration.waiting || registration.installing))
+                    || null;
+                if (!target || !("postMessage" in target)) {
+                    return false;
+                }
+                target.postMessage({ type: "duty-sync-request-sw-debug" });
+                return true;
+            } catch (_error) {
+                return false;
+            }
+            {% else %}
+            return false;
             {% endif %}
         }
 
@@ -5562,11 +5625,18 @@
         logDutySyncRuntime("startup initialization complete", { href: window.location.href });
         renderDutySyncPushDebug();
         renderDutySyncDebugConsole();
-        registerDutyPushServiceWorker().catch(() => {});
+        registerDutyPushServiceWorker()
+            .then(() => requestDutySyncSwDebugBridge())
+            .catch(() => {});
         syncExistingDutySyncPushSubscription().catch(() => {});
         if ("serviceWorker" in navigator) {
             navigator.serviceWorker.addEventListener("message", async (event) => {
                 const data = event.data || {};
+                if (data.type === "duty-sync-sw-debug-batch") {
+                    persistDutySyncSwDebugEntries(data.entries || []);
+                    renderDutySyncDebugConsole();
+                    return;
+                }
                 if (data.type !== "duty-sync-open-review") return;
                 const targetUrl = data.url || buildDutySyncDeepLinkPath();
                 ensureDutySyncFlowTraceId("push", {
@@ -5601,6 +5671,9 @@
                     // Fall back to regular navigation below.
                 }
                 window.location.href = targetUrl;
+            });
+            navigator.serviceWorker.addEventListener("controllerchange", () => {
+                requestDutySyncSwDebugBridge().catch(() => {});
             });
         }
         window.addEventListener("pageshow", () => {

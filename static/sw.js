@@ -60,18 +60,79 @@ function writeDutySyncSwDebug(message, payload = null) {
           store.put(entry);
           transaction.oncomplete = () => {
             db.close();
-            resolve();
+            broadcastDutySyncSwDebugBatch().finally(() => resolve(entry));
           };
           transaction.onerror = () => {
             db.close();
-            resolve();
+            resolve(entry);
           };
         } catch (_error) {
           db.close();
-          resolve();
+          resolve(entry);
         }
       })
   );
+}
+
+function readDutySyncSwDebugEntries() {
+  return openDutySyncPushDb().then(
+    (db) =>
+      new Promise((resolve) => {
+        try {
+          if (!db.objectStoreNames.contains(DUTY_SYNC_DEBUG_STORE_NAME)) {
+            db.close();
+            resolve([]);
+            return;
+          }
+          const transaction = db.transaction(DUTY_SYNC_DEBUG_STORE_NAME, "readonly");
+          const store = transaction.objectStore(DUTY_SYNC_DEBUG_STORE_NAME);
+          const request = store.getAll();
+          request.onsuccess = () => {
+            const value = Array.isArray(request.result) ? request.result : [];
+            db.close();
+            resolve(value.sort((a, b) => String(a.ts || "").localeCompare(String(b.ts || ""))));
+          };
+          request.onerror = () => {
+            db.close();
+            resolve([]);
+          };
+        } catch (_error) {
+          db.close();
+          resolve([]);
+        }
+      })
+  );
+}
+
+function postDutySyncSwDebugBatch(client) {
+  if (!client || !("postMessage" in client)) {
+    return Promise.resolve(false);
+  }
+  return readDutySyncSwDebugEntries().then((entries) => {
+    client.postMessage({
+      type: "duty-sync-sw-debug-batch",
+      entries,
+    });
+    return true;
+  });
+}
+
+function resolveDutySyncSwDebugClient() {
+  return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    if (!clients || !clients.length) {
+      return null;
+    }
+    return clients[0];
+  });
+}
+
+function broadcastDutySyncSwDebugBatch() {
+  return resolveDutySyncSwDebugClient().then((client) => {
+    if (!client) {
+      return false;
+    }
+    return postDutySyncSwDebugBatch(client);
+  });
 }
 
 function withDutySyncTrace(targetUrl, traceId, traceSteps) {
@@ -257,5 +318,13 @@ self.addEventListener("notificationclick", (event) => {
       });
       return undefined;
     })
+  );
+});
+
+self.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type !== "duty-sync-request-sw-debug") return;
+  event.waitUntil(
+    writeDutySyncSwDebug("BRIDGE_OK", { source: "sw_bridge" }).then(() => postDutySyncSwDebugBatch(event.source))
   );
 });
