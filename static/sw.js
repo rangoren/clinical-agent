@@ -133,12 +133,9 @@ self.addEventListener("notificationclick", (event) => {
             return activeClient;
           });
         }
-        if ("postMessage" in client) {
-          client.postMessage({ type: "duty-sync-open-review", url: targetUrl, review });
-        }
-        if ("focus" in client) {
-          self.__dutySyncDebug("navigation attempted", { via: "focus-only", targetUrl });
-          return client.focus();
+        if (self.clients.openWindow) {
+          self.__dutySyncDebug("navigation attempted", { via: "openWindow-existing-client", targetUrl });
+          return self.clients.openWindow(targetUrl);
         }
         return client;
       }
