@@ -2868,9 +2868,13 @@
         }
 
         async function syncExistingDutySyncPushSubscription() {
+            persistDutySyncPushDebug("[App] syncExistingDutySyncPushSubscription started");
             if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+                persistDutySyncPushDebug("[App] service worker available=no");
                 return false;
             }
+            persistDutySyncPushDebug("[App] service worker available=yes");
+            persistDutySyncPushDebug(`[App] Notification.permission=${Notification.permission || "unknown"}`);
             if (Notification.permission !== "granted") {
                 return false;
             }
@@ -2878,8 +2882,10 @@
                 const registration = await registerDutyPushServiceWorker();
                 const subscription = await registration.pushManager.getSubscription();
                 if (!subscription) {
+                    persistDutySyncPushDebug("[App] existing push subscription found=no");
                     return false;
                 }
+                persistDutySyncPushDebug("[App] existing push subscription found=yes");
                 const statusResponse = await fetch("/calendar/duty-sync/push/status", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -2887,11 +2893,17 @@
                 });
                 const status = await statusResponse.json();
                 if (!status.available) {
+                    persistDutySyncPushDebug("[App] subscribe request sent to server=no");
+                    persistDutySyncPushDebug("[App] subscribe response=failure");
+                    persistDutySyncPushDebug("[App] server error=Web push is not configured in this environment.");
                     return false;
                 }
                 if (status.subscribed) {
+                    persistDutySyncPushDebug("[App] subscribe request sent to server=no");
+                    persistDutySyncPushDebug("[App] subscribe response=success (already subscribed)");
                     return true;
                 }
+                persistDutySyncPushDebug("[App] subscribe request sent to server=yes");
                 const subscribeResponse = await fetch("/calendar/duty-sync/push/subscribe", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -2901,8 +2913,18 @@
                     })
                 });
                 const subscribeData = await subscribeResponse.json();
+                persistDutySyncPushDebug(`[App] subscribe response=${subscribeData.status === "subscribed" ? "success" : "failure"}`);
+                if (subscribeData.debug) {
+                    persistDutySyncPushDebug(`[App] server save debug=${JSON.stringify(subscribeData.debug)}`);
+                }
+                if (subscribeData.status !== "subscribed") {
+                    persistDutySyncPushDebug(`[App] server error=${subscribeData.reply || "unknown"}`);
+                }
                 return subscribeData.status === "subscribed";
-            } catch (_error) {
+            } catch (error) {
+                persistDutySyncPushDebug("[App] subscribe request sent to server=no");
+                persistDutySyncPushDebug("[App] subscribe response=failure");
+                persistDutySyncPushDebug(`[App] server error=${error}`);
                 return false;
             }
         }

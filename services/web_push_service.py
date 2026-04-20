@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 
 from db import duty_sync_connections_collection, push_subscriptions_collection
 from services.logging_service import log_event
-from settings import APP_BASE_URL, WEB_PUSH_PRIVATE_KEY, WEB_PUSH_PUBLIC_KEY, WEB_PUSH_SUBJECT
+from settings import APP_BASE_URL, APP_ENV, WEB_PUSH_PRIVATE_KEY, WEB_PUSH_PUBLIC_KEY, WEB_PUSH_SUBJECT
 
 
 _push_poller_started = False
@@ -39,7 +39,7 @@ def save_web_push_subscription(session_id, subscription):
     if not endpoint or not p256dh or not auth:
         return {"status": "invalid", "reply": "Push subscription payload was incomplete."}
     now = datetime.utcnow()
-    push_subscriptions_collection.update_one(
+    result = push_subscriptions_collection.update_one(
         {"session_id": session_id, "endpoint": endpoint},
         {
             "$set": {
@@ -52,7 +52,20 @@ def save_web_push_subscription(session_id, subscription):
         },
         upsert=True,
     )
-    return {"status": "subscribed", "reply": "Duty Sync push alerts are enabled."}
+    subscription_count = push_subscriptions_collection.count_documents({"session_id": session_id})
+    debug_payload = {
+        "session_id": session_id,
+        "endpoint_saved": True,
+        "matched_count": result.matched_count,
+        "modified_count": result.modified_count,
+        "upserted": bool(result.upserted_id),
+        "subscription_count": subscription_count,
+    }
+    log_event("duty_sync_push_subscription_saved", session_id=session_id, payload=debug_payload)
+    response = {"status": "subscribed", "reply": "Duty Sync push alerts are enabled."}
+    if APP_ENV != "production":
+        response["debug"] = debug_payload
+    return response
 
 
 def delete_web_push_subscription(session_id, endpoint=None):
