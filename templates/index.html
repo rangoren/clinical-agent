@@ -2943,6 +2943,44 @@
             }
         }
 
+        async function openDutySyncReviewContextById(reviewId, updatedAt) {
+            if (!reviewId) {
+                appendAssistantMessage("Duty Sync review could not be opened right now.", "error");
+                return;
+            }
+            const activeReviewMatches =
+                activeDutyReview &&
+                activeDutyReview.review_id === reviewId &&
+                (!updatedAt || !activeDutyReview.updated_at || activeDutyReview.updated_at === updatedAt);
+            if (activeReviewMatches) {
+                await openDutySyncReviewContext(activeDutyReview);
+                return;
+            }
+            try {
+                const response = await fetch("/calendar/duty-sync/review/load", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        review_id: reviewId,
+                        updated_at: updatedAt || null
+                    })
+                });
+                const data = await response.json();
+                if (data && data.status === "loaded" && data.review && data.review.review_id) {
+                    activeDutyReview = data.review;
+                    await openDutySyncReviewContext(data.review);
+                    return;
+                }
+                await openDutySyncReviewContext();
+                if (!document.getElementById(`duty-review-${reviewId}`)) {
+                    appendAssistantMessage(data.reply || "Duty Sync review could not be opened right now.", "error");
+                }
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
         function maybeShowDutySyncBrowserNotification(review, replyText) {
             if (!review || !document.hidden || !("Notification" in window) || Notification.permission !== "granted") {
                 return;
@@ -3026,9 +3064,11 @@
 
             if (activeDutyReview && activeDutyReview.review_id) {
                 const pendingCount = activeDutyReview.included_count || (activeDutyReview.changes || []).length || 0;
+                const reviewId = escapeHtml(activeDutyReview.review_id || "");
+                const reviewUpdatedAt = escapeHtml(activeDutyReview.updated_at || "");
                 showSessionBanner(
                     `Duty Sync found ${pendingCount} updates pending review.`,
-                    `<button class="secondary-button" onclick="openDutySyncReviewContext()">Review updates</button>`
+                    `<button class="secondary-button" onclick="openDutySyncReviewContextById('${reviewId}', '${reviewUpdatedAt}')">Review updates</button>`
                 );
                 return true;
             }

@@ -52,7 +52,7 @@ GOOGLE_SHEETS_METADATA_URL = "https://sheets.googleapis.com/v4/spreadsheets/{she
 GOOGLE_SHEETS_VALUES_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{sheet_range}"
 DUTY_SYNC_CALENDAR_TYPE = "personal"
 DUTY_SYNC_WRITE_DISABLED_MESSAGE = "Duty Sync review is ready, but Google Calendar writes are disabled in this environment."
-DEFAULT_DUTY_SYNC_POLLING_MINUTES = 45 if APP_ENV == "production" else 5
+DEFAULT_DUTY_SYNC_POLLING_MINUTES = 45 if APP_ENV == "production" else 1
 
 
 def _is_debug_env():
