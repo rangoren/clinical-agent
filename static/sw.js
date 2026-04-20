@@ -49,6 +49,23 @@ function withDutySyncTrace(targetUrl, traceId, traceSteps) {
   }
 }
 
+function withDutySyncReviewIdentity(targetUrl, review) {
+  try {
+    const url = new URL(targetUrl, self.location.origin);
+    url.searchParams.set("app_mode", "scheduling");
+    url.searchParams.set("duty_sync_review", "1");
+    if (review && review.review_id) {
+      url.searchParams.set("duty_sync_review_id", review.review_id);
+    }
+    if (review && review.updated_at) {
+      url.searchParams.set("duty_sync_review_updated_at", review.updated_at);
+    }
+    return url.toString();
+  } catch (_error) {
+    return targetUrl;
+  }
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
 });
@@ -75,17 +92,18 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const baseTargetUrl = (event.notification.data && event.notification.data.url) || "/?app_mode=scheduling&duty_sync_review=1";
   const review = (event.notification.data && event.notification.data.review) || null;
+  const resolvedTargetUrl = withDutySyncReviewIdentity(baseTargetUrl, review);
   const traceId = `push-${Date.now()}`;
-  self.__dutySyncDebug("notificationclick fired", { targetUrl: baseTargetUrl, traceId });
+  self.__dutySyncDebug("notificationclick fired", { targetUrl: resolvedTargetUrl, traceId });
   let storedTraceLine = "";
   event.waitUntil(
     Promise.resolve()
       .then(() => {
-        const parsedUrl = new URL(baseTargetUrl, self.location.origin);
+        const parsedUrl = new URL(resolvedTargetUrl, self.location.origin);
         const context = {
           active: true,
-          review_id: parsedUrl.searchParams.get("duty_sync_review_id") || "",
-          updated_at: parsedUrl.searchParams.get("duty_sync_review_updated_at") || "",
+          review_id: (review && review.review_id) || parsedUrl.searchParams.get("duty_sync_review_id") || "",
+          updated_at: (review && review.updated_at) || parsedUrl.searchParams.get("duty_sync_review_updated_at") || "",
           source: "service_worker_notificationclick",
         };
         storedTraceLine = `[SW/App] stored push context review_id=${context.review_id} updated_at=${context.updated_at}`;
@@ -94,7 +112,7 @@ self.addEventListener("notificationclick", (event) => {
       .then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true }))
       .then((clients) => {
       if (clients && clients.length) {
-        const targetUrl = withDutySyncTrace(baseTargetUrl, traceId, [
+        const targetUrl = withDutySyncTrace(resolvedTargetUrl, traceId, [
           "[SW] notificationclick fired",
           storedTraceLine,
           "[SW] client found",
@@ -124,7 +142,7 @@ self.addEventListener("notificationclick", (event) => {
         }
         return client;
       }
-      const targetUrl = withDutySyncTrace(baseTargetUrl, traceId, [
+      const targetUrl = withDutySyncTrace(resolvedTargetUrl, traceId, [
         "[SW] notificationclick fired",
         storedTraceLine,
         "[SW] no client found",
