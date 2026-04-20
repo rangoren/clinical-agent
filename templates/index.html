@@ -2867,6 +2867,46 @@
             }
         }
 
+        async function syncExistingDutySyncPushSubscription() {
+            if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+                return false;
+            }
+            if (Notification.permission !== "granted") {
+                return false;
+            }
+            try {
+                const registration = await registerDutyPushServiceWorker();
+                const subscription = await registration.pushManager.getSubscription();
+                if (!subscription) {
+                    return false;
+                }
+                const statusResponse = await fetch("/calendar/duty-sync/push/status", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+                const status = await statusResponse.json();
+                if (!status.available) {
+                    return false;
+                }
+                if (status.subscribed) {
+                    return true;
+                }
+                const subscribeResponse = await fetch("/calendar/duty-sync/push/subscribe", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        subscription: subscription.toJSON()
+                    })
+                });
+                const subscribeData = await subscribeResponse.json();
+                return subscribeData.status === "subscribed";
+            } catch (_error) {
+                return false;
+            }
+        }
+
         async function sendDutySyncTestPush() {
             try {
                 const response = await fetch("/calendar/duty-sync/push/test", {
@@ -4954,6 +4994,7 @@
         restoreDutySyncPushContextFromStorage().catch(() => {});
         handleInitialDutySyncDeepLink();
         registerDutyPushServiceWorker().catch(() => {});
+        syncExistingDutySyncPushSubscription().catch(() => {});
         if ("serviceWorker" in navigator) {
             navigator.serviceWorker.addEventListener("message", async (event) => {
                 const data = event.data || {};
