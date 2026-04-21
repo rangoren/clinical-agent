@@ -3239,6 +3239,30 @@
             {% endif %}
         }
 
+        async function requestDutySyncSwVersion() {
+            {% if app_env != "production" %}
+            if (!("serviceWorker" in navigator)) {
+                return false;
+            }
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                const target =
+                    navigator.serviceWorker.controller
+                    || (registration && (registration.active || registration.waiting || registration.installing))
+                    || null;
+                if (!target || !("postMessage" in target)) {
+                    return false;
+                }
+                target.postMessage({ type: "duty-sync-request-sw-version" });
+                return true;
+            } catch (_error) {
+                return false;
+            }
+            {% else %}
+            return false;
+            {% endif %}
+        }
+
         function toggleDutySyncDebugPanel(forceOpen) {
             {% if app_env != "production" %}
             dutySyncDebugPanelOpen = typeof forceOpen === "boolean" ? forceOpen : !dutySyncDebugPanelOpen;
@@ -6075,12 +6099,17 @@
         renderDutySyncPushDebug();
         renderDutySyncDebugConsole();
         registerDutyPushServiceWorker()
-            .then(() => requestDutySyncSwDebugBridge())
+            .then(() => Promise.allSettled([requestDutySyncSwVersion(), requestDutySyncSwDebugBridge()]))
             .catch(() => {});
         syncExistingDutySyncPushSubscription().catch(() => {});
         if ("serviceWorker" in navigator) {
             navigator.serviceWorker.addEventListener("message", async (event) => {
                 const data = event.data || {};
+                if (data.type === "duty-sync-sw-version") {
+                    dutySyncSwVersion = data.sw_version || "unknown";
+                    renderDutySyncDebugConsole();
+                    return;
+                }
                 if (data.type === "duty-sync-sw-debug-batch") {
                     if (data.sw_version) {
                         dutySyncSwVersion = data.sw_version;
@@ -6184,6 +6213,7 @@
                 window.location.href = targetUrl;
             });
             navigator.serviceWorker.addEventListener("controllerchange", () => {
+                requestDutySyncSwVersion().catch(() => {});
                 requestDutySyncSwDebugBridge().catch(() => {});
             });
         }

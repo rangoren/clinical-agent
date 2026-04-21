@@ -429,6 +429,15 @@ self.addEventListener("notificationclick", (event) => {
 
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "duty-sync-request-sw-version") {
+    if (event.source && "postMessage" in event.source) {
+      event.source.postMessage({
+        type: "duty-sync-sw-version",
+        sw_version: DUTY_SYNC_SW_VERSION,
+      });
+    }
+    return;
+  }
   if (data.type !== "duty-sync-request-sw-debug") return;
   event.waitUntil(
     writeDutySyncSwDebug("BRIDGE_OK", { source: "sw_bridge" }).then(() => postDutySyncSwDebugBatch(event.source))
