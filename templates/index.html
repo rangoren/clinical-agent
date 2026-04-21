@@ -2492,6 +2492,8 @@
 
         let dutySyncConnected = false;
         let dutySyncNeedsReconnect = false;
+        let calendarStatusKnown = false;
+        let dutySyncStatusKnown = false;
         let activeDutyReview = null;
         let pendingDutySyncReviewId = null;
         let pendingDutySyncReviewUpdatedAt = null;
@@ -4030,6 +4032,10 @@
                 );
                 return true;
             }
+            if (appMode === "scheduling" && (!calendarStatusKnown || !dutySyncStatusKnown)) {
+                hideSessionBanner();
+                return false;
+            }
             if (shouldShowDutySyncNotificationPrompt()) {
                 if (appMode === "scheduling") {
                     if (!googleCalendarConnected) {
@@ -4706,8 +4712,10 @@
                     })
                 });
                 const data = await response.json();
+                calendarStatusKnown = true;
                 updateCalendarUi(data);
             } catch (_error) {
+                calendarStatusKnown = true;
                 updateCalendarUi({ connected: false, available: false });
             }
         }
@@ -4732,6 +4740,7 @@
                         })
                     });
                     const data = await response.json();
+                    dutySyncStatusKnown = true;
                     ingestDutySyncRenderDebug(data);
                     dutySyncDebug("pending review loaded", {
                         hasPendingReview: !!(data && data.pending_review),
@@ -4794,6 +4803,7 @@
                     }
                     return data;
                 } catch (_error) {
+                    dutySyncStatusKnown = true;
                     if (dutySyncActiveForegroundRecoveryAttemptId !== null) {
                         logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus result", {
                             push_review_scope_exists: false,
@@ -5368,6 +5378,10 @@
         function switchAppMode(nextMode) {
             if (appMode === nextMode) return;
             appMode = nextMode;
+            if (nextMode === "scheduling") {
+                calendarStatusKnown = false;
+                dutySyncStatusKnown = false;
+            }
             entryGuidanceDismissed = false;
             setComposerModeStripOpen(false);
             const input = document.getElementById("input");
