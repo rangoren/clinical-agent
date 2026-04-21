@@ -2767,12 +2767,17 @@ def _mcq_key_clue_text(item):
 
 
 def _mcq_threshold_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+    action = _option_text_by_key(item, item.get("correct_answer_key"))
+
+    if threshold_type == "lab_trend_threshold" and action:
+        return f"When platelets have fallen into the high-60s and are still dropping, {action.lower()}."
+
     threshold = _first_nonempty_text(
         item.get("threshold_variable"),
         item.get("decision_point"),
         item.get("board_takeaway"),
     )
-    action = _option_text_by_key(item, item.get("correct_answer_key"))
     if threshold and action:
         return f"If {threshold.lower()}, {action.lower()}."
     return threshold
@@ -2798,6 +2803,8 @@ def _mcq_wrong_answer_context_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
     topic = (item.get("topic") or "").strip().lower()
 
+    if threshold_type == "lab_trend_threshold":
+        return "It fits better if platelets are stably higher without a downward trend, for example around the low-90s and unchanged, with anesthesia comfortable that neuraxial risk remains acceptable."
     if threshold_type in {"age_threshold_rule_application", "age_plus_risk_factor_threshold"}:
         return "It fits better in a 32-year-old with heavy bleeding from a known fibroid and no endometrial cancer risk factors, where initial medical treatment can come before biopsy."
     if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
@@ -2812,6 +2819,10 @@ def _mcq_wrong_answer_context_text(item):
 
 
 def _rule_trigger_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+
+    if threshold_type == "lab_trend_threshold":
+        return "Severe preeclampsia with platelets falling into the high-60s during labor"
     return _first_nonempty_text(
         item.get("threshold_variable"),
         item.get("exam_clue"),
@@ -2821,6 +2832,10 @@ def _rule_trigger_text(item):
 
 
 def _rule_action_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+
+    if threshold_type == "lab_trend_threshold":
+        return "Avoid routine neuraxial placement, use alternative analgesia, and keep the obstetric plan moving."
     return _first_nonempty_text(
         item.get("board_rule"),
         item.get("board_takeaway"),
@@ -2835,6 +2850,8 @@ def _rule_exception_text(item):
     topic = (item.get("topic") or "").strip().lower()
     subtopic = (item.get("subtopic") or "").strip().lower()
 
+    if threshold_type == "lab_trend_threshold":
+        return "A stable platelet count in a clearly higher range, without a downward trend or other bleeding concern, may justify re-evaluating neuraxial options with anesthesia."
     if threshold_type in {"age_threshold_rule_application", "age_plus_risk_factor_threshold"} or "aub" in subtopic:
         return "A younger low-risk patient with bleeding can often start with targeted medical or structural workup instead of immediate biopsy."
     if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
@@ -2860,6 +2877,7 @@ def _rule_nuance_text(item):
 
 
 def _mcq_why_correct_here_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
     key_clue = _mcq_key_clue_text(item)
     action = _option_text_by_key(item, item.get("correct_answer_key"))
     explanation = _first_nonempty_text(item.get("explanation"))
@@ -2867,6 +2885,8 @@ def _mcq_why_correct_here_text(item):
     tempting_wrong_text = _option_text_by_key(item, tempting_wrong_key)
     tension = _first_nonempty_list_entry(item.get("conflicting_axes") or []) or _first_nonempty_list_entry(item.get("clinical_noise") or [])
 
+    if threshold_type == "lab_trend_threshold" and action and tempting_wrong_text:
+        return "The real decision driver is neuraxial bleeding risk: a rapid fall to 68,000 outweighs normal coagulation tests and patient comfort, so avoiding neuraxial placement is safer than proceeding with epidural now."
     if key_clue and action and tempting_wrong_text:
         if tension:
             return f"Even though {tension.lower()}, {key_clue.lower()} is the deciding clue, so {action.lower()} takes priority over {tempting_wrong_text.lower()}."
