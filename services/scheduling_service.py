@@ -2462,7 +2462,7 @@ def handle_scheduling_message(session_id, user_message):
     if _is_generic_scheduling_smalltalk(normalized_user_message):
         _clear_pending_details_context(session_id)
         return {
-            "reply": "Still in scheduling mode. You can ask about shifts, dates, tomorrow, next month, or calendar changes.",
+            "reply": "Want me to check another month or a specific date?",
             "scheduling_draft": None,
         }
     contextual_followup = _maybe_resolve_scheduling_context_followup(session_id, normalized_user_message)
