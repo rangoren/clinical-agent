@@ -1,6 +1,6 @@
 {
-  "name": "Dr. Goren OB-GYN Assistant",
-  "short_name": "Dr. Goren",
+  "name": "ORS",
+  "short_name": "ORS",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#eef3f1",
