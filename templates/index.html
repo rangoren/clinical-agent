@@ -3031,7 +3031,7 @@
         }
 
         function buildDutySyncOpenDebugFallback(entries, openEntries) {
-            const allEntries = Array.isArray(entries) ? entries : [];
+            const allEntries = (Array.isArray(entries) ? entries : []).filter((entry) => isDutySyncOpenDebugEntry(entry));
             const filteredEntries = Array.isArray(openEntries) ? openEntries : [];
             const hasSwNotificationClick = allEntries.some((entry) =>
                 String((entry && entry.message) || "").startsWith("[DutySyncSWDebug] notificationclick start")
@@ -3053,21 +3053,13 @@
 
         function getLatestDutySyncOpenFlowEntries(entries) {
             const openEntries = (Array.isArray(entries) ? entries : []).filter((entry) => isDutySyncOpenDebugEntry(entry));
-            const latestStart = [...openEntries].reverse().find((entry) =>
+            const latestStartIndex = [...openEntries].map((entry, index) => ({ entry, index })).reverse().find(({ entry }) =>
                 String((entry && entry.message) || "").startsWith("[DutySyncSWDebug] notificationclick start")
-            ) || null;
-            if (!latestStart) {
+            );
+            if (!latestStartIndex) {
                 return [];
             }
-            const latestTraceId = latestStart && latestStart.payload ? latestStart.payload.trace_id || null : null;
-            if (latestTraceId) {
-                return openEntries.filter((entry) => {
-                    const payload = entry && entry.payload ? entry.payload : {};
-                    return (payload.trace_id || null) === latestTraceId;
-                });
-            }
-            const latestTs = String(latestStart.ts || "");
-            return openEntries.filter((entry) => String(entry.ts || "") >= latestTs);
+            return openEntries.slice(latestStartIndex.index);
         }
 
         async function renderDutySyncDebugConsole() {
