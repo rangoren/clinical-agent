@@ -53,6 +53,7 @@ GOOGLE_SHEETS_VALUES_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet
 DUTY_SYNC_CALENDAR_TYPE = "personal"
 DUTY_SYNC_WRITE_DISABLED_MESSAGE = "Duty Sync review is ready, but Google Calendar writes are disabled in this environment."
 DEFAULT_DUTY_SYNC_POLLING_MINUTES = 45 if APP_ENV == "production" else 1
+PUSH_OPEN_CONTEXT_FALLBACK_TTL_SECONDS = 300
 
 
 def _is_debug_env():
@@ -466,6 +467,14 @@ def _serialize_push_open_context(connection_doc, pending_payload=None):
     review_id = context.get("review_id")
     if not review_id:
         return None
+    pushed_at = context.get("pushed_at")
+    if pushed_at:
+        pushed_at_dt = _parse_iso_datetime(pushed_at) if isinstance(pushed_at, str) else pushed_at
+        now_dt = _utcnow()
+        if pushed_at_dt is not None and getattr(pushed_at_dt, "tzinfo", None) is not None:
+            now_dt = now_dt.replace(tzinfo=pushed_at_dt.tzinfo)
+        if pushed_at_dt is not None and (now_dt - pushed_at_dt).total_seconds() > PUSH_OPEN_CONTEXT_FALLBACK_TTL_SECONDS:
+            return None
     if pending_payload and pending_payload.get("review_id") != review_id:
         return None
     return {
@@ -904,6 +913,7 @@ def get_duty_sync_status(session_id):
     doc = _connection_doc(session_id) or {}
     current_status = doc.get("current_status", "not_connected")
     last_checked_at = as_iso(doc.get("last_checked_at"))
+    push_open_context_fallback = _serialize_push_open_context(doc)
     if not access_state.get("ok"):
         result = {
             "available": google_calendar_enabled(),
@@ -975,6 +985,7 @@ def get_duty_sync_status(session_id):
         "details": details,
         "last_checked_at": last_checked_at,
         "last_successful_parse_at": as_iso(doc.get("last_successful_parse_at")),
+        "push_open_context_fallback": push_open_context_fallback,
     }
     if _is_debug_env() and current_status == "error":
         if doc.get("last_debug_reason"):
