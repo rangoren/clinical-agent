@@ -2020,6 +2020,8 @@
         let dutySyncForegroundOpenDebugActive = false;
         let dutySyncForegroundRecoveryAttemptCounter = 0;
         let dutySyncActiveForegroundRecoveryAttemptId = null;
+        let dutySyncForegroundRecoveryRetryIndex = -1;
+        let dutySyncForegroundRecoveryRetryTimer = null;
         let lastConsumedDutySyncServerFallbackKey = null;
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
@@ -2036,6 +2038,7 @@
         const dutySyncRenderSnapshotPrefix = "[DutySyncRenderDebugSnapshot]";
         const dutySyncOpenDebugPrefix = "[DutySyncOpenDebug]";
         const dutySyncForegroundRecoveryDebugPrefix = "[DutySyncForegroundRecoveryDebug]";
+        const dutySyncForegroundRecoveryRetryDelaysMs = [400, 1000];
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -3196,6 +3199,43 @@
             {% endif %}
         }
 
+        function stopDutySyncForegroundRecoveryRetryPlan() {
+            if (dutySyncForegroundRecoveryRetryTimer) {
+                clearTimeout(dutySyncForegroundRecoveryRetryTimer);
+                dutySyncForegroundRecoveryRetryTimer = null;
+            }
+            dutySyncForegroundRecoveryRetryIndex = -1;
+        }
+
+        function hasDutySyncRecoverableStatusContext(status) {
+            return !!(
+                status &&
+                (
+                    (status.push_review_scope && status.push_review_scope.review_id)
+                    || (status.pending_review && status.pending_review.review_id)
+                    || (status.push_open_context_fallback && status.push_open_context_fallback.review_id)
+                )
+            );
+        }
+
+        function scheduleDutySyncForegroundRecoveryRetry() {
+            const nextIndex = dutySyncForegroundRecoveryRetryIndex + 1;
+            if (nextIndex >= dutySyncForegroundRecoveryRetryDelaysMs.length) {
+                stopDutySyncForegroundRecoveryRetryPlan();
+                return;
+            }
+            dutySyncForegroundRecoveryRetryIndex = nextIndex;
+            const delayMs = dutySyncForegroundRecoveryRetryDelaysMs[nextIndex];
+            if (dutySyncForegroundRecoveryRetryTimer) {
+                clearTimeout(dutySyncForegroundRecoveryRetryTimer);
+            }
+            dutySyncForegroundRecoveryRetryTimer = setTimeout(() => {
+                dutySyncForegroundRecoveryRetryTimer = null;
+                pendingDutySyncForegroundRecovery = true;
+                refreshDutySyncStatus().catch(() => {});
+            }, delayMs);
+        }
+
         async function copyDutySyncText(text) {
             {% if app_env != "production" %}
             if (navigator.clipboard && window.isSecureContext) {
@@ -4309,6 +4349,7 @@
                 value: shouldRunForegroundRecovery,
             });
             if (shouldRunForegroundRecovery) {
+                stopDutySyncForegroundRecoveryRetryPlan();
                 beginDutySyncForegroundRecoveryDebugSession(source, {
                     visibility_state: document.visibilityState,
                     has_focus: document.hasFocus(),
@@ -4653,12 +4694,12 @@
         }
 
         async function refreshDutySyncStatus() {
-            if (appMode !== "scheduling" && !pendingDutySyncForegroundRecovery) return;
+            if (appMode !== "scheduling" && !pendingDutySyncForegroundRecovery && dutySyncForegroundRecoveryRetryIndex < 0) return;
             if (dutySyncStatusRefreshPromise) {
                 return dutySyncStatusRefreshPromise;
             }
             dutySyncStatusRefreshPromise = (async () => {
-                const foregroundRecoveryActive = pendingDutySyncForegroundRecovery;
+                const foregroundRecoveryActive = pendingDutySyncForegroundRecovery || dutySyncForegroundRecoveryRetryIndex >= 0;
                 try {
                     logDutySyncRuntime("FLOW_STATUS_REFRESH", { source: "status", phase: "start" });
                     logDutySyncRuntime("refreshDutySyncStatus start", { app_mode: appMode });
@@ -4692,6 +4733,7 @@
                         phase: "complete",
                         pending_review: summarizeDutyReview(data && data.pending_review ? data.pending_review : null),
                     });
+                    const hasRecoverableContext = hasDutySyncRecoverableStatusContext(data);
                     if (dutySyncActiveForegroundRecoveryAttemptId !== null) {
                         logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus result", {
                             push_review_scope_exists: !!(data && data.push_review_scope && data.push_review_scope.review_id),
@@ -4724,6 +4766,13 @@
                         renderModeState();
                     }
                     updateDutySyncUi(data);
+                    if (foregroundRecoveryActive) {
+                        if (hasRecoverableContext) {
+                            stopDutySyncForegroundRecoveryRetryPlan();
+                        } else {
+                            scheduleDutySyncForegroundRecoveryRetry();
+                        }
+                    }
                     return data;
                 } catch (_error) {
                     if (dutySyncActiveForegroundRecoveryAttemptId !== null) {
@@ -6303,6 +6352,7 @@
                 dutySyncDebug("service worker message received", { targetUrl });
                 const isAlreadyOpenForeground = document.visibilityState === "visible" && document.hasFocus();
                 if (isAlreadyOpenForeground) {
+                    stopDutySyncForegroundRecoveryRetryPlan();
                     beginDutySyncForegroundRecoveryDebugSession("already_open_foreground", {
                         message_type: data.type,
                         review_id: reviewIdentity.review_id,
