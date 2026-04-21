@@ -724,8 +724,43 @@ def _format_shift_phrase(count):
     return f"{count} shift was" if count == 1 else f"{count} shifts were"
 
 
-def _build_calendar_apply_reply(applied):
+def _format_reply_shift_line(duty):
+    duty = duty or {}
+    raw_date = str(duty.get("date") or "")
+    weekday_text = ""
+    date_text = raw_date
+    if raw_date:
+        try:
+            parsed_date = datetime.fromisoformat(raw_date)
+            weekday_text = parsed_date.strftime("%A")
+            date_text = parsed_date.strftime("%d %b")
+        except ValueError:
+            weekday_text = ""
+            date_text = raw_date
+    title_parts = [part.strip() for part in str(duty.get("title") or duty.get("role") or "").split("/") if part.strip()]
+    title_text = " · ".join(title_parts)
+    return " · ".join(part for part in [weekday_text, date_text, title_text] if part)
+
+
+def _build_added_shifts_reply(selected_changes):
+    added_lines = [
+        _format_reply_shift_line((change or {}).get("new_duty") or {})
+        for change in (selected_changes or [])
+        if (change or {}).get("change_type") == "added" and (change or {}).get("included", True)
+    ]
+    added_lines = [line for line in added_lines if line]
+    if not added_lines:
+        return None
+    summary_line = f"{_format_shift_phrase(len(added_lines))} added to your calendar:"
+    return "\n".join([summary_line, *added_lines, "", "You’re all set."])
+
+
+def _build_calendar_apply_reply(applied, selected_changes=None):
     applied = applied or {}
+    if applied.get("added") and not applied.get("changed") and not applied.get("removed"):
+        added_reply = _build_added_shifts_reply(selected_changes or [])
+        if added_reply:
+            return added_reply
     parts = []
     if applied.get("added"):
         parts.append(f"{_format_shift_phrase(applied['added'])} added to your calendar")
@@ -1064,7 +1099,7 @@ def approve_pending_duty_review(session_id, review_id):
     applied = calendar_sync_result.get("applied") or {}
     return _attach_render_debug({
         "status": "approved",
-        "reply": _build_calendar_apply_reply(applied),
+        "reply": _build_calendar_apply_reply(applied, review_doc.get("detected_changes_json") or []),
         "approved_duty_count": len(duties_json),
     }, [
         _render_debug_entry("approval executing", pending_payload),
@@ -1113,7 +1148,7 @@ def approve_pending_duty_review_scope(session_id, review_id, change_keys):
         )
     return _attach_render_debug({
         "status": "approved",
-        "reply": _build_calendar_apply_reply(calendar_sync_result.get("applied") or {}),
+        "reply": _build_calendar_apply_reply(calendar_sync_result.get("applied") or {}, selected_changes),
         "approved_duty_count": len(duties_json),
         "pending_review": _serialize_review_doc(duty_sync_pending_reviews_collection.find_one({"_id": review_doc["_id"]})) if remaining_changes else None,
     }, [
