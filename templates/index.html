@@ -4284,6 +4284,7 @@
                 appMode = "scheduling";
                 renderModeState();
             }
+            resetChatSurfaceForPushModeTransition();
             const loadedReview = await loadDutySyncReviewForDeepLink();
             if (loadedReview && loadedReview.review) {
                 maybeOpenDutySyncReviewFromPayload(loadedReview.review, resumeStartedAt, loadedReview.source || "push_scoped");
@@ -5389,6 +5390,18 @@
             refreshEntryGuidanceVisibility();
             scheduleDutySyncPolling();
             bootstrapSession();
+        }
+
+        function resetChatSurfaceForPushModeTransition() {
+            const chat = document.getElementById("chat");
+            if (chat) {
+                chat.innerHTML = "";
+            }
+            hideSessionBanner();
+            clearStudyCards();
+            setThinkingState(false);
+            setActiveDutyReview(null, "push_mode_transition_reset");
+            refreshEntryGuidanceVisibility();
         }
 
         function setComposerEnabled(enabled) {
