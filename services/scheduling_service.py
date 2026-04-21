@@ -1118,6 +1118,20 @@ def _looks_like_short_followup(message):
     return len(re.findall(r"\w+", lowered, flags=re.UNICODE)) <= 8
 
 
+def _is_scheduling_greeting(message):
+    cleaned = _normalize_text(message).strip().lower()
+    return cleaned in {
+        "hi",
+        "hello",
+        "hey",
+        "hi there",
+        "hello there",
+        "hey there",
+        "שלום",
+        "היי",
+    }
+
+
 def _extract_contextual_summary_date(message):
     lowered = _normalize_text(message).lower()
     lowered = lowered.replace("tommrow", "tomorrow").replace("tomrrow", "tomorrow")
@@ -2324,6 +2338,11 @@ def _build_monthly_shift_summary(session_id, message):
     return _build_monthly_shift_summary_for_month(session_id, month, year)
 
 
+def _shift_month(year, month, delta):
+    index = ((year * 12) + (month - 1)) + delta
+    return index // 12, (index % 12) + 1
+
+
 def _maybe_resolve_scheduling_context_followup(session_id, user_message):
     context = _get_recent_scheduling_context(session_id)
     if not context or not _looks_like_short_followup(user_message):
@@ -2333,6 +2352,14 @@ def _maybe_resolve_scheduling_context_followup(session_id, user_message):
     entities = context.get("entities") or {}
 
     if intent == "monthly_shift_summary":
+        lowered = _normalize_text(user_message).lower()
+        context_month = int(entities.get("month") or 0)
+        context_year = int(entities.get("year") or 0)
+        if "next month" in lowered and context_month and context_year:
+            next_year, next_month = _shift_month(context_year, context_month, 1)
+            return _build_monthly_shift_summary_for_month(session_id, next_month, next_year)
+        if "this month" in lowered and context_month and context_year:
+            return _build_monthly_shift_summary_for_month(session_id, context_month, context_year)
         month, year = _extract_month_year(user_message)
         if month:
             resolved_year = year
@@ -2364,6 +2391,12 @@ def build_scheduling_welcome(session_id):
 
 def handle_scheduling_message(session_id, user_message):
     normalized_user_message = _normalize_scheduling_aliases(session_id, user_message)
+    if _is_scheduling_greeting(normalized_user_message):
+        _clear_pending_details_context(session_id)
+        return {
+            "reply": "I’m here for your schedule. Ask me about shifts, today, tomorrow, or calendar changes.",
+            "scheduling_draft": None,
+        }
     contextual_followup = _maybe_resolve_scheduling_context_followup(session_id, normalized_user_message)
     if contextual_followup:
         _clear_pending_details_context(session_id)
