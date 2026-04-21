@@ -2022,6 +2022,7 @@
         let dutySyncActiveForegroundRecoveryAttemptId = null;
         let dutySyncForegroundRecoveryRetryIndex = -1;
         let dutySyncForegroundRecoveryRetryTimer = null;
+        let pendingDutySyncForegroundPrompt = null;
         let lastConsumedDutySyncServerFallbackKey = null;
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
@@ -4011,6 +4012,26 @@
                 duty_sync_connected: dutySyncConnected,
                 duty_sync_needs_reconnect: dutySyncNeedsReconnect,
             });
+            const foregroundPromptMatchesActiveReview =
+                pendingDutySyncForegroundPrompt &&
+                activeDutyReview &&
+                pendingDutySyncForegroundPrompt.review_id &&
+                activeDutyReview.review_id === pendingDutySyncForegroundPrompt.review_id &&
+                (
+                    !pendingDutySyncForegroundPrompt.updated_at
+                    || !activeDutyReview.updated_at
+                    || normalizeDutySyncReviewUpdatedAt(activeDutyReview.updated_at) === normalizeDutySyncReviewUpdatedAt(pendingDutySyncForegroundPrompt.updated_at)
+                );
+            if (foregroundPromptMatchesActiveReview) {
+                clearDutySyncForegroundPrompt();
+            }
+            if (pendingDutySyncForegroundPrompt) {
+                showSessionBanner(
+                    "A new Duty Sync review is available.",
+                    `<button class="secondary-button" onclick="openDutySyncForegroundPromptReview()">Open review</button>`
+                );
+                return true;
+            }
             if (shouldShowDutySyncNotificationPrompt()) {
                 if (appMode === "scheduling") {
                     if (!googleCalendarConnected) {
@@ -5071,6 +5092,13 @@
                 source: renderSource,
                 caller: renderCaller
             });
+            if (
+                pendingDutySyncForegroundPrompt &&
+                pendingDutySyncForegroundPrompt.review_id &&
+                pendingDutySyncForegroundPrompt.review_id === renderReview.review_id
+            ) {
+                clearDutySyncForegroundPrompt();
+            }
             hideStudyCards();
             refreshEntryGuidanceVisibility();
             setActiveDutyReview(renderReview, "appendDutyReviewCard");
@@ -5927,6 +5955,20 @@
             document.getElementById("session-banner").style.display = "block";
         }
 
+        function clearDutySyncForegroundPrompt() {
+            pendingDutySyncForegroundPrompt = null;
+        }
+
+        async function openDutySyncForegroundPromptReview() {
+            const prompt = pendingDutySyncForegroundPrompt;
+            clearDutySyncForegroundPrompt();
+            if (prompt && prompt.review_id) {
+                await openDutySyncReviewContextById(prompt.review_id, prompt.updated_at || "");
+                return;
+            }
+            await openDutySyncReviewContext();
+        }
+
         function renderStudySessionBanner() {
             hideSessionBanner();
         }
@@ -6352,6 +6394,11 @@
                 dutySyncDebug("service worker message received", { targetUrl });
                 const isAlreadyOpenForeground = document.visibilityState === "visible" && document.hasFocus();
                 if (isAlreadyOpenForeground) {
+                    pendingDutySyncForegroundPrompt = {
+                        review_id: reviewIdentity.review_id || null,
+                        updated_at: reviewIdentity.updated_at || null,
+                    };
+                    renderDutySyncPrimaryBanner();
                     stopDutySyncForegroundRecoveryRetryPlan();
                     beginDutySyncForegroundRecoveryDebugSession("already_open_foreground", {
                         message_type: data.type,
