@@ -1120,12 +1120,13 @@ def _looks_like_short_followup(message):
 
 def _extract_contextual_summary_date(message):
     lowered = _normalize_text(message).lower()
+    lowered = lowered.replace("tommrow", "tomorrow").replace("tomrrow", "tomorrow")
     if "today" in lowered or "tomorrow" in lowered:
-        return _extract_date(message)
+        return _extract_date(lowered)
     if any(f"next {weekday_name}" in lowered for weekday_name in WEEKDAYS):
-        return _extract_date(message)
+        return _extract_date(lowered)
     if any(weekday_name in lowered for weekday_name in WEEKDAYS):
-        return _extract_date(message)
+        return _extract_date(lowered)
     return None
 
 
@@ -2168,6 +2169,14 @@ def _load_saved_shift_duties_for_month(session_id, month, year):
     return duties
 
 
+def _load_saved_shift_duties_for_date(session_id, target_date):
+    if not target_date:
+        return []
+    duties = _load_saved_shift_duties_for_month(session_id, target_date.month, target_date.year)
+    target_iso = target_date.isoformat()
+    return [duty for duty in duties if str(duty.get("date") or "") == target_iso]
+
+
 def _format_shift_summary_line_from_duty(duty):
     duty_date = str(duty.get("date") or "")
     title = duty.get("title") or duty.get("role") or "תורנות"
@@ -2176,6 +2185,28 @@ def _format_shift_summary_line_from_duty(duty):
     except ValueError:
         date_label = duty_date or "Unknown date"
     return f"- {date_label} · {title}"
+
+
+def _build_shift_summary_for_date(session_id, target_date):
+    duties = _load_saved_shift_duties_for_date(session_id, target_date)
+    date_label = target_date.strftime("%A %d %b %Y")
+    _save_scheduling_context(
+        session_id,
+        intent="daily_shift_summary",
+        entities={"date": target_date.isoformat()},
+    )
+    if not duties:
+        return {
+            "reply": f"I don’t see any saved shifts for {date_label}.",
+            "scheduling_draft": None,
+        }
+
+    lines = [f"Your shifts for {date_label}", f"{len(duties)} total:"]
+    lines.extend(_format_shift_summary_line_from_duty(duty) for duty in duties)
+    return {
+        "reply": "\n".join(lines),
+        "scheduling_draft": None,
+    }
 
 
 def _build_daily_summary_for_date(session_id, target_date):
@@ -2308,6 +2339,14 @@ def _maybe_resolve_scheduling_context_followup(session_id, user_message):
             if not _message_has_explicit_year(user_message):
                 resolved_year = entities.get("year") or year
             return _build_monthly_shift_summary_for_month(session_id, month, resolved_year)
+        target_date = _extract_contextual_summary_date(user_message)
+        if target_date:
+            return _build_shift_summary_for_date(session_id, target_date)
+
+    if intent == "daily_shift_summary":
+        target_date = _extract_contextual_summary_date(user_message)
+        if target_date:
+            return _build_shift_summary_for_date(session_id, target_date)
 
     if intent == "daily_summary":
         target_date = _extract_contextual_summary_date(user_message)
@@ -2327,6 +2366,7 @@ def handle_scheduling_message(session_id, user_message):
     normalized_user_message = _normalize_scheduling_aliases(session_id, user_message)
     contextual_followup = _maybe_resolve_scheduling_context_followup(session_id, normalized_user_message)
     if contextual_followup:
+        _clear_pending_details_context(session_id)
         return contextual_followup
 
     if _is_monthly_shift_summary_request(normalized_user_message):
