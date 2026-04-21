@@ -2861,14 +2861,18 @@ def _rule_nuance_text(item):
 
 def _mcq_why_correct_here_text(item):
     key_clue = _mcq_key_clue_text(item)
-    threshold = _first_nonempty_text(item.get("threshold_variable"), item.get("decision_point"))
     action = _option_text_by_key(item, item.get("correct_answer_key"))
     explanation = _first_nonempty_text(item.get("explanation"))
+    tempting_wrong_key = item.get("tempting_wrong_option")
+    tempting_wrong_text = _option_text_by_key(item, tempting_wrong_key)
+    tension = _first_nonempty_list_entry(item.get("conflicting_axes") or []) or _first_nonempty_list_entry(item.get("clinical_noise") or [])
 
-    if key_clue and threshold and action:
-        return f"Because {key_clue.lower()}, this crosses the threshold of {threshold.lower()}, so the next step is to {action.lower()}."
-    if threshold and action:
-        return f"This stem crosses the threshold of {threshold.lower()}, so the next step is to {action.lower()}."
+    if key_clue and action and tempting_wrong_text:
+        if tension:
+            return f"Even though {tension.lower()}, {key_clue.lower()} is the deciding clue, so {action.lower()} takes priority over {tempting_wrong_text.lower()}."
+        return f"Even though {tempting_wrong_text.lower()} is tempting, {key_clue.lower()} is the deciding clue, so {action.lower()} is the right next step."
+    if key_clue and action:
+        return f"{key_clue} is the deciding clue here, so {action.lower()} is the right next step."
     return explanation
 
 
