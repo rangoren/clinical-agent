@@ -2031,6 +2031,7 @@
         const dutySyncSwBridgeMarker = "[DutySyncSWDebug] BRIDGE_OK";
         const dutySyncRenderSnapshotPrefix = "[DutySyncRenderDebugSnapshot]";
         const dutySyncOpenDebugPrefix = "[DutySyncOpenDebug]";
+        const dutySyncForegroundRecoveryDebugPrefix = "[DutySyncForegroundRecoveryDebug]";
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -2728,25 +2729,7 @@
 
         function isDutySyncOpenDebugEntry(entry) {
             const message = String((entry && entry.message) || "");
-            if (message.startsWith("[DutySyncSWDebug]")) {
-                return [
-                    "[DutySyncSWDebug] open-flow session start",
-                    "[DutySyncSWDebug] notificationclick start",
-                    "[DutySyncSWDebug] before clients.matchAll",
-                    "[DutySyncSWDebug] after clients.matchAll",
-                    "[DutySyncSWDebug] before choosing existing client",
-                    "[DutySyncSWDebug] after choosing existing client",
-                    "[DutySyncSWDebug] existing client found",
-                    "[DutySyncSWDebug] before postMessage",
-                    "[DutySyncSWDebug] after postMessage",
-                    "[DutySyncSWDebug] duty-sync-open-review message sent",
-                    "[DutySyncSWDebug] before focus",
-                    "[DutySyncSWDebug] after focus",
-                    "[DutySyncSWDebug] focus called",
-                    "[DutySyncSWDebug] notificationclick error",
-                ].some((prefix) => message.startsWith(prefix));
-            }
-            return message.startsWith(dutySyncOpenDebugPrefix);
+            return message.startsWith(dutySyncForegroundRecoveryDebugPrefix);
         }
 
         function parseDutySyncTraceIdentity(inputUrl, fallback = {}) {
@@ -3057,16 +3040,10 @@
         function getLatestDutySyncOpenFlowEntries(entries) {
             const openEntries = (Array.isArray(entries) ? entries : []).filter((entry) => isDutySyncOpenDebugEntry(entry));
             const latestSessionStart = [...openEntries].map((entry, index) => ({ entry, index })).reverse().find(({ entry }) =>
-                String((entry && entry.message) || "").startsWith("[DutySyncSWDebug] open-flow session start")
+                String((entry && entry.message) || "").startsWith(`${dutySyncForegroundRecoveryDebugPrefix} session start`)
             );
             if (latestSessionStart) {
                 return openEntries.slice(latestSessionStart.index);
-            }
-            const latestClickStart = [...openEntries].map((entry, index) => ({ entry, index })).reverse().find(({ entry }) =>
-                String((entry && entry.message) || "").startsWith("[DutySyncSWDebug] notificationclick start")
-            );
-            if (latestClickStart) {
-                return openEntries.slice(latestClickStart.index);
             }
             return [];
         }
@@ -3166,6 +3143,27 @@
                 ts: new Date().toISOString(),
                 origin: "app",
                 message: `${dutySyncOpenDebugPrefix} ${message}`,
+                payload: {
+                    trace_id: identity.trace_id,
+                    review_id: identity.review_id,
+                    updated_at: identity.updated_at,
+                    ...(payload || {}),
+                },
+            };
+            const entries = readDutySyncDebugEntries();
+            entries.push(entry);
+            writeDutySyncDebugEntries(mergeDutySyncDebugEntries(entries));
+            renderDutySyncDebugConsole();
+            {% endif %}
+        }
+
+        function logDutySyncForegroundRecoveryDebug(message, payload = {}) {
+            {% if app_env != "production" %}
+            const identity = parseDutySyncTraceIdentity(payload.target_url || payload.url || "", payload);
+            const entry = {
+                ts: new Date().toISOString(),
+                origin: "app",
+                message: `${dutySyncForegroundRecoveryDebugPrefix} ${message}`,
                 payload: {
                     trace_id: identity.trace_id,
                     review_id: identity.review_id,
@@ -4288,13 +4286,25 @@
             const shouldRunForegroundRecovery =
                 (source === "pageshow" || source === "visibilitychange" || source === "focus")
                 && document.visibilityState === "visible";
+            logDutySyncForegroundRecoveryDebug("pendingDutySyncForegroundRecovery set", {
+                source,
+                value: shouldRunForegroundRecovery,
+            });
             if (shouldRunForegroundRecovery) {
                 pendingDutySyncForegroundRecovery = true;
+                logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus triggered by foreground recovery", {
+                    source,
+                    triggered: true,
+                });
                 logDutySyncRuntime("restorePushContextAndResumeDutySyncReview foreground_recovery", { source });
                 await refreshDutySyncStatus();
                 logDutySyncRuntime("restorePushContextAndResumeDutySyncReview exit", { reason: "foreground_recovery" });
                 return;
             }
+            logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus triggered by foreground recovery", {
+                source,
+                triggered: false,
+            });
             logDutySyncRuntime("restorePushContextAndResumeDutySyncReview exit", { reason: "no_resume" });
         }
 
@@ -4328,10 +4338,30 @@
             const shouldRecoverFromStatus =
                 (pendingDutySyncStatusRecovery && !!(status && status.push_review_scope && status.push_review_scope.review_id))
                 || (pendingDutySyncForegroundRecovery && !!(status && ((status.push_review_scope && status.push_review_scope.review_id) || (status.pending_review && status.pending_review.review_id))));
+            if (pendingDutySyncForegroundRecovery) {
+                logDutySyncForegroundRecoveryDebug("maybeOpenDutySyncReviewFromStatus called", {
+                    called: true,
+                    should_recover_from_status: shouldRecoverFromStatus,
+                });
+            }
             if (!pendingDutySyncReviewDeepLink && !shouldRecoverFromStatus) return false;
-            if (!status || (!status.pending_review && !status.push_review_scope)) return false;
+            if (!status || (!status.pending_review && !status.push_review_scope)) {
+                if (pendingDutySyncForegroundRecovery) {
+                    logDutySyncForegroundRecoveryDebug("review open skipped", {
+                        skipped: true,
+                        reason: "no_review_in_status",
+                    });
+                }
+                return false;
+            }
             const resolvedReview = resolveDutyReviewScope(status);
             if (!resolvedReview || !resolvedReview.review_id) {
+                if (pendingDutySyncForegroundRecovery) {
+                    logDutySyncForegroundRecoveryDebug("review open skipped", {
+                        skipped: true,
+                        reason: "no_scoped_review_match",
+                    });
+                }
                 persistDutySyncPushDebug("[App] review not opened: no scoped review match");
                 logDutySyncRuntime("maybeOpenDutySyncReviewFromStatus exit", {
                     reason: "no_scoped_review_match",
@@ -4345,8 +4375,21 @@
             if (!review || !review.review_id) return false;
             const openKey = getDutySyncReviewIdentityKey(review);
             if (lastOpenedDutySyncReviewKey === openKey) {
+                if (pendingDutySyncForegroundRecovery) {
+                    logDutySyncForegroundRecoveryDebug("review open skipped", {
+                        skipped: true,
+                        reason: "duplicate_review_key",
+                    });
+                }
                 pendingDutySyncForegroundRecovery = false;
                 return false;
+            }
+            if (pendingDutySyncForegroundRecovery) {
+                logDutySyncForegroundRecoveryDebug("review open attempted", {
+                    attempted: true,
+                    review_id: review.review_id,
+                    updated_at: review.updated_at || null,
+                });
             }
             pendingDutySyncStatusRecovery = false;
             pendingDutySyncForegroundRecovery = false;
@@ -4570,6 +4613,7 @@
                 return dutySyncStatusRefreshPromise;
             }
             dutySyncStatusRefreshPromise = (async () => {
+                const foregroundRecoveryActive = pendingDutySyncForegroundRecovery;
                 try {
                     logDutySyncRuntime("FLOW_STATUS_REFRESH", { source: "status", phase: "start" });
                     logDutySyncRuntime("refreshDutySyncStatus start", { app_mode: appMode });
@@ -4603,6 +4647,12 @@
                         phase: "complete",
                         pending_review: summarizeDutyReview(data && data.pending_review ? data.pending_review : null),
                     });
+                    if (foregroundRecoveryActive) {
+                        logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus result", {
+                            push_review_scope_exists: !!(data && data.push_review_scope && data.push_review_scope.review_id),
+                            pending_review_exists: !!(data && data.pending_review && data.pending_review.review_id),
+                        });
+                    }
                     if (
                         pendingDutySyncForegroundRecovery &&
                         appMode !== "scheduling" &&
@@ -4615,6 +4665,13 @@
                     updateDutySyncUi(data);
                     return data;
                 } catch (_error) {
+                    if (foregroundRecoveryActive) {
+                        logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus result", {
+                            push_review_scope_exists: false,
+                            pending_review_exists: false,
+                            error: "request_failed",
+                        });
+                    }
                     logDutySyncRuntime("refreshDutySyncStatus complete", { error: "request_failed" });
                     logDutySyncRuntime("FLOW_STATUS_REFRESH", { source: "status", phase: "failed" });
                     updateDutySyncUi({ available: false, connected: false });
@@ -6264,6 +6321,8 @@
             .then(() => Promise.allSettled([requestDutySyncSwVersion(), requestDutySyncSwDebugBridge()]))
             .catch(() => {});
         window.addEventListener("pageshow", () => {
+            logDutySyncForegroundRecoveryDebug("session start", { source: "pageshow" });
+            logDutySyncForegroundRecoveryDebug("pageshow fired", { fired: true });
             dutySyncDebug("pageshow fired", { href: window.location.href });
             persistDutySyncPushDebug("[Client] app resumed");
             ensureDutySyncFlowTraceId("resume", { source: "resume" }, true);
@@ -6274,6 +6333,8 @@
         document.addEventListener("visibilitychange", () => {
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
             if (document.visibilityState === "visible") {
+                logDutySyncForegroundRecoveryDebug("session start", { source: "visibilitychange" });
+                logDutySyncForegroundRecoveryDebug("visibilitychange -> visible fired", { fired: true });
                 persistDutySyncPushDebug("[Client] app resumed");
                 ensureDutySyncFlowTraceId("resume", { source: "resume" }, true);
                 logDutySyncRuntime("push/deep-link entry received", { source: "visibilitychange", href: window.location.href });
@@ -6283,6 +6344,8 @@
         });
         window.addEventListener("focus", () => {
             if (document.visibilityState !== "visible") return;
+            logDutySyncForegroundRecoveryDebug("session start", { source: "focus" });
+            logDutySyncForegroundRecoveryDebug("focus fired", { fired: true });
             restorePushContextAndResumeDutySyncReview("focus").catch(() => {});
         });
         if (pendingDutySyncReviewDeepLink) {
