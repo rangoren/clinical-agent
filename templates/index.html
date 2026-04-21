@@ -1991,6 +1991,7 @@
             <div class="duty-sync-debug-actions">
                 <button type="button" onclick="toggleDutySyncDebugPanel(false)">Close</button>
                 <button type="button" onclick="clearDutySyncDebugLogs()">Clear logs</button>
+                <button type="button" onclick="copyDutySyncOpenFlowLogs()">Copy open-flow logs</button>
             </div>
             <div id="duty-sync-debug-log" class="duty-sync-debug-log">No logs yet.</div>
         </div>
@@ -3003,6 +3004,27 @@
             return mergeDutySyncDebugEntries([...appEntries, ...swEntries]);
         }
 
+        function buildDutySyncOpenDebugFallback(entries, openEntries) {
+            const allEntries = Array.isArray(entries) ? entries : [];
+            const filteredEntries = Array.isArray(openEntries) ? openEntries : [];
+            const hasSwNotificationClick = allEntries.some((entry) =>
+                String((entry && entry.message) || "").startsWith("[DutySyncSWDebug] notificationclick start")
+            );
+            const hasAppSwMessage = allEntries.some((entry) =>
+                String((entry && entry.message) || "").startsWith(`${dutySyncOpenDebugPrefix} service worker message received`)
+            );
+            const totalCount = allEntries.length;
+            const filteredCount = filteredEntries.length;
+            const logsFilteredOut = totalCount > 0 && filteredCount === 0;
+            return [
+                "[DutySyncOpenDebug]",
+                `open_flow_log_count: ${filteredCount}`,
+                `sw_notificationclick_start_exists: ${hasSwNotificationClick ? "yes" : "no"}`,
+                `app_service_worker_message_exists: ${hasAppSwMessage ? "yes" : "no"}`,
+                `logs_filtered_out: ${logsFilteredOut ? "yes" : "no"}`,
+            ].join("\n");
+        }
+
         async function renderDutySyncDebugConsole() {
             {% if app_env != "production" %}
             const node = document.getElementById("duty-sync-debug-log");
@@ -3010,7 +3032,7 @@
             const entries = await getMergedDutySyncDebugEntries();
             const openEntries = entries.filter((entry) => isDutySyncOpenDebugEntry(entry));
             const blocks = openEntries.map((entry) => formatDutySyncOpenDebugEntry(entry));
-            node.textContent = blocks.length ? blocks.join("\n") : "No already-open push logs yet.";
+            node.textContent = blocks.length ? blocks.join("\n") : buildDutySyncOpenDebugFallback(entries, openEntries);
             node.scrollTop = node.scrollHeight;
             {% endif %}
         }
@@ -3060,6 +3082,17 @@
             } catch (error) {
                 logDutySyncRuntime("debug console copy failed", { error: String(error) });
             }
+            {% endif %}
+        }
+
+        async function copyDutySyncOpenFlowLogs() {
+            {% if app_env != "production" %}
+            const entries = await getMergedDutySyncDebugEntries();
+            const openEntries = entries.filter((entry) => isDutySyncOpenDebugEntry(entry));
+            const text = openEntries.length
+                ? openEntries.map((entry) => formatDutySyncOpenDebugEntry(entry)).join("\n")
+                : buildDutySyncOpenDebugFallback(entries, openEntries);
+            await copyDutySyncText(text);
             {% endif %}
         }
 
