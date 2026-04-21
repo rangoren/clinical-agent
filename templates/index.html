@@ -235,72 +235,6 @@
             align-items: center;
         }
 
-        .duty-sync-debug-trigger {
-            position: fixed;
-            right: 18px;
-            bottom: calc(env(safe-area-inset-bottom, 0px) + 124px);
-            z-index: 70;
-            padding: 10px 12px;
-            border: 1px solid rgba(24, 38, 34, 0.16);
-            border-radius: 999px;
-            background: rgba(24, 38, 34, 0.92);
-            color: #fff;
-            font-size: 0.78rem;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .duty-sync-debug-panel {
-            position: fixed;
-            inset: 0;
-            z-index: 80;
-            display: none;
-            background: rgba(15, 23, 21, 0.88);
-            color: #f5f7f6;
-        }
-
-        .duty-sync-debug-panel.open {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .duty-sync-debug-panel-inner {
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-            flex: 1;
-            padding: 16px;
-            gap: 12px;
-        }
-
-        .duty-sync-debug-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .duty-sync-debug-actions button {
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            background: rgba(255, 255, 255, 0.08);
-            color: #fff;
-            cursor: pointer;
-        }
-
-        .duty-sync-debug-log {
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            word-break: break-word;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(255, 255, 255, 0.04);
-            padding: 12px;
-            font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        }
-
         .settings-shell {
             position: relative;
             display: none;
@@ -1984,20 +1918,6 @@
             </div>
         </footer>
     </main>
-    {% if app_env != "production" %}
-    <button id="duty-sync-debug-trigger" class="duty-sync-debug-trigger" type="button" onclick="toggleDutySyncDebugPanel(true)">DutySync debug</button>
-    <div id="duty-sync-debug-panel" class="duty-sync-debug-panel" aria-hidden="true">
-        <div class="duty-sync-debug-panel-inner">
-            <div class="duty-sync-debug-actions">
-                <button type="button" onclick="toggleDutySyncDebugPanel(false)">Close</button>
-                <button type="button" onclick="clearDutySyncDebugLogs()">Clear logs</button>
-                <button type="button" onclick="copyDutySyncOpenFlowLogs()">Copy open-flow logs</button>
-            </div>
-            <div id="duty-sync-debug-log" class="duty-sync-debug-log">No logs yet.</div>
-        </div>
-    </div>
-    {% endif %}
-
     <script>
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
@@ -5211,22 +5131,6 @@
             const visibleChanges = buildDutyReviewVisibleChanges(renderReview);
             const visibleSummaryValues = buildDutyReviewSummary(visibleChanges);
             const visibleChangeCount = visibleChanges.length;
-            {% if app_env != "production" %}
-            const finalDebugBlock = document.createElement("pre");
-            finalDebugBlock.className = "calendar-subcopy";
-            finalDebugBlock.style.whiteSpace = "pre-wrap";
-            finalDebugBlock.textContent = [
-                "[DutySyncFinalDebug]",
-                `review_id: ${renderReview.review_id || "-"}`,
-                `approval_change_count: ${renderReview.approval_change_count || buildDutySyncApprovalChangeKeys(renderReview).length}`,
-                `approval_change_keys: ${JSON.stringify(buildDutySyncApprovalChangeKeys(renderReview))}`,
-                `render_input_change_count: ${(review.changes || []).length}`,
-                `render_input_change_keys: ${JSON.stringify((review.changes || []).map((change) => change.change_key).filter(Boolean))}`,
-                `visible_row_count: ${visibleChangeCount}`,
-                `visible_row_types: ${JSON.stringify(visibleChanges.map((change) => change.change_type).filter(Boolean))}`,
-            ].join("\n");
-            card.appendChild(finalDebugBlock);
-            {% endif %}
             const isSingleEventReview = visibleChangeCount === 1 && renderReview.review_type !== "monthly_rollover";
             const reviewMode = isSingleEventReview ? "single" : (renderReview.review_mode === "individual" ? "individual" : "group");
             const singleChange = getSingleDutyReviewChange(renderReview);
