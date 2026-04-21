@@ -1908,6 +1908,7 @@
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
         let appMode = "clinical";
+        let chatRenderContextToken = 0;
         let googleCalendarConnected = false;
         let studyCardsRequested = false;
         let studyCardsDismissed = false;
@@ -3881,6 +3882,7 @@
         }
 
         async function openDutySyncReviewContext(review) {
+            const modeChanged = appMode !== "scheduling";
             if (appMode !== "scheduling") {
                 appMode = "scheduling";
                 renderModeState();
@@ -3892,6 +3894,9 @@
             clearDutySyncPushContext();
             const resolvedReview = review && review.review_id ? review : activeDutyReview;
             if (resolvedReview && resolvedReview.review_id) {
+                if (modeChanged) {
+                    resetChatSurfaceForDutySyncReviewOpen("openDutySyncReviewContext");
+                }
                 appendDutyReviewCard(resolvedReview, "generic_pending_review", "openDutySyncReviewContext");
                 return;
             }
@@ -3906,6 +3911,9 @@
                 ingestDutySyncRenderDebug(data);
                 updateDutySyncUi(data);
                 if (data && data.pending_review && data.pending_review.review_id) {
+                    if (modeChanged) {
+                        resetChatSurfaceForDutySyncReviewOpen("openDutySyncReviewContext.status");
+                    }
                     appendDutyReviewCard(data.pending_review, "generic_pending_review", "openDutySyncReviewContext.status");
                     return;
                 }
@@ -3923,6 +3931,9 @@
                     ingestDutySyncRenderDebug(checkData);
                     if (checkData && checkData.pending_review && checkData.pending_review.review_id) {
                         setActiveDutyReview(checkData.pending_review, "openDutySyncReviewContext.check");
+                        if (modeChanged) {
+                            resetChatSurfaceForDutySyncReviewOpen("openDutySyncReviewContext.check");
+                        }
                         appendDutyReviewCard(checkData.pending_review, "generic_pending_review", "openDutySyncReviewContext.check");
                         await refreshDutySyncStatus();
                         return;
@@ -4241,6 +4252,15 @@
             if (dutySyncReviewOpenPromise) return dutySyncReviewOpenPromise;
             dutySyncReviewOpenPromise = (async () => {
             const params = new URLSearchParams(window.location.search);
+            const hasImmediatePushContext =
+                pendingDutySyncReviewDeepLink
+                || !!pendingDutySyncReviewId
+                || !!pendingDutySyncReviewUpdatedAt
+                || isDutySyncPushDeepLinkUrlActive()
+                || !!(loadDutySyncPushContext() || {}).active;
+            if (hasImmediatePushContext) {
+                transitionImmediatelyToSchedulingForPush("resumeDutySyncReviewFromDeepLink");
+            }
             ensureDutySyncFlowTraceId("resume", {
                 source: "resume",
                 review_id: params.get("duty_sync_review_id"),
@@ -4284,6 +4304,7 @@
                 appMode = "scheduling";
                 renderModeState();
             }
+            resetChatSurfaceForPushModeTransition();
             const loadedReview = await loadDutySyncReviewForDeepLink();
             if (loadedReview && loadedReview.review) {
                 maybeOpenDutySyncReviewFromPayload(loadedReview.review, resumeStartedAt, loadedReview.source || "push_scoped");
@@ -4341,6 +4362,9 @@
                 !!pendingDutySyncReviewId ||
                 !!pendingDutySyncReviewUpdatedAt ||
                 isDutySyncPushDeepLinkUrlActive();
+            if (hasRealPushContext) {
+                transitionImmediatelyToSchedulingForPush(`restorePushContextAndResumeDutySyncReview:${source}`);
+            }
             if (shouldResume) {
                 pendingDutySyncStatusRecovery = false;
                 logDutySyncRuntime("FLOW_RESUME_ATTEMPT", { source: "resume" });
@@ -4505,6 +4529,7 @@
             clearDutySyncPushContext();
             lastOpenedDutySyncReviewKey = openKey;
             clearPendingDutySyncInlineReview();
+            resetChatSurfaceForDutySyncReviewOpen("maybeOpenDutySyncReviewFromStatus");
             logDutySyncRuntime("maybeOpenDutySyncReviewFromStatus render", {
                 review: summarizeDutyReview(review),
                 pending_review: summarizeDutyReview(status && status.pending_review ? status.pending_review : null),
@@ -4541,6 +4566,7 @@
             clearDutySyncPushContext();
             lastOpenedDutySyncReviewKey = openKey;
             clearPendingDutySyncInlineReview();
+            resetChatSurfaceForDutySyncReviewOpen("maybeOpenDutySyncReviewFromPayload");
             persistDutySyncPushDebug("[App] review open handler fired");
             logDutySyncRuntime("maybeOpenDutySyncReviewFromPayload render", {
                 review: summarizeDutyReview(review),
@@ -5371,6 +5397,7 @@
 
         function switchAppMode(nextMode) {
             if (appMode === nextMode) return;
+            chatRenderContextToken += 1;
             appMode = nextMode;
             if (nextMode === "scheduling") {
                 calendarStatusKnown = false;
@@ -5389,6 +5416,39 @@
             refreshEntryGuidanceVisibility();
             scheduleDutySyncPolling();
             bootstrapSession();
+        }
+
+        function resetChatSurfaceForPushModeTransition() {
+            chatRenderContextToken += 1;
+            const chat = document.getElementById("chat");
+            if (chat) {
+                chat.innerHTML = "";
+            }
+            hideSessionBanner();
+            clearStudyCards();
+            setThinkingState(false);
+            setActiveDutyReview(null, "push_mode_transition_reset");
+            refreshEntryGuidanceVisibility();
+        }
+
+        function resetChatSurfaceForDutySyncReviewOpen(source = "generic") {
+            const chat = document.getElementById("chat");
+            if (chat) {
+                chat.innerHTML = "";
+            }
+            hideSessionBanner();
+            clearStudyCards();
+            setThinkingState(false);
+            setActiveDutyReview(null, `duty_sync_review_reset:${source}`);
+            refreshEntryGuidanceVisibility();
+        }
+
+        function transitionImmediatelyToSchedulingForPush(source = "push_transition") {
+            if (appMode !== "scheduling") {
+                appMode = "scheduling";
+                renderModeState();
+            }
+            resetChatSurfaceForDutySyncReviewOpen(source);
         }
 
         function setComposerEnabled(enabled) {
@@ -5738,6 +5798,7 @@
 
         function appendStudyInteractionCard(studyItem) {
             if (!studyItem || !studyItem.content_item_id) return null;
+            if (appMode !== "clinical") return null;
 
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
@@ -5808,6 +5869,7 @@
 
         function appendStudyFollowupCard(contentItemId, actions) {
             if (!actions || !actions.length) return;
+            if (appMode !== "clinical") return;
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
             card.className = "study-followup-card";
@@ -5825,6 +5887,8 @@
         }
 
         async function openStudyCard(cardType, contentItemId) {
+            const requestMode = appMode;
+            const requestToken = chatRenderContextToken;
             dismissStudyCards();
             clearStudyCards();
             const input = document.getElementById("input");
@@ -5847,6 +5911,9 @@
                 });
                 const data = await response.json();
                 setThinkingState(false);
+                if (requestMode !== "clinical" || appMode !== requestMode || requestToken !== chatRenderContextToken) {
+                    return;
+                }
                 if (data.reply && !data.study_item) {
                     appendAssistantMessage(data.reply, "system");
                 }
@@ -5864,6 +5931,8 @@
         }
 
         async function submitStudyAnswer(contentItemId, selectedOption, card) {
+            const requestMode = appMode;
+            const requestToken = chatRenderContextToken;
             if (card) {
                 card.querySelectorAll(".study-option-button").forEach((button) => {
                     button.disabled = true;
@@ -5883,6 +5952,9 @@
                     })
                 });
                 const data = await response.json();
+                if (requestMode !== "clinical" || appMode !== requestMode || requestToken !== chatRenderContextToken) {
+                    return;
+                }
                 if (data.reply && !data.study_item) {
                     appendAssistantMessage(data.reply);
                 }
@@ -5899,6 +5971,8 @@
         }
 
         async function handleStudyAction(contentItemId, action) {
+            const requestMode = appMode;
+            const requestToken = chatRenderContextToken;
             try {
                 const response = await fetch("/study/action", {
                     method: "POST",
@@ -5912,6 +5986,9 @@
                     })
                 });
                 const data = await response.json();
+                if (requestMode !== "clinical" || appMode !== requestMode || requestToken !== chatRenderContextToken) {
+                    return;
+                }
                 if (data.reply && !data.study_item) {
                     appendAssistantMessage(data.reply);
                 }
@@ -6141,6 +6218,8 @@
             const input = document.getElementById("input");
             const message = input.value.trim();
             if (!message) return;
+            const requestMode = appMode;
+            const requestToken = chatRenderContextToken;
 
             dismissStudyCards();
             clearStudyCards();
@@ -6166,6 +6245,9 @@
                 const data = await response.json();
 
                 setThinkingState(false);
+                if (appMode !== requestMode || requestToken !== chatRenderContextToken) {
+                    return;
+                }
                 const assistantRow = appendAssistantMessage(data.reply);
 
                 if (data.undo) {
