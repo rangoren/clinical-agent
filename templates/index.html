@@ -3021,20 +3021,20 @@
         function buildDutySyncOpenDebugFallback(entries, openEntries) {
             const allEntries = (Array.isArray(entries) ? entries : []).filter((entry) => isDutySyncOpenDebugEntry(entry));
             const filteredEntries = Array.isArray(openEntries) ? openEntries : [];
-            const hasSwNotificationClick = allEntries.some((entry) =>
-                String((entry && entry.message) || "").startsWith("[DutySyncSWDebug] notificationclick start")
+            const hasForegroundSessionStart = allEntries.some((entry) =>
+                String((entry && entry.message) || "").startsWith(`${dutySyncForegroundRecoveryDebugPrefix} session start`)
             );
             const hasAppSwMessage = allEntries.some((entry) =>
-                String((entry && entry.message) || "").startsWith(`${dutySyncOpenDebugPrefix} service worker message received`)
+                String((entry && entry.message) || "").startsWith(`${dutySyncForegroundRecoveryDebugPrefix} service worker message received`)
             );
             const totalCount = allEntries.length;
             const filteredCount = filteredEntries.length;
             const logsFilteredOut = totalCount > 0 && filteredCount === 0;
             return [
-                "[DutySyncOpenDebug]",
-                `open_flow_log_count: ${filteredCount}`,
-                `sw_notificationclick_start_exists: ${hasSwNotificationClick ? "yes" : "no"}`,
-                `app_service_worker_message_exists: ${hasAppSwMessage ? "yes" : "no"}`,
+                "[DutySyncForegroundRecoveryDebug]",
+                `foreground_log_count: ${filteredCount}`,
+                `session_start_exists: ${hasForegroundSessionStart ? "yes" : "no"}`,
+                `service_worker_message_received_exists: ${hasAppSwMessage ? "yes" : "no"}`,
                 `logs_filtered_out: ${logsFilteredOut ? "yes" : "no"}`,
             ].join("\n");
         }
@@ -3047,7 +3047,7 @@
             if (latestSessionStart) {
                 return openEntries.slice(latestSessionStart.index);
             }
-            return [];
+            return openEntries;
         }
 
         async function renderDutySyncDebugConsole() {
