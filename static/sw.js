@@ -135,7 +135,7 @@ function postDutySyncOpenReviewMessage(client, targetUrl) {
 }
 
 function writeDutySyncOpenFlowDebug(message, payload) {
-  return writeDutySyncSwDebug(`[DutySyncSWDebug] ${message}`, payload || {});
+  return writeDutySyncSwDebug(message, payload || {});
 }
 
 function broadcastDutySyncSwDebugBatch() {
@@ -232,6 +232,12 @@ self.addEventListener("notificationclick", (event) => {
   let storedTraceLine = "";
   event.waitUntil(
     Promise.resolve()
+      .then(() => writeDutySyncOpenFlowDebug("open-flow session start", {
+        trace_id: traceId,
+        source: "notification_tap",
+        review_id: reviewIdentity.review_id || null,
+        updated_at: reviewIdentity.updated_at || null,
+      }))
       .then(() => writeDutySyncOpenFlowDebug("notificationclick start", {
         notification_data: notificationData,
         review_id: reviewIdentity.review_id || null,

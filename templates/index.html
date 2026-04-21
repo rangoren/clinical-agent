@@ -2728,6 +2728,7 @@
             const message = String((entry && entry.message) || "");
             if (message.startsWith("[DutySyncSWDebug]")) {
                 return [
+                    "[DutySyncSWDebug] open-flow session start",
                     "[DutySyncSWDebug] notificationclick start",
                     "[DutySyncSWDebug] before clients.matchAll",
                     "[DutySyncSWDebug] after clients.matchAll",
@@ -3053,13 +3054,19 @@
 
         function getLatestDutySyncOpenFlowEntries(entries) {
             const openEntries = (Array.isArray(entries) ? entries : []).filter((entry) => isDutySyncOpenDebugEntry(entry));
-            const latestStartIndex = [...openEntries].map((entry, index) => ({ entry, index })).reverse().find(({ entry }) =>
+            const latestSessionStart = [...openEntries].map((entry, index) => ({ entry, index })).reverse().find(({ entry }) =>
+                String((entry && entry.message) || "").startsWith("[DutySyncSWDebug] open-flow session start")
+            );
+            if (latestSessionStart) {
+                return openEntries.slice(latestSessionStart.index);
+            }
+            const latestClickStart = [...openEntries].map((entry, index) => ({ entry, index })).reverse().find(({ entry }) =>
                 String((entry && entry.message) || "").startsWith("[DutySyncSWDebug] notificationclick start")
             );
-            if (!latestStartIndex) {
-                return [];
+            if (latestClickStart) {
+                return openEntries.slice(latestClickStart.index);
             }
-            return openEntries.slice(latestStartIndex.index);
+            return [];
         }
 
         async function renderDutySyncDebugConsole() {
