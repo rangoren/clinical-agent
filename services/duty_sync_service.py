@@ -1,6 +1,5 @@
 from dataclasses import asdict
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from urllib.parse import quote
 
 import requests
@@ -55,7 +54,6 @@ DUTY_SYNC_CALENDAR_TYPE = "personal"
 DUTY_SYNC_WRITE_DISABLED_MESSAGE = "Duty Sync review is ready, but Google Calendar writes are disabled in this environment."
 DEFAULT_DUTY_SYNC_POLLING_MINUTES = 45 if APP_ENV == "production" else 1
 PUSH_OPEN_CONTEXT_FALLBACK_TTL_SECONDS = 300
-JERUSALEM_TZ = ZoneInfo("Asia/Jerusalem")
 
 
 def _is_debug_env():
@@ -726,44 +724,8 @@ def _format_shift_phrase(count):
     return f"{count} shift was" if count == 1 else f"{count} shifts were"
 
 
-def _format_reply_shift_line(duty):
-    duty = duty or {}
-    parsed = _parse_iso_datetime(duty.get("start_datetime")) or _parse_iso_datetime(duty.get("date"))
-    if parsed is None and duty.get("date"):
-        try:
-            parsed = datetime.fromisoformat(str(duty.get("date")))
-        except ValueError:
-            parsed = None
-    weekday_text = ""
-    date_text = str(duty.get("date") or "")
-    if parsed is not None:
-        localized = parsed.astimezone(JERUSALEM_TZ) if parsed.tzinfo else parsed.replace(tzinfo=JERUSALEM_TZ)
-        weekday_text = localized.strftime("%A")
-        date_text = localized.strftime("%d %b")
-    title_parts = [part.strip() for part in str(duty.get("title") or duty.get("role") or "").split("/") if part.strip()]
-    title_text = " · ".join(title_parts)
-    return " · ".join(part for part in [weekday_text, date_text, title_text] if part)
-
-
-def _build_added_shifts_reply(added_changes):
-    added_lines = [
-        _format_reply_shift_line((change or {}).get("new_duty") or {})
-        for change in (added_changes or [])
-        if (change or {}).get("change_type") == "added" and (change or {}).get("included", True)
-    ]
-    added_lines = [line for line in added_lines if line]
-    if not added_lines:
-        return None
-    summary_line = f"{_format_shift_phrase(len(added_lines))} added to your calendar:"
-    return "\n".join([summary_line, *added_lines, "", "You’re all set."])
-
-
-def _build_calendar_apply_reply(applied, selected_changes=None):
+def _build_calendar_apply_reply(applied):
     applied = applied or {}
-    if applied.get("added") and not applied.get("changed") and not applied.get("removed"):
-        added_reply = _build_added_shifts_reply(selected_changes or [])
-        if added_reply:
-            return added_reply
     parts = []
     if applied.get("added"):
         parts.append(f"{_format_shift_phrase(applied['added'])} added to your calendar")
@@ -1102,7 +1064,7 @@ def approve_pending_duty_review(session_id, review_id):
     applied = calendar_sync_result.get("applied") or {}
     return _attach_render_debug({
         "status": "approved",
-        "reply": _build_calendar_apply_reply(applied, review_doc.get("detected_changes_json") or []),
+        "reply": _build_calendar_apply_reply(applied),
         "approved_duty_count": len(duties_json),
     }, [
         _render_debug_entry("approval executing", pending_payload),
@@ -1151,7 +1113,7 @@ def approve_pending_duty_review_scope(session_id, review_id, change_keys):
         )
     return _attach_render_debug({
         "status": "approved",
-        "reply": _build_calendar_apply_reply(calendar_sync_result.get("applied") or {}, selected_changes),
+        "reply": _build_calendar_apply_reply(calendar_sync_result.get("applied") or {}),
         "approved_duty_count": len(duties_json),
         "pending_review": _serialize_review_doc(duty_sync_pending_reviews_collection.find_one({"_id": review_doc["_id"]})) if remaining_changes else None,
     }, [
