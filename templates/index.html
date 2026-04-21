@@ -2018,6 +2018,8 @@
         let dutyPushRegistration = null;
         let pendingDutySyncForegroundRecovery = false;
         let dutySyncForegroundOpenDebugActive = false;
+        let dutySyncForegroundRecoveryAttemptCounter = 0;
+        let dutySyncActiveForegroundRecoveryAttemptId = null;
         let lastConsumedDutySyncServerFallbackKey = null;
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
@@ -3170,6 +3172,7 @@
                     trace_id: identity.trace_id,
                     review_id: identity.review_id,
                     updated_at: identity.updated_at,
+                    attempt_id: dutySyncActiveForegroundRecoveryAttemptId,
                     ...(payload || {}),
                 },
             };
@@ -3177,6 +3180,19 @@
             entries.push(entry);
             writeDutySyncDebugEntries(mergeDutySyncDebugEntries(entries));
             renderDutySyncDebugConsole();
+            {% endif %}
+        }
+
+        function beginDutySyncForegroundRecoveryDebugSession(source, payload = {}) {
+            {% if app_env != "production" %}
+            dutySyncForegroundRecoveryAttemptCounter += 1;
+            dutySyncActiveForegroundRecoveryAttemptId = dutySyncForegroundRecoveryAttemptCounter;
+            dutySyncForegroundOpenDebugActive = true;
+            logDutySyncForegroundRecoveryDebug("session start", {
+                source,
+                attempt_id: dutySyncActiveForegroundRecoveryAttemptId,
+                ...(payload || {}),
+            });
             {% endif %}
         }
 
@@ -4293,6 +4309,10 @@
                 value: shouldRunForegroundRecovery,
             });
             if (shouldRunForegroundRecovery) {
+                beginDutySyncForegroundRecoveryDebugSession(source, {
+                    visibility_state: document.visibilityState,
+                    has_focus: document.hasFocus(),
+                });
                 pendingDutySyncForegroundRecovery = true;
                 logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus triggered by foreground recovery", {
                     source,
@@ -4340,34 +4360,47 @@
         }
 
         function maybeOpenDutySyncReviewFromStatus(status) {
+            const foregroundDebugActive = dutySyncActiveForegroundRecoveryAttemptId !== null;
             const shouldRecoverFromStatus =
                 (pendingDutySyncStatusRecovery && !!(status && status.push_review_scope && status.push_review_scope.review_id))
                 || (pendingDutySyncForegroundRecovery && !!(status && ((status.push_review_scope && status.push_review_scope.review_id) || (status.pending_review && status.pending_review.review_id))));
-            if (dutySyncForegroundOpenDebugActive) {
+            if (foregroundDebugActive) {
                 logDutySyncForegroundRecoveryDebug("maybeOpenDutySyncReviewFromStatus called", {
                     called: true,
                     should_recover_from_status: shouldRecoverFromStatus,
                 });
             }
-            if (!pendingDutySyncReviewDeepLink && !shouldRecoverFromStatus) return false;
+            if (!pendingDutySyncReviewDeepLink && !shouldRecoverFromStatus) {
+                if (foregroundDebugActive) {
+                    logDutySyncForegroundRecoveryDebug("review open skipped", {
+                        skipped: true,
+                        reason: "no_recoverable_review_context",
+                    });
+                    dutySyncForegroundOpenDebugActive = false;
+                    dutySyncActiveForegroundRecoveryAttemptId = null;
+                }
+                return false;
+            }
             if (!status || (!status.pending_review && !status.push_review_scope)) {
-                if (dutySyncForegroundOpenDebugActive) {
+                if (foregroundDebugActive) {
                     logDutySyncForegroundRecoveryDebug("review open skipped", {
                         skipped: true,
                         reason: "no_review_in_status",
                     });
                     dutySyncForegroundOpenDebugActive = false;
+                    dutySyncActiveForegroundRecoveryAttemptId = null;
                 }
                 return false;
             }
             const resolvedReview = resolveDutyReviewScope(status);
             if (!resolvedReview || !resolvedReview.review_id) {
-                if (dutySyncForegroundOpenDebugActive) {
+                if (foregroundDebugActive) {
                     logDutySyncForegroundRecoveryDebug("review open skipped", {
                         skipped: true,
                         reason: "no_scoped_review_match",
                     });
                     dutySyncForegroundOpenDebugActive = false;
+                    dutySyncActiveForegroundRecoveryAttemptId = null;
                 }
                 persistDutySyncPushDebug("[App] review not opened: no scoped review match");
                 logDutySyncRuntime("maybeOpenDutySyncReviewFromStatus exit", {
@@ -4382,23 +4415,25 @@
             if (!review || !review.review_id) return false;
             const openKey = getDutySyncReviewIdentityKey(review);
             if (lastOpenedDutySyncReviewKey === openKey) {
-                if (dutySyncForegroundOpenDebugActive) {
+                if (foregroundDebugActive) {
                     logDutySyncForegroundRecoveryDebug("review open skipped", {
                         skipped: true,
                         reason: "duplicate_review_key",
                     });
                     dutySyncForegroundOpenDebugActive = false;
+                    dutySyncActiveForegroundRecoveryAttemptId = null;
                 }
                 pendingDutySyncForegroundRecovery = false;
                 return false;
             }
-            if (dutySyncForegroundOpenDebugActive) {
+            if (foregroundDebugActive) {
                 logDutySyncForegroundRecoveryDebug("review open attempted", {
                     attempted: true,
                     review_id: review.review_id,
                     updated_at: review.updated_at || null,
                 });
                 dutySyncForegroundOpenDebugActive = false;
+                dutySyncActiveForegroundRecoveryAttemptId = null;
             }
             pendingDutySyncStatusRecovery = false;
             pendingDutySyncForegroundRecovery = false;
@@ -4657,7 +4692,7 @@
                         phase: "complete",
                         pending_review: summarizeDutyReview(data && data.pending_review ? data.pending_review : null),
                     });
-                    if (dutySyncForegroundOpenDebugActive) {
+                    if (dutySyncActiveForegroundRecoveryAttemptId !== null) {
                         logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus result", {
                             push_review_scope_exists: !!(data && data.push_review_scope && data.push_review_scope.review_id),
                             pending_review_exists: !!(data && data.pending_review && data.pending_review.review_id),
@@ -4691,7 +4726,7 @@
                     updateDutySyncUi(data);
                     return data;
                 } catch (_error) {
-                    if (dutySyncForegroundOpenDebugActive) {
+                    if (dutySyncActiveForegroundRecoveryAttemptId !== null) {
                         logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus result", {
                             push_review_scope_exists: false,
                             pending_review_exists: false,
@@ -4699,6 +4734,7 @@
                             error: "request_failed",
                         });
                         dutySyncForegroundOpenDebugActive = false;
+                        dutySyncActiveForegroundRecoveryAttemptId = null;
                     }
                     logDutySyncRuntime("refreshDutySyncStatus complete", { error: "request_failed" });
                     logDutySyncRuntime("FLOW_STATUS_REFRESH", { source: "status", phase: "failed" });
@@ -6264,9 +6300,7 @@
                 dutySyncDebug("service worker message received", { targetUrl });
                 const isAlreadyOpenForeground = document.visibilityState === "visible" && document.hasFocus();
                 if (isAlreadyOpenForeground) {
-                    dutySyncForegroundOpenDebugActive = true;
-                    logDutySyncForegroundRecoveryDebug("session start", {
-                        source: "already_open_foreground",
+                    beginDutySyncForegroundRecoveryDebugSession("already_open_foreground", {
                         message_type: data.type,
                         review_id: reviewIdentity.review_id,
                         updated_at: reviewIdentity.updated_at,
