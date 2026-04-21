@@ -126,6 +126,14 @@ function resolveDutySyncSwDebugClient() {
   });
 }
 
+function postDutySyncOpenReviewMessage(client, targetUrl) {
+  if (!client || !("postMessage" in client)) {
+    return false;
+  }
+  client.postMessage({ type: "duty-sync-open-review", url: targetUrl });
+  return true;
+}
+
 function broadcastDutySyncSwDebugBatch() {
   return resolveDutySyncSwDebugClient().then((client) => {
     if (!client) {
@@ -266,6 +274,7 @@ self.addEventListener("notificationclick", (event) => {
           "[SW] navigate/openWindow attempted",
         ]);
         self.__dutySyncDebug("client found", { clientCount: clients.length, targetUrl });
+        postDutySyncOpenReviewMessage(client, targetUrl);
         if ("navigate" in client) {
           self.__dutySyncDebug("navigation attempted", { via: "client.navigate", targetUrl });
           writeDutySyncSwDebug("navigation action", {
@@ -274,22 +283,19 @@ self.addEventListener("notificationclick", (event) => {
           });
           return client.navigate(targetUrl).then((navigatedClient) => {
             const activeClient = navigatedClient || client;
-            if (activeClient && "postMessage" in activeClient) {
-              activeClient.postMessage({ type: "duty-sync-open-review", url: targetUrl, review });
-            }
             if (activeClient && "focus" in activeClient) {
               return activeClient.focus();
             }
             return activeClient;
           });
         }
-        if (self.clients.openWindow) {
-          self.__dutySyncDebug("navigation attempted", { via: "openWindow-existing-client", targetUrl });
+        if (client && "focus" in client) {
+          self.__dutySyncDebug("navigation attempted", { via: "focus-existing-client", targetUrl });
           writeDutySyncSwDebug("navigation action", {
-            branch: "openWindow-existing-client",
+            branch: "focus-existing-client",
             target_url: targetUrl,
           });
-          return self.clients.openWindow(targetUrl);
+          return client.focus();
         }
         writeDutySyncSwDebug("navigation action", {
           branch: "existing-client-no-navigation",
