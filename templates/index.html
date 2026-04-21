@@ -1908,6 +1908,7 @@
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
         let appMode = "clinical";
+        let chatRenderContextToken = 0;
         let googleCalendarConnected = false;
         let studyCardsRequested = false;
         let studyCardsDismissed = false;
@@ -5372,6 +5373,7 @@
 
         function switchAppMode(nextMode) {
             if (appMode === nextMode) return;
+            chatRenderContextToken += 1;
             appMode = nextMode;
             if (nextMode === "scheduling") {
                 calendarStatusKnown = false;
@@ -5393,6 +5395,7 @@
         }
 
         function resetChatSurfaceForPushModeTransition() {
+            chatRenderContextToken += 1;
             const chat = document.getElementById("chat");
             if (chat) {
                 chat.innerHTML = "";
@@ -5751,6 +5754,7 @@
 
         function appendStudyInteractionCard(studyItem) {
             if (!studyItem || !studyItem.content_item_id) return null;
+            if (appMode !== "clinical") return null;
 
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
@@ -5821,6 +5825,7 @@
 
         function appendStudyFollowupCard(contentItemId, actions) {
             if (!actions || !actions.length) return;
+            if (appMode !== "clinical") return;
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
             card.className = "study-followup-card";
@@ -5838,6 +5843,8 @@
         }
 
         async function openStudyCard(cardType, contentItemId) {
+            const requestMode = appMode;
+            const requestToken = chatRenderContextToken;
             dismissStudyCards();
             clearStudyCards();
             const input = document.getElementById("input");
@@ -5860,6 +5867,9 @@
                 });
                 const data = await response.json();
                 setThinkingState(false);
+                if (requestMode !== "clinical" || appMode !== requestMode || requestToken !== chatRenderContextToken) {
+                    return;
+                }
                 if (data.reply && !data.study_item) {
                     appendAssistantMessage(data.reply, "system");
                 }
@@ -5877,6 +5887,8 @@
         }
 
         async function submitStudyAnswer(contentItemId, selectedOption, card) {
+            const requestMode = appMode;
+            const requestToken = chatRenderContextToken;
             if (card) {
                 card.querySelectorAll(".study-option-button").forEach((button) => {
                     button.disabled = true;
@@ -5896,6 +5908,9 @@
                     })
                 });
                 const data = await response.json();
+                if (requestMode !== "clinical" || appMode !== requestMode || requestToken !== chatRenderContextToken) {
+                    return;
+                }
                 if (data.reply && !data.study_item) {
                     appendAssistantMessage(data.reply);
                 }
@@ -5912,6 +5927,8 @@
         }
 
         async function handleStudyAction(contentItemId, action) {
+            const requestMode = appMode;
+            const requestToken = chatRenderContextToken;
             try {
                 const response = await fetch("/study/action", {
                     method: "POST",
@@ -5925,6 +5942,9 @@
                     })
                 });
                 const data = await response.json();
+                if (requestMode !== "clinical" || appMode !== requestMode || requestToken !== chatRenderContextToken) {
+                    return;
+                }
                 if (data.reply && !data.study_item) {
                     appendAssistantMessage(data.reply);
                 }
@@ -6154,6 +6174,8 @@
             const input = document.getElementById("input");
             const message = input.value.trim();
             if (!message) return;
+            const requestMode = appMode;
+            const requestToken = chatRenderContextToken;
 
             dismissStudyCards();
             clearStudyCards();
@@ -6179,6 +6201,9 @@
                 const data = await response.json();
 
                 setThinkingState(false);
+                if (appMode !== requestMode || requestToken !== chatRenderContextToken) {
+                    return;
+                }
                 const assistantRow = appendAssistantMessage(data.reply);
 
                 if (data.undo) {
