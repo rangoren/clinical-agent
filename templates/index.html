@@ -4252,6 +4252,15 @@
             if (dutySyncReviewOpenPromise) return dutySyncReviewOpenPromise;
             dutySyncReviewOpenPromise = (async () => {
             const params = new URLSearchParams(window.location.search);
+            const hasImmediatePushContext =
+                pendingDutySyncReviewDeepLink
+                || !!pendingDutySyncReviewId
+                || !!pendingDutySyncReviewUpdatedAt
+                || isDutySyncPushDeepLinkUrlActive()
+                || !!(loadDutySyncPushContext() || {}).active;
+            if (hasImmediatePushContext) {
+                transitionImmediatelyToSchedulingForPush("resumeDutySyncReviewFromDeepLink");
+            }
             ensureDutySyncFlowTraceId("resume", {
                 source: "resume",
                 review_id: params.get("duty_sync_review_id"),
@@ -4353,6 +4362,9 @@
                 !!pendingDutySyncReviewId ||
                 !!pendingDutySyncReviewUpdatedAt ||
                 isDutySyncPushDeepLinkUrlActive();
+            if (hasRealPushContext) {
+                transitionImmediatelyToSchedulingForPush(`restorePushContextAndResumeDutySyncReview:${source}`);
+            }
             if (shouldResume) {
                 pendingDutySyncStatusRecovery = false;
                 logDutySyncRuntime("FLOW_RESUME_ATTEMPT", { source: "resume" });
@@ -5429,6 +5441,14 @@
             setThinkingState(false);
             setActiveDutyReview(null, `duty_sync_review_reset:${source}`);
             refreshEntryGuidanceVisibility();
+        }
+
+        function transitionImmediatelyToSchedulingForPush(source = "push_transition") {
+            if (appMode !== "scheduling") {
+                appMode = "scheduling";
+                renderModeState();
+            }
+            resetChatSurfaceForDutySyncReviewOpen(source);
         }
 
         function setComposerEnabled(enabled) {
