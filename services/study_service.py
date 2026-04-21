@@ -2767,11 +2767,15 @@ def _mcq_key_clue_text(item):
 
 
 def _mcq_threshold_text(item):
-    return _first_nonempty_text(
+    threshold = _first_nonempty_text(
         item.get("threshold_variable"),
         item.get("decision_point"),
         item.get("board_takeaway"),
     )
+    action = _option_text_by_key(item, item.get("correct_answer_key"))
+    if threshold and action:
+        return f"If {threshold.lower()}, {action.lower()}."
+    return threshold
 
 
 def _mcq_practical_rule_text(item):
@@ -2795,15 +2799,15 @@ def _mcq_wrong_answer_context_text(item):
     topic = (item.get("topic") or "").strip().lower()
 
     if threshold_type in {"age_threshold_rule_application", "age_plus_risk_factor_threshold"}:
-        return "That option is more reasonable in a younger patient without biopsy-triggering endometrial risk, when fibroid-directed treatment can come before sampling."
+        return "It fits better in a 32-year-old with heavy bleeding from a known fibroid and no endometrial cancer risk factors, where initial medical treatment can come before biopsy."
     if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
-        return "That option becomes reasonable only when there is no recent pregnancy-associated thrombosis and estrogen is no longer contraindicated after a real risk review."
+        return "It fits better in a patient without a recent pregnancy-associated DVT, where estrogen is not contraindicated after thrombosis-risk review."
     if threshold_type == "response_to_treatment":
-        return "That option becomes reasonable once the patient clearly fails the current treatment path, not while the stem still supports the present plan."
+        return "It fits better after clear treatment failure, such as persistent fever, worsening pain, or no clinical improvement after the expected response window."
     if threshold_type in {"gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
-        return "That option becomes reasonable if maternal or fetal status worsens enough to cross the delivery threshold."
+        return "It fits better when maternal or fetal status worsens, for example infection, severe tracing deterioration, or another delivery trigger."
     if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
-        return "That option becomes reasonable when the reassuring threshold is absent and the imaging pattern or risk profile is more concerning."
+        return "It fits better when the reassuring imaging threshold is absent, such as a thicker stripe or a clearly suspicious adnexal pattern."
     return "That option becomes reasonable only in a different clinical scenario where the stem does not meet the threshold that drives this answer."
 
 
@@ -2832,15 +2836,15 @@ def _rule_exception_text(item):
     subtopic = (item.get("subtopic") or "").strip().lower()
 
     if threshold_type in {"age_threshold_rule_application", "age_plus_risk_factor_threshold"} or "aub" in subtopic:
-        return "A younger low-risk patient with bleeding does not automatically need the same biopsy-first step."
+        return "A younger low-risk patient with bleeding can often start with targeted medical or structural workup instead of immediate biopsy."
     if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
-        return "Do not apply this rule to a patient whose thrombosis history no longer makes estrogen contraindicated."
+        return "This changes if the patient does not have a recent VTE history that still makes estrogen unsafe."
     if threshold_type == "response_to_treatment":
-        return "If the patient is clearly failing therapy or deteriorating, the rule shifts from continue-current-plan to escalate."
+        return "If the patient is worsening or has clearly failed treatment, the right move becomes escalation rather than continuing the same plan."
     if threshold_type in {"gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
-        return "This rule changes once maternal or fetal stability is lost."
+        return "This rule stops applying once maternal or fetal stability is lost and delivery or escalation is required."
     if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
-        return "A more concerning ultrasound or symptom profile changes this from reassurance logic to escalation logic."
+        return "A more concerning ultrasound pattern or symptom profile changes this from reassurance to biopsy, referral, or escalation."
     if topic == "gynecologic oncology":
         return "Do not use this shortcut when the stem adds cancer-risk features that change the workup now."
     if item.get("item_type") == "pearl":
@@ -2853,6 +2857,19 @@ def _rule_nuance_text(item):
         item.get("clinical_consequence"),
         item.get("board_focus"),
     )
+
+
+def _mcq_why_correct_here_text(item):
+    key_clue = _mcq_key_clue_text(item)
+    threshold = _first_nonempty_text(item.get("threshold_variable"), item.get("decision_point"))
+    action = _option_text_by_key(item, item.get("correct_answer_key"))
+    explanation = _first_nonempty_text(item.get("explanation"))
+
+    if key_clue and threshold and action:
+        return f"Because {key_clue.lower()}, this crosses the threshold of {threshold.lower()}, so the next step is to {action.lower()}."
+    if threshold and action:
+        return f"This stem crosses the threshold of {threshold.lower()}, so the next step is to {action.lower()}."
+    return explanation
 
 
 def _build_mcq_structured_lines(item, include_wrong_answer_context=False):
@@ -2871,7 +2888,7 @@ def _build_mcq_structured_lines(item, include_wrong_answer_context=False):
     if threshold:
         lines.append(f"Decision threshold: {threshold}")
 
-    explanation = _first_nonempty_text(item.get("explanation"))
+    explanation = _mcq_why_correct_here_text(item)
     if explanation:
         lines.append(f"Why correct here: {explanation}")
 
