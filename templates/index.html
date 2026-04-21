@@ -2020,6 +2020,7 @@
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
         let dutySyncDebugPanelOpen = false;
         let dutySyncFlowTraceId = null;
+        let dutySyncSwVersion = "unknown";
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
         const studyCardsCacheKey = "entry_study_cards_v1";
@@ -3076,7 +3077,13 @@
             const entries = await getMergedDutySyncDebugEntries();
             const openEntries = getLatestDutySyncOpenFlowEntries(entries);
             const blocks = openEntries.map((entry) => formatDutySyncOpenDebugEntry(entry));
-            node.textContent = blocks.length ? blocks.join("\n") : buildDutySyncOpenDebugFallback(entries, openEntries);
+            const versionBlock = [
+                `[DutySyncVersion]`,
+                `APP_VERSION: {{ app_version }}`,
+                `SW_VERSION: ${dutySyncSwVersion || "unknown"}`,
+            ].join("\n");
+            const body = blocks.length ? blocks.join("\n") : buildDutySyncOpenDebugFallback(entries, openEntries);
+            node.textContent = `${versionBlock}\n\n${body}`;
             node.scrollTop = node.scrollHeight;
             {% endif %}
         }
@@ -6075,6 +6082,9 @@
             navigator.serviceWorker.addEventListener("message", async (event) => {
                 const data = event.data || {};
                 if (data.type === "duty-sync-sw-debug-batch") {
+                    if (data.sw_version) {
+                        dutySyncSwVersion = data.sw_version;
+                    }
                     persistDutySyncSwDebugEntries(data.entries || []);
                     renderDutySyncDebugConsole();
                     return;

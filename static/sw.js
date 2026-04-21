@@ -2,6 +2,7 @@ self.__dutySyncDebug = (...args) => {
   console.log("[DutySyncDebug][SW]", ...args);
 };
 
+const DUTY_SYNC_SW_VERSION = "v0.3.229";
 const DUTY_SYNC_PUSH_DB_NAME = "duty-sync-push";
 const DUTY_SYNC_PUSH_STORE_NAME = "context";
 const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
@@ -111,6 +112,7 @@ function postDutySyncSwDebugBatch(client) {
   return readDutySyncSwDebugEntries().then((entries) => {
     client.postMessage({
       type: "duty-sync-sw-debug-batch",
+      sw_version: DUTY_SYNC_SW_VERSION,
       entries,
     });
     return true;
