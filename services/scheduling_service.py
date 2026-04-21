@@ -1,11 +1,17 @@
 import re
 from calendar import monthrange
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from uuid import uuid4
 
 from bson import ObjectId
 
-from db import scheduled_events_collection, scheduling_drafts_collection, scheduling_preferences_collection
+from db import (
+    duty_sync_snapshots_collection,
+    scheduled_events_collection,
+    scheduling_drafts_collection,
+    scheduling_preferences_collection,
+)
 from services.scheduling_extraction_service import extract_scheduling_intent
 from services.logging_service import log_event
 from services.google_calendar_service import (
@@ -28,6 +34,7 @@ HALF_SHIFT_START_MINUTE = 0
 HALF_SHIFT_END_HOUR = 23
 HALF_SHIFT_END_MINUTE = 0
 HALF_SHIFT_DURATION_MINUTES = 8 * 60
+APP_TIMEZONE = ZoneInfo("Asia/Jerusalem")
 KNOWN_LOCATIONS = {
     "שיבא": ("shiba", "sheba", "tel hashomer", "תל השומר", "שיבא"),
 }
@@ -2039,6 +2046,58 @@ def _format_shift_summary_line(event):
     return f"- {start_label} · {time_label}"
 
 
+def _parse_duty_snapshot_datetime(raw_value):
+    if not raw_value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(raw_value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=APP_TIMEZONE)
+    return parsed.astimezone(APP_TIMEZONE)
+
+
+def _latest_approved_duty_snapshot(session_id):
+    return duty_sync_snapshots_collection.find_one(
+        {"session_id": session_id},
+        sort=[("approved_at", -1)],
+    )
+
+
+def _load_saved_shift_duties_for_month(session_id, month, year):
+    snapshot = _latest_approved_duty_snapshot(session_id)
+    if not snapshot:
+        return []
+
+    month_prefix = f"{year:04d}-{month:02d}-"
+    duties = []
+    for duty in (snapshot.get("duties_json") or []):
+        duty_date = str(duty.get("date") or "")
+        if not duty_date.startswith(month_prefix):
+            continue
+        duties.append(duty)
+
+    duties.sort(
+        key=lambda duty: (
+            duty.get("date") or "",
+            duty.get("start_datetime") or "",
+            duty.get("title") or duty.get("role") or "",
+        )
+    )
+    return duties
+
+
+def _format_shift_summary_line_from_duty(duty):
+    duty_date = str(duty.get("date") or "")
+    title = duty.get("title") or duty.get("role") or "תורנות"
+    try:
+        date_label = datetime.strptime(duty_date, "%Y-%m-%d").strftime("%a %d %b")
+    except ValueError:
+        date_label = duty_date or "Unknown date"
+    return f"- {date_label} · {title}"
+
+
 def _build_daily_summary(session_id):
     now = _utcnow()
     start_of_day = datetime.combine(now.date(), datetime.min.time())
@@ -2110,41 +2169,19 @@ def _build_monthly_shift_summary(session_id, message):
             "scheduling_draft": None,
         }
 
-    start_of_month = datetime(year, month, 1)
-    end_of_month = datetime(year, month, monthrange(year, month)[1], 23, 59, 59)
-    shift_titles = {"תורנות", "תורנות חצי"}
-    events = list(
-        scheduled_events_collection.find(
-            {
-                "session_id": session_id,
-                "status": "confirmed",
-                "start_at": {"$gte": start_of_month, "$lte": end_of_month},
-                "title": {"$in": list(shift_titles)},
-            }
-        ).sort("start_at", 1)
-    )
-
+    duties = _load_saved_shift_duties_for_month(session_id, month, year)
     month_label = datetime(year, month, 1).strftime("%B %Y")
-    if not events:
+    if not duties:
         return {
             "reply": f"I don’t see any saved shifts for {month_label}.",
             "scheduling_draft": None,
         }
 
-    full_shift_count = sum(1 for event in events if event.get("title") == "תורנות")
-    half_shift_count = sum(1 for event in events if event.get("title") == "תורנות חצי")
-    summary_bits = []
-    if full_shift_count:
-        summary_bits.append(f"{full_shift_count} full")
-    if half_shift_count:
-        summary_bits.append(f"{half_shift_count} half")
-    summary_suffix = f" ({', '.join(summary_bits)})" if summary_bits else ""
-
     lines = [
         f"Your shifts for {month_label}",
-        f"{len(events)} total{summary_suffix}:",
+        f"{len(duties)} total:",
     ]
-    lines.extend(_format_shift_summary_line(event) for event in events)
+    lines.extend(_format_shift_summary_line_from_duty(duty) for duty in duties)
     return {
         "reply": "\n".join(lines),
         "scheduling_draft": None,
@@ -2153,21 +2190,21 @@ def _build_monthly_shift_summary(session_id, message):
 
 def build_scheduling_welcome(session_id):
     if has_google_calendar_connection(session_id):
-        return "Scheduling is on."
+        return ""
     return "Connect your calendar in Settings to start creating and syncing events."
 
 
 def handle_scheduling_message(session_id, user_message):
     normalized_user_message = _normalize_scheduling_aliases(session_id, user_message)
 
+    if _is_monthly_shift_summary_request(normalized_user_message):
+        return _build_monthly_shift_summary(session_id, normalized_user_message)
+
     if not has_google_calendar_connection(session_id):
         return {
             "reply": "Calendar scheduling is almost ready. Connect your calendar in Settings first, then I can create and sync events for you here.",
             "scheduling_draft": None,
         }
-
-    if _is_monthly_shift_summary_request(normalized_user_message):
-        return _build_monthly_shift_summary(session_id, normalized_user_message)
 
     if _is_daily_summary_request(normalized_user_message):
         return _build_daily_summary(session_id)

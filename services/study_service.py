@@ -2740,41 +2740,227 @@ def _mcq_takeaway_text(item):
     return ""
 
 
-def _build_mcq_feedback_reply(item, correct, selected_option=None):
-    status = "Correct." if correct else "Incorrect."
+def _first_nonempty_text(*values):
+    for value in values:
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned:
+                return cleaned
+    return ""
+
+
+def _first_nonempty_list_entry(values):
+    for value in values or []:
+        cleaned = str(value or "").strip()
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _mcq_key_clue_text(item):
+    return _first_nonempty_text(
+        item.get("exam_clue"),
+        item.get("threshold_variable"),
+        item.get("decision_point"),
+        item.get("topic"),
+    )
+
+
+def _mcq_threshold_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+    action = _option_text_by_key(item, item.get("correct_answer_key"))
+
+    if threshold_type == "lab_trend_threshold" and action:
+        return f"Platelets <70,000 and falling -> {action.lower()}."
+
+    threshold = _first_nonempty_text(
+        item.get("threshold_variable"),
+        item.get("decision_point"),
+        item.get("board_takeaway"),
+    )
+    if threshold and action:
+        return f"If {threshold.lower()}, {action.lower()}."
+    return threshold
+
+
+def _mcq_practical_rule_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+
+    if threshold_type == "lab_trend_threshold":
+        return "If platelets are <70,000 and falling, avoid routine neuraxial placement; if they are stably >=80,000-100,000 without a downward trend, discuss neuraxial options with anesthesia."
+    return _first_nonempty_text(
+        item.get("board_takeaway"),
+        item.get("board_rule"),
+        item.get("key_takeaway"),
+        item.get("explanation"),
+    )
+
+
+def _mcq_clinical_detail_text(item):
+    return _first_nonempty_list_entry(item.get("management_nuance") or []) or _first_nonempty_text(
+        item.get("clinical_consequence"),
+        item.get("source_excerpt"),
+    )
+
+
+def _mcq_wrong_answer_context_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
+
+    if threshold_type == "lab_trend_threshold":
+        return "It fits better if platelets are stably higher without a downward trend, for example around the low-90s and unchanged, with anesthesia comfortable that neuraxial risk remains acceptable."
+    if threshold_type in {"age_threshold_rule_application", "age_plus_risk_factor_threshold"}:
+        return "It fits better in a 32-year-old with heavy bleeding from a known fibroid and no endometrial cancer risk factors, where initial medical treatment can come before biopsy."
+    if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
+        return "It fits better in a patient without a recent pregnancy-associated DVT, where estrogen is not contraindicated after thrombosis-risk review."
+    if threshold_type == "response_to_treatment":
+        return "It fits better after clear treatment failure, such as persistent fever, worsening pain, or no clinical improvement after the expected response window."
+    if threshold_type in {"gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
+        return "It fits better when maternal or fetal status worsens, for example infection, severe tracing deterioration, or another delivery trigger."
+    if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
+        return "It fits better when the reassuring imaging threshold is absent, such as a thicker stripe or a clearly suspicious adnexal pattern."
+    return "That option becomes reasonable only in a different clinical scenario where the stem does not meet the threshold that drives this answer."
+
+
+def _rule_trigger_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+
+    if threshold_type == "lab_trend_threshold":
+        return "Severe preeclampsia with platelets falling into the high-60s during labor"
+    return _first_nonempty_text(
+        item.get("threshold_variable"),
+        item.get("exam_clue"),
+        item.get("key_fact"),
+        item.get("topic"),
+    )
+
+
+def _rule_action_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+
+    if threshold_type == "lab_trend_threshold":
+        return "Avoid routine neuraxial placement, use alternative analgesia, and keep the obstetric plan moving."
+    return _first_nonempty_text(
+        item.get("board_rule"),
+        item.get("board_takeaway"),
+        item.get("board_focus"),
+        item.get("clinical_consequence"),
+        item.get("key_fact"),
+    )
+
+
+def _rule_exception_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
+    subtopic = (item.get("subtopic") or "").strip().lower()
+
+    if threshold_type == "lab_trend_threshold":
+        return "Stable platelets >=80,000-100,000 without a downward trend or other bleeding concern may justify re-evaluating neuraxial options with anesthesia."
+    if threshold_type in {"age_threshold_rule_application", "age_plus_risk_factor_threshold"} or "aub" in subtopic:
+        return "A younger low-risk patient with bleeding can often start with targeted medical or structural workup instead of immediate biopsy."
+    if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
+        return "This changes if the patient does not have a recent VTE history that still makes estrogen unsafe."
+    if threshold_type == "response_to_treatment":
+        return "If the patient is worsening or has clearly failed treatment, the right move becomes escalation rather than continuing the same plan."
+    if threshold_type in {"gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
+        return "This rule stops applying once maternal or fetal stability is lost and delivery or escalation is required."
+    if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
+        return "A more concerning ultrasound pattern or symptom profile changes this from reassurance to biopsy, referral, or escalation."
+    if topic == "gynecologic oncology":
+        return "Do not use this shortcut when the stem adds cancer-risk features that change the workup now."
+    if item.get("item_type") == "pearl":
+        return "If the stem adds a red-flag feature that changes urgency, escalate beyond the default pearl rule."
+    return "If the key clinical trigger is missing, reassess before applying this rule."
+
+
+def _rule_nuance_text(item):
+    return _first_nonempty_list_entry(item.get("management_nuance") or []) or _first_nonempty_text(
+        item.get("clinical_consequence"),
+        item.get("board_focus"),
+    )
+
+
+def _mcq_why_correct_here_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+    key_clue = _mcq_key_clue_text(item)
+    action = _option_text_by_key(item, item.get("correct_answer_key"))
+    explanation = _first_nonempty_text(item.get("explanation"))
+    tempting_wrong_key = item.get("tempting_wrong_option")
+    tempting_wrong_text = _option_text_by_key(item, tempting_wrong_key)
+    tension = _first_nonempty_list_entry(item.get("conflicting_axes") or []) or _first_nonempty_list_entry(item.get("clinical_noise") or [])
+
+    if threshold_type == "lab_trend_threshold" and action and tempting_wrong_text:
+        return "The real decision driver is neuraxial bleeding risk: a rapid fall to 68,000 outweighs normal coagulation tests and patient comfort, so avoiding neuraxial placement is safer than proceeding with epidural now."
+    if key_clue and action and tempting_wrong_text:
+        if tension:
+            return f"Even though {tension.lower()}, {key_clue.lower()} is the deciding clue, so {action.lower()} takes priority over {tempting_wrong_text.lower()}."
+        return f"Even though {tempting_wrong_text.lower()} is tempting, {key_clue.lower()} is the deciding clue, so {action.lower()} is the right next step."
+    if key_clue and action:
+        return f"{key_clue} is the deciding clue here, so {action.lower()} is the right next step."
+    return explanation
+
+
+def _build_mcq_structured_lines(item, include_wrong_answer_context=False):
     correct_key = item.get("correct_answer_key")
     correct_text = _option_text_by_key(item, correct_key)
-    lines = [status]
+    lines = []
+
     if correct_key and correct_text:
         lines.append(f"Best answer: {correct_key}: {correct_text}")
 
-    explanation = (item.get("explanation") or "").strip()
+    key_clue = _mcq_key_clue_text(item)
+    if key_clue:
+        lines.append(f"Key clue: {key_clue}")
+
+    threshold = _mcq_threshold_text(item)
+    if threshold:
+        lines.append(f"Decision threshold: {threshold}")
+
+    explanation = _mcq_why_correct_here_text(item)
     if explanation:
-        lines.append(f"Why: {explanation}")
+        lines.append(f"Why correct here: {explanation}")
 
-    takeaway = _mcq_takeaway_text(item)
-    if takeaway:
-        lines.append(f"Takeaway: {takeaway}")
-
-    why_not_key = None
-    why_not_reason = None
     tempting_wrong_key = item.get("tempting_wrong_option")
-    tempting_wrong_reason = item.get("tempting_wrong_reason")
-    if correct:
-        why_not_key = tempting_wrong_key
-        why_not_reason = tempting_wrong_reason
-    else:
-        selected_text = _option_text_by_key(item, selected_option)
-        if selected_option and selected_text:
-            why_not_key = selected_option
-            if selected_option == tempting_wrong_key and tempting_wrong_reason:
-                why_not_reason = tempting_wrong_reason
-            else:
-                why_not_reason = "It does not fit the main exam clue as well as the best answer."
+    tempting_wrong_reason = _first_nonempty_text(item.get("tempting_wrong_reason"))
+    if tempting_wrong_key and tempting_wrong_reason:
+        lines.append(f"Why not {tempting_wrong_key}: {tempting_wrong_reason}")
 
-    if why_not_key and why_not_reason:
-        lines.append(f"Why not {why_not_key}: {why_not_reason}")
+    if include_wrong_answer_context:
+        lines.append(f"When that wrong answer fits: {_mcq_wrong_answer_context_text(item)}")
 
+    practical_rule = _mcq_practical_rule_text(item)
+    if practical_rule:
+        lines.append(f"Practical rule: {practical_rule}")
+
+    clinical_detail = _mcq_clinical_detail_text(item)
+    if clinical_detail:
+        lines.append(f"Clinical detail: {clinical_detail}")
+
+    return lines
+
+
+def _build_rule_reply(item):
+    lines = []
+    trigger = _rule_trigger_text(item)
+    action = _rule_action_text(item)
+    exception = _rule_exception_text(item)
+    nuance = _rule_nuance_text(item)
+
+    if trigger:
+        lines.append(f"Trigger / pattern: {trigger}")
+    if action:
+        lines.append(f"Correct action: {action}")
+    if exception:
+        lines.append(f"Important exception: {exception}")
+    if nuance:
+        lines.append(f"Clinical nuance: {nuance}")
+    return "\n".join(lines)
+
+
+def _build_mcq_feedback_reply(item, correct, selected_option=None):
+    status = "Correct." if correct else "Incorrect."
+    lines = [status]
+    lines.extend(_build_mcq_structured_lines(item, include_wrong_answer_context=False))
     return "\n".join(lines)
 
 
@@ -2788,10 +2974,6 @@ def _board_rule_text(item):
 
 
 def _build_mcq_explain_reply(item, state):
-    correct_key = item.get("correct_answer_key")
-    correct_text = _option_text_by_key(item, correct_key)
-    selected_key = (state.get("last_answered_option") or "").upper() or None
-    selected_text = _option_text_by_key(item, selected_key)
     answered_correctly = state.get("last_answer_correct")
     lines = []
 
@@ -2801,35 +2983,7 @@ def _build_mcq_explain_reply(item, state):
     elif answered_correctly is False:
         opening = "Why your answer was off:"
     lines.append(opening)
-
-    if correct_key and correct_text:
-        lines.append(f"Best answer: {correct_key}: {correct_text}")
-
-    explanation = (item.get("explanation") or "").strip()
-    if explanation:
-        lines.append(f"Why: {explanation}")
-
-    takeaway = _mcq_takeaway_text(item)
-    if takeaway:
-        lines.append(f"Takeaway: {takeaway}")
-
-    why_not_key = None
-    why_not_reason = None
-    tempting_wrong_key = item.get("tempting_wrong_option")
-    tempting_wrong_reason = item.get("tempting_wrong_reason")
-    if answered_correctly is False and selected_key and selected_text:
-        why_not_key = selected_key
-        if selected_key == tempting_wrong_key and tempting_wrong_reason:
-            why_not_reason = tempting_wrong_reason
-        else:
-            why_not_reason = "It does not match the main clue as well as the best answer."
-    elif tempting_wrong_key and tempting_wrong_reason:
-        why_not_key = tempting_wrong_key
-        why_not_reason = tempting_wrong_reason
-
-    if why_not_key and why_not_reason:
-        lines.append(f"Why not {why_not_key}: {why_not_reason}")
-
+    lines.extend(_build_mcq_structured_lines(item, include_wrong_answer_context=True))
     return "\n".join(lines)
 
 
@@ -3550,10 +3704,10 @@ def handle_study_action(session_id, content_item_id, action):
     if action == "explain_why":
         if item["item_type"] == "mcq":
             return {"reply": _build_mcq_explain_reply(item, state)}
-        return {"reply": "Why this pearl matters: " + _board_rule_text(item)}
+        return {"reply": _build_rule_reply(item)}
 
     if action == "quick_recap":
-        return {"reply": "Board rule: " + _board_rule_text(item)}
+        return {"reply": _build_rule_reply(item)}
 
     if action == "another_question":
         next_item = _pick_next_session_item(session_id, state, policy, anchor_topic=item.get("topic")) or _pick_related_item(session_id, item, "mcq", exclude_self=True)
