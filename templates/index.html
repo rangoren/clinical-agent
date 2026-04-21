@@ -3882,6 +3882,7 @@
         }
 
         async function openDutySyncReviewContext(review) {
+            const modeChanged = appMode !== "scheduling";
             if (appMode !== "scheduling") {
                 appMode = "scheduling";
                 renderModeState();
@@ -3893,6 +3894,9 @@
             clearDutySyncPushContext();
             const resolvedReview = review && review.review_id ? review : activeDutyReview;
             if (resolvedReview && resolvedReview.review_id) {
+                if (modeChanged) {
+                    resetChatSurfaceForDutySyncReviewOpen("openDutySyncReviewContext");
+                }
                 appendDutyReviewCard(resolvedReview, "generic_pending_review", "openDutySyncReviewContext");
                 return;
             }
@@ -3907,6 +3911,9 @@
                 ingestDutySyncRenderDebug(data);
                 updateDutySyncUi(data);
                 if (data && data.pending_review && data.pending_review.review_id) {
+                    if (modeChanged) {
+                        resetChatSurfaceForDutySyncReviewOpen("openDutySyncReviewContext.status");
+                    }
                     appendDutyReviewCard(data.pending_review, "generic_pending_review", "openDutySyncReviewContext.status");
                     return;
                 }
@@ -3924,6 +3931,9 @@
                     ingestDutySyncRenderDebug(checkData);
                     if (checkData && checkData.pending_review && checkData.pending_review.review_id) {
                         setActiveDutyReview(checkData.pending_review, "openDutySyncReviewContext.check");
+                        if (modeChanged) {
+                            resetChatSurfaceForDutySyncReviewOpen("openDutySyncReviewContext.check");
+                        }
                         appendDutyReviewCard(checkData.pending_review, "generic_pending_review", "openDutySyncReviewContext.check");
                         await refreshDutySyncStatus();
                         return;
@@ -4507,6 +4517,7 @@
             clearDutySyncPushContext();
             lastOpenedDutySyncReviewKey = openKey;
             clearPendingDutySyncInlineReview();
+            resetChatSurfaceForDutySyncReviewOpen("maybeOpenDutySyncReviewFromStatus");
             logDutySyncRuntime("maybeOpenDutySyncReviewFromStatus render", {
                 review: summarizeDutyReview(review),
                 pending_review: summarizeDutyReview(status && status.pending_review ? status.pending_review : null),
@@ -4543,6 +4554,7 @@
             clearDutySyncPushContext();
             lastOpenedDutySyncReviewKey = openKey;
             clearPendingDutySyncInlineReview();
+            resetChatSurfaceForDutySyncReviewOpen("maybeOpenDutySyncReviewFromPayload");
             persistDutySyncPushDebug("[App] review open handler fired");
             logDutySyncRuntime("maybeOpenDutySyncReviewFromPayload render", {
                 review: summarizeDutyReview(review),
@@ -5404,6 +5416,18 @@
             clearStudyCards();
             setThinkingState(false);
             setActiveDutyReview(null, "push_mode_transition_reset");
+            refreshEntryGuidanceVisibility();
+        }
+
+        function resetChatSurfaceForDutySyncReviewOpen(source = "generic") {
+            const chat = document.getElementById("chat");
+            if (chat) {
+                chat.innerHTML = "";
+            }
+            hideSessionBanner();
+            clearStudyCards();
+            setThinkingState(false);
+            setActiveDutyReview(null, `duty_sync_review_reset:${source}`);
             refreshEntryGuidanceVisibility();
         }
 
