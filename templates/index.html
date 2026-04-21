@@ -6269,6 +6269,18 @@
                     review: summarizeDutyReview(data.review || null),
                 });
                 dutySyncDebug("service worker message received", { targetUrl });
+                const isAlreadyOpenForeground = document.visibilityState === "visible" && document.hasFocus();
+                if (isAlreadyOpenForeground) {
+                    pendingDutySyncForegroundRecovery = true;
+                    if (reviewIdentity.review_id) {
+                        pendingDutySyncReviewId = reviewIdentity.review_id;
+                    }
+                    if (reviewIdentity.updated_at) {
+                        pendingDutySyncReviewUpdatedAt = reviewIdentity.updated_at;
+                    }
+                    await refreshDutySyncStatus();
+                    return;
+                }
                 pendingDutySyncReviewDeepLink = true;
                 setDutySyncPushRenderLock(true);
                 storeDutySyncPushContextFromUrl(targetUrl, "service_worker_message");
