@@ -3253,8 +3253,27 @@
                 if (!target || !("postMessage" in target)) {
                     return false;
                 }
-                target.postMessage({ type: "duty-sync-request-sw-version" });
-                return true;
+                return await new Promise((resolve) => {
+                    try {
+                        const channel = new MessageChannel();
+                        const timeoutId = window.setTimeout(() => resolve(false), 2000);
+                        channel.port1.onmessage = (event) => {
+                            const data = event.data || {};
+                            if (data.type === "duty-sync-sw-version") {
+                                dutySyncSwVersion = data.sw_version || "unknown";
+                                window.clearTimeout(timeoutId);
+                                renderDutySyncDebugConsole();
+                                resolve(true);
+                                return;
+                            }
+                            window.clearTimeout(timeoutId);
+                            resolve(false);
+                        };
+                        target.postMessage({ type: "duty-sync-request-sw-version" }, [channel.port2]);
+                    } catch (_error) {
+                        resolve(false);
+                    }
+                });
             } catch (_error) {
                 return false;
             }

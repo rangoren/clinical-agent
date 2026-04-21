@@ -430,7 +430,12 @@ self.addEventListener("notificationclick", (event) => {
 self.addEventListener("message", (event) => {
   const data = event.data || {};
   if (data.type === "duty-sync-request-sw-version") {
-    if (event.source && "postMessage" in event.source) {
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage({
+        type: "duty-sync-sw-version",
+        sw_version: DUTY_SYNC_SW_VERSION,
+      });
+    } else if (event.source && "postMessage" in event.source) {
       event.source.postMessage({
         type: "duty-sync-sw-version",
         sw_version: DUTY_SYNC_SW_VERSION,
