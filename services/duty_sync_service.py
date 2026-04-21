@@ -40,6 +40,7 @@ from services.google_calendar_service import (
     sync_google_update_event,
 )
 from services.logging_service import log_event
+from services.scheduling_service import touch_scheduling_context_for_duty_review
 from settings import APP_ENV
 
 
@@ -563,7 +564,9 @@ def _replace_pending_review(session_id, source_tab_name, source_month, changes, 
                 }
             },
         )
-        return duty_sync_pending_reviews_collection.find_one({"_id": existing["_id"]})
+        refreshed = duty_sync_pending_reviews_collection.find_one({"_id": existing["_id"]})
+        touch_scheduling_context_for_duty_review(session_id, refreshed)
+        return refreshed
 
     review_id = f"duty-review-{session_id}-{int(now.timestamp())}"
     doc = {
@@ -581,6 +584,7 @@ def _replace_pending_review(session_id, source_tab_name, source_month, changes, 
         "summary": _review_summary(changes),
     }
     duty_sync_pending_reviews_collection.insert_one(doc)
+    touch_scheduling_context_for_duty_review(session_id, doc)
     return doc
 
 
