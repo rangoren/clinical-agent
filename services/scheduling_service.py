@@ -34,6 +34,7 @@ HALF_SHIFT_START_MINUTE = 0
 HALF_SHIFT_END_HOUR = 23
 HALF_SHIFT_END_MINUTE = 0
 HALF_SHIFT_DURATION_MINUTES = 8 * 60
+SCHEDULING_CONTEXT_TTL_MINUTES = 10
 APP_TIMEZONE = ZoneInfo("Asia/Jerusalem")
 KNOWN_LOCATIONS = {
     "שיבא": ("shiba", "sheba", "tel hashomer", "תל השומר", "שיבא"),
@@ -265,6 +266,57 @@ def _get_last_scheduling_reference(session_id):
     return preferences.get("last_scheduling_reference")
 
 
+def _get_recent_scheduling_context(session_id):
+    preferences = _get_scheduling_preferences(session_id)
+    context = preferences.get("last_scheduling_context") or {}
+    if not context.get("intent"):
+        return None
+    updated_at = context.get("updated_at")
+    if not isinstance(updated_at, datetime):
+        return None
+    if _utcnow() - updated_at > timedelta(minutes=SCHEDULING_CONTEXT_TTL_MINUTES):
+        return None
+    return context
+
+
+def _save_scheduling_context(session_id, intent, entities=None, reference_ids=None):
+    if not session_id or not intent:
+        return
+    now = _utcnow()
+    scheduling_preferences_collection.update_one(
+        {"session_id": session_id},
+        {
+            "$set": {
+                "last_scheduling_context": {
+                    "intent": intent,
+                    "entities": entities or {},
+                    "reference_ids": reference_ids or {},
+                    "updated_at": now,
+                },
+                "updated_at": now,
+            },
+            "$setOnInsert": {"created_at": now},
+        },
+        upsert=True,
+    )
+
+
+def touch_scheduling_context_for_duty_review(session_id, review_doc):
+    if not review_doc:
+        return
+    _save_scheduling_context(
+        session_id,
+        intent="duty_review",
+        entities={
+            "source_month": review_doc.get("source_month"),
+            "review_type": review_doc.get("review_type"),
+        },
+        reference_ids={
+            "review_id": review_doc.get("review_id"),
+        },
+    )
+
+
 def _save_preferred_google_calendar(session_id, calendar_type, provider_calendar_id):
     if not provider_calendar_id or not calendar_type:
         return
@@ -479,19 +531,40 @@ def _detect_action(message):
 
 
 def _is_daily_summary_request(message):
-    lowered = _normalize_text(message).lower()
+    lowered = _normalize_scheduling_followup_text(message)
     if any(keyword in lowered for keyword in SUMMARY_KEYWORDS):
         return True
-    return "today" in lowered and any(
-        phrase in lowered
-        for phrase in ("do i have", "meetings", "meeting", "schedule", "events", "what do i", "what's on", "whats on")
+    summary_phrases = (
+        "do i have",
+        "meetings",
+        "meeting",
+        "schedule",
+        "events",
+        "what do i",
+        "what is on",
+        "what's on",
+        "whats on",
+        "show me",
     )
+    if ("today" in lowered or "tomorrow" in lowered) and any(phrase in lowered for phrase in summary_phrases):
+        return True
+    return False
 
 
 def _is_monthly_shift_summary_request(message):
-    lowered = _normalize_text(message).lower()
+    lowered = _normalize_scheduling_followup_text(message)
     if any(marker in lowered for marker in MONTHLY_SHIFT_SUMMARY_MARKERS):
         return True
+    if bool(_extract_month_year(lowered)[0]) and any(
+        phrase in lowered
+        for phrase in ("and ", "for ", "in ", "what about", "show me", "how about")
+    ):
+        asks_shifts_or_context = any(
+            token in lowered
+            for token in ("תורנות", "תורנויות", "תורניות", "shift", "shifts", "on-call", "call")
+        )
+        if asks_shifts_or_context or len(re.findall(r"\w+", lowered, flags=re.UNICODE)) <= 6:
+            return True
     has_month = bool(_extract_month_year(lowered)[0])
     asks_when = any(token in lowered for token in ("מתי", "איזה", "what", "when"))
     asks_shifts = any(
@@ -1047,6 +1120,87 @@ def _extract_month_year(text):
         return int(slash_match.group(1)), int(slash_match.group(2))
 
     return None, None
+
+
+def _message_has_explicit_year(text):
+    return bool(re.search(r"\b20\d{2}\b", text or ""))
+
+
+def _normalize_scheduling_followup_text(message):
+    lowered = _normalize_text(message).lower()
+    replacements = {
+        "tommrow": "tomorrow",
+        "tomrrow": "tomorrow",
+        "tmrw": "tomorrow",
+        "tmr": "tomorrow",
+        "nxt month": "next month",
+        "whats": "what is",
+    }
+    for source, target in replacements.items():
+        lowered = lowered.replace(source, target)
+    return lowered
+
+
+def _looks_like_short_followup(message):
+    lowered = _normalize_scheduling_followup_text(message)
+    if not lowered:
+        return False
+    if any(keyword in lowered for keyword in DELETE_KEYWORDS):
+        return False
+    if any(keyword in lowered for keyword in UPDATE_KEYWORDS):
+        return False
+    if any(token in lowered for token in ("add ", "schedule", "create", "book ", "insert ", "תוסיף", "תקבע", "צור")):
+        return False
+    return len(re.findall(r"\w+", lowered, flags=re.UNICODE)) <= 8
+
+
+def _is_scheduling_greeting(message):
+    cleaned = _normalize_scheduling_followup_text(message).strip().lower()
+    return cleaned in {
+        "hi",
+        "hello",
+        "hey",
+        "yo",
+        "ok",
+        "okay",
+        "ok hello",
+        "ok hi",
+        "hi again",
+        "hello again",
+        "hi there",
+        "hello there",
+        "hey there",
+        "שלום",
+        "היי",
+    }
+
+
+def _is_generic_scheduling_smalltalk(message):
+    cleaned = _normalize_scheduling_followup_text(message).strip().lower()
+    return cleaned in {
+        "ok",
+        "okay",
+        "ok.",
+        "okay.",
+        "thanks",
+        "thank you",
+        "great",
+        "cool",
+        "got it",
+        "understood",
+        "fine",
+    }
+
+
+def _extract_contextual_summary_date(message):
+    lowered = _normalize_scheduling_followup_text(message)
+    if "today" in lowered or "tomorrow" in lowered:
+        return _extract_date(lowered)
+    if any(f"next {weekday_name}" in lowered for weekday_name in WEEKDAYS):
+        return _extract_date(lowered)
+    if any(weekday_name in lowered for weekday_name in WEEKDAYS):
+        return _extract_date(lowered)
+    return None
 
 
 def _clean_title(text):
@@ -2088,6 +2242,14 @@ def _load_saved_shift_duties_for_month(session_id, month, year):
     return duties
 
 
+def _load_saved_shift_duties_for_date(session_id, target_date):
+    if not target_date:
+        return []
+    duties = _load_saved_shift_duties_for_month(session_id, target_date.month, target_date.year)
+    target_iso = target_date.isoformat()
+    return [duty for duty in duties if str(duty.get("date") or "") == target_iso]
+
+
 def _format_shift_summary_line_from_duty(duty):
     duty_date = str(duty.get("date") or "")
     title = duty.get("title") or duty.get("role") or "תורנות"
@@ -2098,10 +2260,34 @@ def _format_shift_summary_line_from_duty(duty):
     return f"- {date_label} · {title}"
 
 
-def _build_daily_summary(session_id):
-    now = _utcnow()
-    start_of_day = datetime.combine(now.date(), datetime.min.time())
+def _build_shift_summary_for_date(session_id, target_date):
+    duties = _load_saved_shift_duties_for_date(session_id, target_date)
+    date_label = target_date.strftime("%A %d %b %Y")
+    _save_scheduling_context(
+        session_id,
+        intent="daily_shift_summary",
+        entities={"date": target_date.isoformat()},
+    )
+    if not duties:
+        return {
+            "reply": f"I don’t see any saved shifts for {date_label}.",
+            "scheduling_draft": None,
+        }
+
+    lines = [f"Your shifts for {date_label}", f"{len(duties)} total:"]
+    lines.extend(_format_shift_summary_line_from_duty(duty) for duty in duties)
+    return {
+        "reply": "\n".join(lines),
+        "scheduling_draft": None,
+    }
+
+
+def _build_daily_summary_for_date(session_id, target_date):
+    target_date = target_date or _utcnow().date()
+    start_of_day = datetime.combine(target_date, datetime.min.time())
     end_of_day = start_of_day + timedelta(days=1)
+    today = _utcnow().date()
+    day_label = "Today" if target_date == today else target_date.strftime("%A")
 
     events = list(
         scheduled_events_collection.find(
@@ -2114,12 +2300,17 @@ def _build_daily_summary(session_id):
     )
 
     if not events:
+        _save_scheduling_context(
+            session_id,
+            intent="daily_summary",
+            entities={"date": target_date.isoformat()},
+        )
         return {
-            "reply": "Today looks clear so far. I don’t see any scheduled events yet.",
+            "reply": f"{day_label} looks clear so far. I don’t see any scheduled events yet.",
             "scheduling_draft": None,
         }
 
-    lines = [f"Today you have {len(events)} event{'s' if len(events) != 1 else ''}:"]
+    lines = [f"{day_label} you have {len(events)} event{'s' if len(events) != 1 else ''}:"]
     lines.extend(_format_event_line(event) for event in events)
 
     total_minutes = int(sum((event["end_at"] - event["start_at"]).total_seconds() for event in events) / 60)
@@ -2155,14 +2346,22 @@ def _build_daily_summary(session_id):
         lines.append("Critical soon:")
         lines.extend(f"- {item}" for item in upcoming_critical[:3])
 
+    _save_scheduling_context(
+        session_id,
+        intent="daily_summary",
+        entities={"date": target_date.isoformat()},
+    )
     return {
         "reply": "\n".join(lines),
         "scheduling_draft": None,
     }
 
 
-def _build_monthly_shift_summary(session_id, message):
-    month, year = _extract_month_year(message)
+def _build_daily_summary(session_id):
+    return _build_daily_summary_for_date(session_id, _utcnow().date())
+
+
+def _build_monthly_shift_summary_for_month(session_id, month, year):
     if not month or not year:
         return {
             "reply": "Which month should I check for your shifts?",
@@ -2171,6 +2370,11 @@ def _build_monthly_shift_summary(session_id, message):
 
     duties = _load_saved_shift_duties_for_month(session_id, month, year)
     month_label = datetime(year, month, 1).strftime("%B %Y")
+    _save_scheduling_context(
+        session_id,
+        intent="monthly_shift_summary",
+        entities={"month": month, "year": year},
+    )
     if not duties:
         return {
             "reply": f"I don’t see any saved shifts for {month_label}.",
@@ -2188,6 +2392,59 @@ def _build_monthly_shift_summary(session_id, message):
     }
 
 
+def _build_monthly_shift_summary(session_id, message):
+    month, year = _extract_month_year(message)
+    return _build_monthly_shift_summary_for_month(session_id, month, year)
+
+
+def _shift_month(year, month, delta):
+    index = ((year * 12) + (month - 1)) + delta
+    return index // 12, (index % 12) + 1
+
+
+def _maybe_resolve_scheduling_context_followup(session_id, user_message):
+    context = _get_recent_scheduling_context(session_id)
+    if not context or not _looks_like_short_followup(user_message):
+        return None
+
+    intent = context.get("intent")
+    entities = context.get("entities") or {}
+    lowered = _normalize_scheduling_followup_text(user_message)
+
+    if intent == "monthly_shift_summary":
+        context_month = int(entities.get("month") or 0)
+        context_year = int(entities.get("year") or 0)
+        if "next month" in lowered and context_month and context_year:
+            next_year, next_month = _shift_month(context_year, context_month, 1)
+            return _build_monthly_shift_summary_for_month(session_id, next_month, next_year)
+        if "previous month" in lowered and context_month and context_year:
+            prev_year, prev_month = _shift_month(context_year, context_month, -1)
+            return _build_monthly_shift_summary_for_month(session_id, prev_month, prev_year)
+        if "this month" in lowered and context_month and context_year:
+            return _build_monthly_shift_summary_for_month(session_id, context_month, context_year)
+        month, year = _extract_month_year(user_message)
+        if month:
+            resolved_year = year
+            if not _message_has_explicit_year(user_message):
+                resolved_year = entities.get("year") or year
+            return _build_monthly_shift_summary_for_month(session_id, month, resolved_year)
+        target_date = _extract_contextual_summary_date(user_message)
+        if target_date:
+            return _build_shift_summary_for_date(session_id, target_date)
+
+    if intent == "daily_shift_summary":
+        target_date = _extract_contextual_summary_date(user_message)
+        if target_date:
+            return _build_shift_summary_for_date(session_id, target_date)
+
+    if intent == "daily_summary":
+        target_date = _extract_contextual_summary_date(user_message)
+        if target_date:
+            return _build_daily_summary_for_date(session_id, target_date)
+
+    return None
+
+
 def build_scheduling_welcome(session_id):
     if has_google_calendar_connection(session_id):
         return ""
@@ -2196,6 +2453,22 @@ def build_scheduling_welcome(session_id):
 
 def handle_scheduling_message(session_id, user_message):
     normalized_user_message = _normalize_scheduling_aliases(session_id, user_message)
+    if _is_scheduling_greeting(normalized_user_message):
+        _clear_pending_details_context(session_id)
+        return {
+            "reply": "I’m here for your schedule. Ask me about shifts, today, tomorrow, or calendar changes.",
+            "scheduling_draft": None,
+        }
+    if _is_generic_scheduling_smalltalk(normalized_user_message):
+        _clear_pending_details_context(session_id)
+        return {
+            "reply": "Want me to check another month or a specific date?",
+            "scheduling_draft": None,
+        }
+    contextual_followup = _maybe_resolve_scheduling_context_followup(session_id, normalized_user_message)
+    if contextual_followup:
+        _clear_pending_details_context(session_id)
+        return contextual_followup
 
     if _is_monthly_shift_summary_request(normalized_user_message):
         return _build_monthly_shift_summary(session_id, normalized_user_message)
@@ -2222,6 +2495,12 @@ def handle_scheduling_message(session_id, user_message):
             normalized_user_message,
             action_type="bulk_delete",
             target_events=serialized_targets,
+        )
+        _save_scheduling_context(
+            session_id,
+            intent="bulk_delete_draft",
+            entities={},
+            reference_ids={"draft_id": draft_id},
         )
         return {
             "reply": _format_bulk_delete_reply(target_events),
@@ -2280,6 +2559,12 @@ def handle_scheduling_message(session_id, user_message):
                 action_type="delete",
                 target_event=serialized_target,
             )
+            _save_scheduling_context(
+                session_id,
+                intent="delete_draft",
+                entities={},
+                reference_ids={"draft_id": draft_id, "event_id": serialized_target.get("event_id")},
+            )
             return {
                 "reply": _format_delete_reply(target_event),
                 "scheduling_draft": {
@@ -2311,6 +2596,14 @@ def handle_scheduling_message(session_id, user_message):
             parsed_event=_serialize_event(parsed),
             conflicts=conflicts,
             target_event=serialized_target,
+        )
+        _save_scheduling_context(
+            session_id,
+            intent="update_draft",
+            entities={
+                "date": parsed["start_at"].date().isoformat(),
+            },
+            reference_ids={"draft_id": draft_id, "event_id": serialized_target.get("event_id")},
         )
         return {
             "reply": _format_update_reply(target_event, parsed, conflicts),
@@ -2354,6 +2647,12 @@ def handle_scheduling_message(session_id, user_message):
             parsed_event={"events": _serialize_events(bulk_parsed["events"])},
             conflicts=conflicts,
         )
+        _save_scheduling_context(
+            session_id,
+            intent="bulk_create_draft",
+            entities={},
+            reference_ids={"draft_id": draft_id},
+        )
         return {
             "reply": _format_bulk_reply(bulk_parsed["events"], conflicts),
             "scheduling_draft": {
@@ -2392,6 +2691,14 @@ def handle_scheduling_message(session_id, user_message):
         action_type="create",
         parsed_event=_serialize_event(parsed),
         conflicts=conflicts,
+    )
+    _save_scheduling_context(
+        session_id,
+        intent="create_draft",
+        entities={
+            "date": parsed["start_at"].date().isoformat(),
+        },
+        reference_ids={"draft_id": draft_id},
     )
 
     return {
@@ -2480,6 +2787,12 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             reply += f" Synced to Google Calendar"
         else:
             reply += _sync_status_suffix(sync_result.get("status"))
+        _save_scheduling_context(
+            session_id,
+            intent="create_confirmed",
+            entities={"date": event_doc["start_at"].date().isoformat()},
+            reference_ids={"draft_id": draft_id, "event_id": str(event_doc.get("_id") or "")},
+        )
         return {
             "status": "confirmed",
             "reply": reply,
@@ -2566,6 +2879,12 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             reply += f" {synced_count} synced to Google Calendar, {failed_count} failed, and {skipped_count} stayed here only."
         elif skipped_count:
             reply += f" {synced_count} synced to Google Calendar, {skipped_count} stayed here only."
+        _save_scheduling_context(
+            session_id,
+            intent="bulk_create_confirmed",
+            entities={},
+            reference_ids={"draft_id": draft_id},
+        )
         return {"status": "confirmed", "reply": reply}
 
     if action_type == "bulk_delete":
@@ -2644,6 +2963,12 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
                 reply += f" Removed {synced_count} from Google Calendar."
         else:
             reply += " Removed here only."
+        _save_scheduling_context(
+            session_id,
+            intent="bulk_delete_confirmed",
+            entities={},
+            reference_ids={"draft_id": draft_id},
+        )
         return {"status": "confirmed", "reply": reply}
 
     target_event = draft.get("target_event")
@@ -2705,6 +3030,12 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             _save_last_scheduling_reference(session_id, updated_doc)
         reply = f"Updated {parsed_event['title']} to {datetime.fromisoformat(parsed_event['start_at']).strftime('%a %d %b at %H:%M')}."
         reply += _sync_status_suffix(sync_result.get("status"))
+        _save_scheduling_context(
+            session_id,
+            intent="update_confirmed",
+            entities={"date": datetime.fromisoformat(parsed_event["start_at"]).date().isoformat()},
+            reference_ids={"draft_id": draft_id, "event_id": target_event.get("event_id")},
+        )
         return {
             "status": "confirmed",
             "reply": reply,
@@ -2758,6 +3089,12 @@ def confirm_scheduling_draft(session_id, draft_id, selected_calendar_id=None):
             reply += " Removed here, but Google Calendar deletion failed."
         elif sync_result.get("status") == "skipped":
             reply += " Removed here only."
+        _save_scheduling_context(
+            session_id,
+            intent="delete_confirmed",
+            entities={},
+            reference_ids={"draft_id": draft_id, "event_id": target_event.get("event_id")},
+        )
         return {
             "status": "confirmed",
             "reply": reply,
