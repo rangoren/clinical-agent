@@ -2740,41 +2740,157 @@ def _mcq_takeaway_text(item):
     return ""
 
 
-def _build_mcq_feedback_reply(item, correct, selected_option=None):
-    status = "Correct." if correct else "Incorrect."
+def _first_nonempty_text(*values):
+    for value in values:
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned:
+                return cleaned
+    return ""
+
+
+def _first_nonempty_list_entry(values):
+    for value in values or []:
+        cleaned = str(value or "").strip()
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _mcq_key_clue_text(item):
+    return _first_nonempty_text(
+        item.get("exam_clue"),
+        item.get("threshold_variable"),
+        item.get("decision_point"),
+        item.get("topic"),
+    )
+
+
+def _mcq_threshold_text(item):
+    return _first_nonempty_text(
+        item.get("threshold_variable"),
+        item.get("decision_point"),
+        item.get("board_takeaway"),
+    )
+
+
+def _mcq_practical_rule_text(item):
+    return _first_nonempty_text(
+        item.get("board_takeaway"),
+        item.get("board_rule"),
+        item.get("key_takeaway"),
+        item.get("explanation"),
+    )
+
+
+def _mcq_clinical_detail_text(item):
+    return _first_nonempty_list_entry(item.get("management_nuance") or []) or _first_nonempty_text(
+        item.get("clinical_consequence"),
+        item.get("source_excerpt"),
+    )
+
+
+def _mcq_wrong_answer_context_text(item):
+    threshold = _mcq_threshold_text(item)
+    if threshold:
+        return f"That option becomes more reasonable only when {threshold.lower()} is not what drives the case."
+    return "That option becomes more reasonable only when the decision threshold in this stem is not met."
+
+
+def _rule_trigger_text(item):
+    return _first_nonempty_text(
+        item.get("threshold_variable"),
+        item.get("exam_clue"),
+        item.get("key_fact"),
+        item.get("topic"),
+    )
+
+
+def _rule_action_text(item):
+    return _first_nonempty_text(
+        item.get("board_rule"),
+        item.get("board_takeaway"),
+        item.get("board_focus"),
+        item.get("clinical_consequence"),
+        item.get("key_fact"),
+    )
+
+
+def _rule_exception_text(item):
+    threshold = _mcq_threshold_text(item)
+    if threshold:
+        return f"If {threshold.lower()} is not present, do not force this rule onto a lower-risk stem."
+    return "If the trigger pattern is missing, reassess before applying this rule."
+
+
+def _rule_nuance_text(item):
+    return _first_nonempty_list_entry(item.get("management_nuance") or []) or _first_nonempty_text(
+        item.get("clinical_consequence"),
+        item.get("board_focus"),
+    )
+
+
+def _build_mcq_structured_lines(item, include_wrong_answer_context=False):
     correct_key = item.get("correct_answer_key")
     correct_text = _option_text_by_key(item, correct_key)
-    lines = [status]
+    lines = []
+
     if correct_key and correct_text:
         lines.append(f"Best answer: {correct_key}: {correct_text}")
 
-    explanation = (item.get("explanation") or "").strip()
+    key_clue = _mcq_key_clue_text(item)
+    if key_clue:
+        lines.append(f"Key clue: {key_clue}")
+
+    threshold = _mcq_threshold_text(item)
+    if threshold:
+        lines.append(f"Decision threshold: {threshold}")
+
+    explanation = _first_nonempty_text(item.get("explanation"))
     if explanation:
-        lines.append(f"Why: {explanation}")
+        lines.append(f"Why correct here: {explanation}")
 
-    takeaway = _mcq_takeaway_text(item)
-    if takeaway:
-        lines.append(f"Takeaway: {takeaway}")
-
-    why_not_key = None
-    why_not_reason = None
     tempting_wrong_key = item.get("tempting_wrong_option")
-    tempting_wrong_reason = item.get("tempting_wrong_reason")
-    if correct:
-        why_not_key = tempting_wrong_key
-        why_not_reason = tempting_wrong_reason
-    else:
-        selected_text = _option_text_by_key(item, selected_option)
-        if selected_option and selected_text:
-            why_not_key = selected_option
-            if selected_option == tempting_wrong_key and tempting_wrong_reason:
-                why_not_reason = tempting_wrong_reason
-            else:
-                why_not_reason = "It does not fit the main exam clue as well as the best answer."
+    tempting_wrong_reason = _first_nonempty_text(item.get("tempting_wrong_reason"))
+    if tempting_wrong_key and tempting_wrong_reason:
+        lines.append(f"Why not {tempting_wrong_key}: {tempting_wrong_reason}")
 
-    if why_not_key and why_not_reason:
-        lines.append(f"Why not {why_not_key}: {why_not_reason}")
+    if include_wrong_answer_context:
+        lines.append(f"When that wrong answer fits: {_mcq_wrong_answer_context_text(item)}")
 
+    practical_rule = _mcq_practical_rule_text(item)
+    if practical_rule:
+        lines.append(f"Practical rule: {practical_rule}")
+
+    clinical_detail = _mcq_clinical_detail_text(item)
+    if clinical_detail:
+        lines.append(f"Clinical detail: {clinical_detail}")
+
+    return lines
+
+
+def _build_rule_reply(item):
+    lines = []
+    trigger = _rule_trigger_text(item)
+    action = _rule_action_text(item)
+    exception = _rule_exception_text(item)
+    nuance = _rule_nuance_text(item)
+
+    if trigger:
+        lines.append(f"Trigger / pattern: {trigger}")
+    if action:
+        lines.append(f"Correct action: {action}")
+    if exception:
+        lines.append(f"Important exception: {exception}")
+    if nuance:
+        lines.append(f"Clinical nuance: {nuance}")
+    return "\n".join(lines)
+
+
+def _build_mcq_feedback_reply(item, correct, selected_option=None):
+    status = "Correct." if correct else "Incorrect."
+    lines = [status]
+    lines.extend(_build_mcq_structured_lines(item, include_wrong_answer_context=False))
     return "\n".join(lines)
 
 
@@ -2788,10 +2904,6 @@ def _board_rule_text(item):
 
 
 def _build_mcq_explain_reply(item, state):
-    correct_key = item.get("correct_answer_key")
-    correct_text = _option_text_by_key(item, correct_key)
-    selected_key = (state.get("last_answered_option") or "").upper() or None
-    selected_text = _option_text_by_key(item, selected_key)
     answered_correctly = state.get("last_answer_correct")
     lines = []
 
@@ -2801,35 +2913,7 @@ def _build_mcq_explain_reply(item, state):
     elif answered_correctly is False:
         opening = "Why your answer was off:"
     lines.append(opening)
-
-    if correct_key and correct_text:
-        lines.append(f"Best answer: {correct_key}: {correct_text}")
-
-    explanation = (item.get("explanation") or "").strip()
-    if explanation:
-        lines.append(f"Why: {explanation}")
-
-    takeaway = _mcq_takeaway_text(item)
-    if takeaway:
-        lines.append(f"Takeaway: {takeaway}")
-
-    why_not_key = None
-    why_not_reason = None
-    tempting_wrong_key = item.get("tempting_wrong_option")
-    tempting_wrong_reason = item.get("tempting_wrong_reason")
-    if answered_correctly is False and selected_key and selected_text:
-        why_not_key = selected_key
-        if selected_key == tempting_wrong_key and tempting_wrong_reason:
-            why_not_reason = tempting_wrong_reason
-        else:
-            why_not_reason = "It does not match the main clue as well as the best answer."
-    elif tempting_wrong_key and tempting_wrong_reason:
-        why_not_key = tempting_wrong_key
-        why_not_reason = tempting_wrong_reason
-
-    if why_not_key and why_not_reason:
-        lines.append(f"Why not {why_not_key}: {why_not_reason}")
-
+    lines.extend(_build_mcq_structured_lines(item, include_wrong_answer_context=True))
     return "\n".join(lines)
 
 
@@ -3550,10 +3634,10 @@ def handle_study_action(session_id, content_item_id, action):
     if action == "explain_why":
         if item["item_type"] == "mcq":
             return {"reply": _build_mcq_explain_reply(item, state)}
-        return {"reply": "Why this pearl matters: " + _board_rule_text(item)}
+        return {"reply": _build_rule_reply(item)}
 
     if action == "quick_recap":
-        return {"reply": "Board rule: " + _board_rule_text(item)}
+        return {"reply": _build_rule_reply(item)}
 
     if action == "another_question":
         next_item = _pick_next_session_item(session_id, state, policy, anchor_topic=item.get("topic")) or _pick_related_item(session_id, item, "mcq", exclude_self=True)
