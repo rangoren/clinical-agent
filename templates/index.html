@@ -5022,6 +5022,8 @@
                 source: renderSource,
                 caller: renderCaller
             });
+            hideStudyCards();
+            refreshEntryGuidanceVisibility();
             setActiveDutyReview(renderReview, "appendDutyReviewCard");
             renderDutySyncPrimaryBanner();
             removeExistingDutyReviewCard(renderReview.review_id);
@@ -5144,6 +5146,7 @@
             card.appendChild(footerActions);
 
             chat.appendChild(card);
+            card.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
             scrollChatToBottom();
         }
 
