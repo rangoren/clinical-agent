@@ -1796,7 +1796,6 @@
                         {% if app_env != "production" %}
                         <div class="env-stamp">{{ app_env }}</div>
                         {% endif %}
-                        <div id="version-stamp" class="version-stamp">{{ app_version }}</div>
                         <div id="settings-shell" class="settings-shell">
                             <button
                                 id="settings-trigger"
@@ -1830,20 +1829,6 @@
                                 <button id="duty-sync-secondary-action" class="calendar-action secondary" onclick="disconnectDutySync()" hidden>Disconnect Sheet</button>
                                 <button id="duty-sync-push-action" class="calendar-action secondary" onclick="enableDutySyncNotifications()" hidden>Enable notifications</button>
                                 <button id="duty-sync-push-test-action" class="calendar-action secondary" onclick="sendDutySyncTestPush()" hidden>Send test push</button>
-                                {% if app_env != "production" %}
-                                <div class="settings-section">
-                                    <span class="settings-label">Runtime debug</span>
-                                    <div class="calendar-copy">
-                                        <span id="duty-sync-runtime-debug" class="calendar-subcopy">No runtime debug yet.</span>
-                                    </div>
-                                </div>
-                                <div class="settings-section">
-                                    <span class="settings-label">Push debug</span>
-                                    <div class="calendar-copy">
-                                        <span id="duty-sync-push-debug" class="calendar-subcopy">No push trace yet.</span>
-                                    </div>
-                                </div>
-                                {% endif %}
                             </div>
                         </div>
                     </div>
