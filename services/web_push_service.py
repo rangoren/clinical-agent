@@ -39,8 +39,9 @@ def save_web_push_subscription(session_id, subscription):
     if not endpoint or not p256dh or not auth:
         return {"status": "invalid", "reply": "Push subscription payload was incomplete."}
     now = datetime.utcnow()
+    push_subscriptions_collection.delete_many({"endpoint": endpoint, "session_id": {"$ne": session_id}})
     result = push_subscriptions_collection.update_one(
-        {"session_id": session_id, "endpoint": endpoint},
+        {"endpoint": endpoint},
         {
             "$set": {
                 "session_id": session_id,
