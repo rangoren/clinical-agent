@@ -2791,10 +2791,20 @@ def _mcq_clinical_detail_text(item):
 
 
 def _mcq_wrong_answer_context_text(item):
-    threshold = _mcq_threshold_text(item)
-    if threshold:
-        return f"That option becomes more reasonable only when {threshold.lower()} is not what drives the case."
-    return "That option becomes more reasonable only when the decision threshold in this stem is not met."
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
+
+    if threshold_type in {"age_threshold_rule_application", "age_plus_risk_factor_threshold"}:
+        return "That option is more reasonable in a younger patient without biopsy-triggering endometrial risk, when fibroid-directed treatment can come before sampling."
+    if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
+        return "That option becomes reasonable only when there is no recent pregnancy-associated thrombosis and estrogen is no longer contraindicated after a real risk review."
+    if threshold_type == "response_to_treatment":
+        return "That option becomes reasonable once the patient clearly fails the current treatment path, not while the stem still supports the present plan."
+    if threshold_type in {"gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
+        return "That option becomes reasonable if maternal or fetal status worsens enough to cross the delivery threshold."
+    if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
+        return "That option becomes reasonable when the reassuring threshold is absent and the imaging pattern or risk profile is more concerning."
+    return "That option becomes reasonable only in a different clinical scenario where the stem does not meet the threshold that drives this answer."
 
 
 def _rule_trigger_text(item):
@@ -2817,10 +2827,25 @@ def _rule_action_text(item):
 
 
 def _rule_exception_text(item):
-    threshold = _mcq_threshold_text(item)
-    if threshold:
-        return f"If {threshold.lower()} is not present, do not force this rule onto a lower-risk stem."
-    return "If the trigger pattern is missing, reassess before applying this rule."
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
+    subtopic = (item.get("subtopic") or "").strip().lower()
+
+    if threshold_type in {"age_threshold_rule_application", "age_plus_risk_factor_threshold"} or "aub" in subtopic:
+        return "A younger low-risk patient with bleeding does not automatically need the same biopsy-first step."
+    if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
+        return "Do not apply this rule to a patient whose thrombosis history no longer makes estrogen contraindicated."
+    if threshold_type == "response_to_treatment":
+        return "If the patient is clearly failing therapy or deteriorating, the rule shifts from continue-current-plan to escalate."
+    if threshold_type in {"gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
+        return "This rule changes once maternal or fetal stability is lost."
+    if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
+        return "A more concerning ultrasound or symptom profile changes this from reassurance logic to escalation logic."
+    if topic == "gynecologic oncology":
+        return "Do not use this shortcut when the stem adds cancer-risk features that change the workup now."
+    if item.get("item_type") == "pearl":
+        return "If the stem adds a red-flag feature that changes urgency, escalate beyond the default pearl rule."
+    return "If the key clinical trigger is missing, reassess before applying this rule."
 
 
 def _rule_nuance_text(item):
