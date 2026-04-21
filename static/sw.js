@@ -136,6 +136,23 @@ function postDutySyncOpenReviewMessage(client, targetUrl) {
   return true;
 }
 
+function notifyDutySyncForegroundClients(targetUrl, reviewIdentity) {
+  return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    (clients || []).forEach((client) => {
+      if (!client || !("postMessage" in client)) {
+        return;
+      }
+      client.postMessage({
+        type: "duty-sync-foreground-review-available",
+        url: targetUrl,
+        review_id: (reviewIdentity && reviewIdentity.review_id) || "",
+        updated_at: (reviewIdentity && reviewIdentity.updated_at) || "",
+      });
+    });
+    return true;
+  });
+}
+
 function writeDutySyncOpenFlowDebug(message, payload) {
   return writeDutySyncSwDebug(message, payload || {});
 }
@@ -189,13 +206,17 @@ self.addEventListener("push", (event) => {
   const payload = event.data ? event.data.json() : {};
   const title = payload.title || "Duty Sync update";
   const targetUrl = payload.url || "/?app_mode=scheduling&duty_sync_review=1";
+  const reviewIdentity = {
+    review_id: payload.review_id || "",
+    updated_at: payload.updated_at || "",
+  };
   const options = {
     body: payload.body || "Duty Sync found personal schedule changes.",
     tag: payload.tag || "duty-sync-review",
     data: {
       url: targetUrl,
-      review_id: payload.review_id || "",
-      updated_at: payload.updated_at || "",
+      review_id: reviewIdentity.review_id,
+      updated_at: reviewIdentity.updated_at,
       review: payload.review || null,
     },
   };
@@ -215,6 +236,7 @@ self.addEventListener("push", (event) => {
           updated_at: options.data.updated_at || null,
         })
       )
+      .then(() => notifyDutySyncForegroundClients(targetUrl, reviewIdentity))
       .then(() => self.registration.showNotification(title, options))
   );
 });

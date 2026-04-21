@@ -6376,6 +6376,16 @@
                     renderDutySyncDebugConsole();
                     return;
                 }
+                if (data.type === "duty-sync-foreground-review-available") {
+                    if (document.visibilityState === "visible" && document.hasFocus()) {
+                        pendingDutySyncForegroundPrompt = {
+                            review_id: data.review_id || null,
+                            updated_at: data.updated_at || null,
+                        };
+                        renderDutySyncPrimaryBanner();
+                    }
+                    return;
+                }
                 if (data.type !== "duty-sync-open-review") return;
                 const targetUrl = data.url || buildDutySyncDeepLinkPath();
                 const reviewIdentity = parseDutySyncReviewIdentity(targetUrl, {
