@@ -6117,9 +6117,6 @@
         logDutySyncRuntime("startup initialization complete", { href: window.location.href });
         renderDutySyncPushDebug();
         renderDutySyncDebugConsole();
-        registerDutyPushServiceWorker()
-            .then(() => Promise.allSettled([requestDutySyncSwVersion(), requestDutySyncSwDebugBridge()]))
-            .catch(() => {});
         syncExistingDutySyncPushSubscription().catch(() => {});
         if ("serviceWorker" in navigator) {
             navigator.serviceWorker.addEventListener("message", async (event) => {
@@ -6236,6 +6233,9 @@
                 requestDutySyncSwDebugBridge().catch(() => {});
             });
         }
+        registerDutyPushServiceWorker()
+            .then(() => Promise.allSettled([requestDutySyncSwVersion(), requestDutySyncSwDebugBridge()]))
+            .catch(() => {});
         window.addEventListener("pageshow", () => {
             dutySyncDebug("pageshow fired", { href: window.location.href });
             persistDutySyncPushDebug("[Client] app resumed");
