@@ -272,12 +272,12 @@ self.addEventListener("notificationclick", (event) => {
           trace_id: traceId,
           client_count: clients ? clients.length : 0,
         });
-        writeDutySyncOpenFlowDebug("before choosing client", {
+        writeDutySyncOpenFlowDebug("before choosing existing client", {
           trace_id: traceId,
           client_count: clients ? clients.length : 0,
         });
         const client = clients && clients.length ? clients[0] : null;
-        writeDutySyncOpenFlowDebug("after choosing client", {
+        writeDutySyncOpenFlowDebug("after choosing existing client", {
           trace_id: traceId,
           found: !!client,
           target_client_id: client && client.id ? client.id : null,

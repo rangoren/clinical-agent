@@ -2729,12 +2729,38 @@
             if (message.startsWith("[DutySyncSWDebug]")) {
                 return [
                     "[DutySyncSWDebug] notificationclick start",
+                    "[DutySyncSWDebug] before clients.matchAll",
+                    "[DutySyncSWDebug] after clients.matchAll",
+                    "[DutySyncSWDebug] before choosing existing client",
+                    "[DutySyncSWDebug] after choosing existing client",
                     "[DutySyncSWDebug] existing client found",
+                    "[DutySyncSWDebug] before postMessage",
+                    "[DutySyncSWDebug] after postMessage",
                     "[DutySyncSWDebug] duty-sync-open-review message sent",
+                    "[DutySyncSWDebug] before focus",
+                    "[DutySyncSWDebug] after focus",
                     "[DutySyncSWDebug] focus called",
+                    "[DutySyncSWDebug] notificationclick error",
                 ].some((prefix) => message.startsWith(prefix));
             }
             return message.startsWith(dutySyncOpenDebugPrefix);
+        }
+
+        function parseDutySyncTraceIdentity(inputUrl, fallback = {}) {
+            const identity = {
+                trace_id: (fallback && fallback.trace_id) || null,
+                review_id: (fallback && fallback.review_id) || null,
+                updated_at: (fallback && fallback.updated_at) || null,
+            };
+            try {
+                const parsedUrl = new URL(inputUrl || "", window.location.origin);
+                identity.trace_id = parsedUrl.searchParams.get("duty_sync_trace_id") || identity.trace_id;
+                identity.review_id = parsedUrl.searchParams.get("duty_sync_review_id") || identity.review_id;
+                identity.updated_at = parsedUrl.searchParams.get("duty_sync_review_updated_at") || identity.updated_at;
+            } catch (_error) {
+                // Keep fallback identity only.
+            }
+            return identity;
         }
 
         function formatDutySyncOpenDebugEntry(entry) {
@@ -3025,12 +3051,31 @@
             ].join("\n");
         }
 
+        function getLatestDutySyncOpenFlowEntries(entries) {
+            const openEntries = (Array.isArray(entries) ? entries : []).filter((entry) => isDutySyncOpenDebugEntry(entry));
+            const latestStart = [...openEntries].reverse().find((entry) =>
+                String((entry && entry.message) || "").startsWith("[DutySyncSWDebug] notificationclick start")
+            ) || null;
+            if (!latestStart) {
+                return [];
+            }
+            const latestTraceId = latestStart && latestStart.payload ? latestStart.payload.trace_id || null : null;
+            if (latestTraceId) {
+                return openEntries.filter((entry) => {
+                    const payload = entry && entry.payload ? entry.payload : {};
+                    return (payload.trace_id || null) === latestTraceId;
+                });
+            }
+            const latestTs = String(latestStart.ts || "");
+            return openEntries.filter((entry) => String(entry.ts || "") >= latestTs);
+        }
+
         async function renderDutySyncDebugConsole() {
             {% if app_env != "production" %}
             const node = document.getElementById("duty-sync-debug-log");
             if (!node) return;
             const entries = await getMergedDutySyncDebugEntries();
-            const openEntries = entries.filter((entry) => isDutySyncOpenDebugEntry(entry));
+            const openEntries = getLatestDutySyncOpenFlowEntries(entries);
             const blocks = openEntries.map((entry) => formatDutySyncOpenDebugEntry(entry));
             node.textContent = blocks.length ? blocks.join("\n") : buildDutySyncOpenDebugFallback(entries, openEntries);
             node.scrollTop = node.scrollHeight;
@@ -3088,7 +3133,7 @@
         async function copyDutySyncOpenFlowLogs() {
             {% if app_env != "production" %}
             const entries = await getMergedDutySyncDebugEntries();
-            const openEntries = entries.filter((entry) => isDutySyncOpenDebugEntry(entry));
+            const openEntries = getLatestDutySyncOpenFlowEntries(entries);
             const text = openEntries.length
                 ? openEntries.map((entry) => formatDutySyncOpenDebugEntry(entry)).join("\n")
                 : buildDutySyncOpenDebugFallback(entries, openEntries);
@@ -3103,28 +3148,19 @@
         }
 
         function parseDutySyncReviewIdentity(inputUrl, fallback = {}) {
-            const identity = {
-                review_id: (fallback && fallback.review_id) || null,
-                updated_at: (fallback && fallback.updated_at) || null,
-            };
-            try {
-                const parsedUrl = new URL(inputUrl || "", window.location.origin);
-                identity.review_id = parsedUrl.searchParams.get("duty_sync_review_id") || identity.review_id;
-                identity.updated_at = parsedUrl.searchParams.get("duty_sync_review_updated_at") || identity.updated_at;
-            } catch (_error) {
-                // Keep fallback identity only.
-            }
+            const identity = parseDutySyncTraceIdentity(inputUrl, fallback);
             return identity;
         }
 
         function logDutySyncOpenDebug(message, payload = {}) {
             {% if app_env != "production" %}
-            const identity = parseDutySyncReviewIdentity(payload.target_url || payload.url || "", payload);
+            const identity = parseDutySyncTraceIdentity(payload.target_url || payload.url || "", payload);
             const entry = {
                 ts: new Date().toISOString(),
                 origin: "app",
                 message: `${dutySyncOpenDebugPrefix} ${message}`,
                 payload: {
+                    trace_id: identity.trace_id,
                     review_id: identity.review_id,
                     updated_at: identity.updated_at,
                     ...(payload || {}),
