@@ -4032,6 +4032,10 @@
                 );
                 return true;
             }
+            if (appMode !== "scheduling") {
+                hideSessionBanner();
+                return false;
+            }
             if (appMode === "scheduling" && (!calendarStatusKnown || !dutySyncStatusKnown)) {
                 hideSessionBanner();
                 return false;
@@ -4059,18 +4063,6 @@
                         );
                         return true;
                     }
-                } else {
-                    showSessionBanner(
-                        "Turn on notifications so Duty Sync updates reach you right away.",
-                        `<button class="secondary-button" onclick="enableDutySyncNotifications()">Enable notifications</button><button class="ghost-button" onclick="switchAppMode('scheduling')">Open Scheduling</button>`
-                    );
-                    return true;
-                }
-            }
-
-            if (appMode !== "scheduling") {
-                hideSessionBanner();
-                return false;
             }
 
             if (!googleCalendarConnected) {
