@@ -2023,6 +2023,8 @@
         let dutySyncForegroundRecoveryRetryIndex = -1;
         let dutySyncForegroundRecoveryRetryTimer = null;
         let pendingDutySyncForegroundPrompt = null;
+        let dutySyncForegroundWatcherTimer = null;
+        let dutySyncForegroundWatcherKnownReviewKey = null;
         let lastConsumedDutySyncServerFallbackKey = null;
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
@@ -2040,6 +2042,7 @@
         const dutySyncOpenDebugPrefix = "[DutySyncOpenDebug]";
         const dutySyncForegroundRecoveryDebugPrefix = "[DutySyncForegroundRecoveryDebug]";
         const dutySyncForegroundRecoveryRetryDelaysMs = [400, 1000];
+        const dutySyncForegroundWatcherIntervalMs = 3000;
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -3589,6 +3592,96 @@
                 pendingDutySyncReviewUpdatedAt ||
                 (storedContext && storedContext.active)
             );
+        }
+
+        function getDutySyncForegroundWatcherReview(status) {
+            if (status && status.pending_review && status.pending_review.review_id) {
+                return status.pending_review;
+            }
+            if (status && status.push_review_scope && status.push_review_scope.review_id) {
+                return status.push_review_scope;
+            }
+            return null;
+        }
+
+        async function checkDutySyncForegroundWatcher({ captureBaseline = false } = {}) {
+            if (document.visibilityState !== "visible") {
+                return;
+            }
+            try {
+                const response = await fetch("/calendar/duty-sync/status", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId
+                    })
+                });
+                const data = await response.json();
+                const review = getDutySyncForegroundWatcherReview(data);
+                const reviewKey = getDutySyncReviewIdentityKey(review);
+                if (captureBaseline) {
+                    dutySyncForegroundWatcherKnownReviewKey = reviewKey;
+                    return;
+                }
+                if (!reviewKey) {
+                    dutySyncForegroundWatcherKnownReviewKey = null;
+                    return;
+                }
+                if (reviewKey === dutySyncForegroundWatcherKnownReviewKey) {
+                    return;
+                }
+                dutySyncForegroundWatcherKnownReviewKey = reviewKey;
+                if (hasActiveDutySyncPushContext()) {
+                    return;
+                }
+                if (lastOpenedDutySyncReviewKey === reviewKey) {
+                    return;
+                }
+                if (activeDutyReview && dutySyncReviewIdentityMatches(activeDutyReview, review)) {
+                    return;
+                }
+                if (
+                    pendingDutySyncForegroundPrompt &&
+                    getDutySyncReviewIdentityKey(pendingDutySyncForegroundPrompt) === reviewKey
+                ) {
+                    return;
+                }
+                pendingDutySyncForegroundPrompt = {
+                    review_id: review.review_id || null,
+                    updated_at: review.updated_at || null,
+                };
+                renderDutySyncPrimaryBanner();
+            } catch (_error) {
+                return;
+            }
+        }
+
+        function stopDutySyncForegroundWatcher() {
+            if (dutySyncForegroundWatcherTimer) {
+                clearInterval(dutySyncForegroundWatcherTimer);
+                dutySyncForegroundWatcherTimer = null;
+            }
+        }
+
+        function startDutySyncForegroundWatcher() {
+            if (document.visibilityState !== "visible") {
+                stopDutySyncForegroundWatcher();
+                return;
+            }
+            const alreadyRunning = !!dutySyncForegroundWatcherTimer;
+            if (alreadyRunning) {
+                return;
+            }
+            checkDutySyncForegroundWatcher({ captureBaseline: true }).catch(() => {});
+            dutySyncForegroundWatcherTimer = setInterval(() => {
+                if (document.visibilityState !== "visible") {
+                    stopDutySyncForegroundWatcher();
+                    return;
+                }
+                checkDutySyncForegroundWatcher().catch(() => {});
+            }, dutySyncForegroundWatcherIntervalMs);
         }
 
         function isDutySyncPushRenderContextActive() {
@@ -6532,15 +6625,19 @@
         document.addEventListener("visibilitychange", () => {
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
             if (document.visibilityState === "visible") {
+                startDutySyncForegroundWatcher();
                 persistDutySyncPushDebug("[Client] app resumed");
                 ensureDutySyncFlowTraceId("resume", { source: "resume" }, true);
                 logDutySyncRuntime("push/deep-link entry received", { source: "visibilitychange", href: window.location.href });
                 storeDutySyncPushContextFromUrl(window.location.href, "visibilitychange_url");
                 restorePushContextAndResumeDutySyncReview("visibilitychange").catch(() => {});
+                return;
             }
+            stopDutySyncForegroundWatcher();
         });
         window.addEventListener("focus", () => {
             if (document.visibilityState !== "visible") return;
+            startDutySyncForegroundWatcher();
             restorePushContextAndResumeDutySyncReview("focus").catch(() => {});
         });
         if (pendingDutySyncReviewDeepLink) {
@@ -6562,6 +6659,9 @@
         {% endif %}
         handleCalendarCallbackStatus();
         bootstrapSession();
+        if (document.visibilityState === "visible") {
+            startDutySyncForegroundWatcher();
+        }
     </script>
 </body>
 </html>
