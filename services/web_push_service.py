@@ -211,6 +211,11 @@ def _poll_once():
                                     "last_pushed_review_signature": current_signature,
                                     "last_pushed_review_payload": review,
                                     "last_push_review_scope": push_scope_review,
+                                    "last_push_open_context": {
+                                        "review_id": review.get("review_id"),
+                                        "updated_at": review.get("updated_at"),
+                                        "pushed_at": datetime.utcnow(),
+                                    },
                                     "last_pushed_at": datetime.utcnow(),
                                 }
                             },
@@ -218,7 +223,7 @@ def _poll_once():
             else:
                 duty_sync_connections_collection.update_one(
                     {"session_id": session_id},
-                    {"$set": {"last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
+                    {"$set": {"last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None, "last_push_open_context": None}},
                 )
         except Exception as exc:
             log_event(

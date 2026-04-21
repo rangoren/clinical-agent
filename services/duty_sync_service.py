@@ -461,6 +461,20 @@ def _serialize_review_doc(review_doc):
     }
 
 
+def _serialize_push_open_context(connection_doc, pending_payload=None):
+    context = (connection_doc or {}).get("last_push_open_context") or {}
+    review_id = context.get("review_id")
+    if not review_id:
+        return None
+    if pending_payload and pending_payload.get("review_id") != review_id:
+        return None
+    return {
+        "review_id": review_id,
+        "updated_at": context.get("updated_at"),
+        "pushed_at": as_iso(context.get("pushed_at")) if context.get("pushed_at") else None,
+    }
+
+
 def _review_change_keys(review):
     return [item.get("change_key") for item in (review or {}).get("changes") or [] if item.get("change_key")]
 
@@ -648,6 +662,7 @@ def _apply_review_to_snapshot(session_id, review_doc):
                 "last_pushed_review_signature": None,
                 "last_pushed_review_payload": None,
                 "last_push_review_scope": None,
+                "last_push_open_context": None,
             }
         },
     )
@@ -920,6 +935,7 @@ def get_duty_sync_status(session_id):
     if pending_review:
         pending_payload = _serialize_review_doc(pending_review)
         push_review_scope = doc.get("last_push_review_scope")
+        push_open_context_fallback = _serialize_push_open_context(doc, pending_payload)
         result = {
             "available": True,
             "connected": True,
@@ -931,6 +947,7 @@ def get_duty_sync_status(session_id):
             "last_checked_at": last_checked_at,
             "pending_review": pending_payload,
             "push_review_scope": push_review_scope,
+            "push_open_context_fallback": push_open_context_fallback,
         }
         return _attach_render_debug(
             result,
@@ -1072,7 +1089,7 @@ def approve_pending_duty_review_scope(session_id, review_id, change_keys):
         )
         duty_sync_connections_collection.update_one(
             {"session_id": session_id},
-            {"$set": {"current_status": "pending_review", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
+            {"$set": {"current_status": "pending_review", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None, "last_push_open_context": None}},
         )
     else:
         duty_sync_pending_reviews_collection.update_one(
@@ -1081,7 +1098,7 @@ def approve_pending_duty_review_scope(session_id, review_id, change_keys):
         )
         duty_sync_connections_collection.update_one(
             {"session_id": session_id},
-            {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
+            {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None, "last_push_open_context": None}},
         )
     return _attach_render_debug({
         "status": "approved",
@@ -1106,7 +1123,7 @@ def ignore_pending_duty_review(session_id, review_id):
     )
     duty_sync_connections_collection.update_one(
         {"session_id": session_id},
-        {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
+        {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None, "last_push_open_context": None}},
     )
     return {"status": "ignored", "reply": "Duty review ignored for now."}
 
@@ -1136,7 +1153,7 @@ def ignore_pending_duty_review_scope(session_id, review_id, change_keys):
     )
     duty_sync_connections_collection.update_one(
         {"session_id": session_id},
-        {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None}},
+        {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None, "last_push_open_context": None}},
     )
     return {"status": "ignored", "reply": "Duty review ignored for now.", "pending_review": None}
 

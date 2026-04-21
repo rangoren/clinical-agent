@@ -2017,6 +2017,7 @@
         let pendingDutySyncReviewDeepLink = false;
         let dutyPushRegistration = null;
         let pendingDutySyncForegroundRecovery = false;
+        let lastConsumedDutySyncServerFallbackKey = null;
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
         let dutySyncDebugPanelOpen = false;
@@ -4331,6 +4332,9 @@
             if (pendingDutySyncStatusRecovery && pushScopedReview && pushScopedReview.review_id) {
                 return pushScopedReview;
             }
+            if (pendingDutySyncForegroundRecovery && pendingReview && pendingReview.review_id) {
+                return pendingReview;
+            }
             return pendingReview;
         }
 
@@ -4393,6 +4397,7 @@
             }
             pendingDutySyncStatusRecovery = false;
             pendingDutySyncForegroundRecovery = false;
+            lastConsumedDutySyncServerFallbackKey = openKey;
             pendingDutySyncReviewDeepLink = false;
             pendingDutySyncReviewId = null;
             pendingDutySyncReviewUpdatedAt = null;
@@ -4651,7 +4656,23 @@
                         logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus result", {
                             push_review_scope_exists: !!(data && data.push_review_scope && data.push_review_scope.review_id),
                             pending_review_exists: !!(data && data.pending_review && data.pending_review.review_id),
+                            push_open_context_fallback_exists: !!(data && data.push_open_context_fallback && data.push_open_context_fallback.review_id),
                         });
+                    }
+                    if (
+                        foregroundRecoveryActive &&
+                        !pendingDutySyncReviewDeepLink &&
+                        !pendingDutySyncReviewId &&
+                        !pendingDutySyncReviewUpdatedAt &&
+                        data &&
+                        data.push_open_context_fallback &&
+                        data.push_open_context_fallback.review_id
+                    ) {
+                        const fallbackKey = getDutySyncReviewIdentityKey(data.push_open_context_fallback);
+                        if (fallbackKey && fallbackKey !== lastConsumedDutySyncServerFallbackKey) {
+                            pendingDutySyncReviewId = data.push_open_context_fallback.review_id || null;
+                            pendingDutySyncReviewUpdatedAt = data.push_open_context_fallback.updated_at || null;
+                        }
                     }
                     if (
                         pendingDutySyncForegroundRecovery &&
@@ -4669,6 +4690,7 @@
                         logDutySyncForegroundRecoveryDebug("refreshDutySyncStatus result", {
                             push_review_scope_exists: false,
                             pending_review_exists: false,
+                            push_open_context_fallback_exists: false,
                             error: "request_failed",
                         });
                     }
