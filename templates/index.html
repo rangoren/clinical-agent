@@ -238,7 +238,7 @@
         .duty-sync-debug-trigger {
             position: fixed;
             right: 18px;
-            bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 124px);
             z-index: 70;
             padding: 10px 12px;
             border: 1px solid rgba(24, 38, 34, 0.16);
@@ -1991,7 +1991,6 @@
             <div class="duty-sync-debug-actions">
                 <button type="button" onclick="toggleDutySyncDebugPanel(false)">Close</button>
                 <button type="button" onclick="clearDutySyncDebugLogs()">Clear logs</button>
-                <button type="button" onclick="copyLatestDutySyncRenderSnapshot()">Copy latest render snapshot</button>
             </div>
             <div id="duty-sync-debug-log" class="duty-sync-debug-log">No logs yet.</div>
         </div>
@@ -2028,6 +2027,7 @@
         const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
         const dutySyncSwBridgeMarker = "[DutySyncSWDebug] BRIDGE_OK";
         const dutySyncRenderSnapshotPrefix = "[DutySyncRenderDebugSnapshot]";
+        const dutySyncOpenDebugPrefix = "[DutySyncOpenDebug]";
 
         if (!sessionId) {
             sessionId = crypto.randomUUID();
@@ -2723,6 +2723,24 @@
             return Array.from(map.values()).sort((a, b) => String(a.ts || "").localeCompare(String(b.ts || "")));
         }
 
+        function isDutySyncOpenDebugEntry(entry) {
+            const message = String((entry && entry.message) || "");
+            if (message.startsWith("[DutySyncSWDebug]")) {
+                return [
+                    "[DutySyncSWDebug] notificationclick start",
+                    "[DutySyncSWDebug] existing client found",
+                    "[DutySyncSWDebug] duty-sync-open-review message sent",
+                    "[DutySyncSWDebug] focus called",
+                ].some((prefix) => message.startsWith(prefix));
+            }
+            return message.startsWith(dutySyncOpenDebugPrefix);
+        }
+
+        function formatDutySyncOpenDebugEntry(entry) {
+            const payload = entry && entry.payload ? entry.payload : {};
+            return `${entry.ts} ${entry.message}${Object.keys(payload).length ? ` ${JSON.stringify(payload)}` : ""}`;
+        }
+
         function persistDutySyncSwDebugEntries(entries) {
             {% if app_env != "production" %}
             const normalized = (Array.isArray(entries) ? entries : []).map((entry) => ({
@@ -2990,9 +3008,9 @@
             const node = document.getElementById("duty-sync-debug-log");
             if (!node) return;
             const entries = await getMergedDutySyncDebugEntries();
-            const snapshots = getDutySyncRenderSnapshotEntries(entries);
-            const blocks = snapshots.map((entry) => formatDutySyncRenderSnapshot(entry));
-            node.textContent = blocks.length ? blocks.join("\n\n--------------------\n\n") : "No render snapshots yet.";
+            const openEntries = entries.filter((entry) => isDutySyncOpenDebugEntry(entry));
+            const blocks = openEntries.map((entry) => formatDutySyncOpenDebugEntry(entry));
+            node.textContent = blocks.length ? blocks.join("\n") : "No already-open push logs yet.";
             node.scrollTop = node.scrollHeight;
             {% endif %}
         }
@@ -3026,7 +3044,6 @@
             writeDutySyncDebugEntries([]);
             clearDutySyncSwDebugEntries().then(() => {
                 renderDutySyncDebugConsole();
-                logDutySyncRuntime("debug console cleared");
             });
             {% endif %}
         }
@@ -3048,19 +3065,42 @@
 
         async function copyLatestDutySyncRenderSnapshot() {
             {% if app_env != "production" %}
-            const mergedEntries = await getMergedDutySyncDebugEntries();
-            const snapshots = getDutySyncRenderSnapshotEntries(mergedEntries);
-            const latestSnapshot = snapshots.length ? snapshots[snapshots.length - 1] : null;
-            const text = latestSnapshot ? formatDutySyncRenderSnapshot(latestSnapshot) : "";
+            return false;
+            {% endif %}
+        }
+
+        function parseDutySyncReviewIdentity(inputUrl, fallback = {}) {
+            const identity = {
+                review_id: (fallback && fallback.review_id) || null,
+                updated_at: (fallback && fallback.updated_at) || null,
+            };
             try {
-                if (!text) {
-                    throw new Error("No render snapshot available");
-                }
-                await copyDutySyncText(text);
-                logDutySyncRuntime("render snapshot copied");
-            } catch (error) {
-                logDutySyncRuntime("render snapshot copy failed", { error: String(error) });
+                const parsedUrl = new URL(inputUrl || "", window.location.origin);
+                identity.review_id = parsedUrl.searchParams.get("duty_sync_review_id") || identity.review_id;
+                identity.updated_at = parsedUrl.searchParams.get("duty_sync_review_updated_at") || identity.updated_at;
+            } catch (_error) {
+                // Keep fallback identity only.
             }
+            return identity;
+        }
+
+        function logDutySyncOpenDebug(message, payload = {}) {
+            {% if app_env != "production" %}
+            const identity = parseDutySyncReviewIdentity(payload.target_url || payload.url || "", payload);
+            const entry = {
+                ts: new Date().toISOString(),
+                origin: "app",
+                message: `${dutySyncOpenDebugPrefix} ${message}`,
+                payload: {
+                    review_id: identity.review_id,
+                    updated_at: identity.updated_at,
+                    ...(payload || {}),
+                },
+            };
+            const entries = readDutySyncDebugEntries();
+            entries.push(entry);
+            writeDutySyncDebugEntries(mergeDutySyncDebugEntries(entries));
+            renderDutySyncDebugConsole();
             {% endif %}
         }
 
@@ -5971,8 +6011,25 @@
                     renderDutySyncDebugConsole();
                     return;
                 }
+                logDutySyncOpenDebug("service worker message received", {
+                    message_type: data.type || "unknown",
+                    url: data.url || null,
+                    review_id: data.review_id || null,
+                    updated_at: data.updated_at || null,
+                });
                 if (data.type !== "duty-sync-open-review") return;
                 const targetUrl = data.url || buildDutySyncDeepLinkPath();
+                const reviewIdentity = parseDutySyncReviewIdentity(targetUrl, {
+                    review_id: data.review_id || null,
+                    updated_at: data.updated_at || null,
+                });
+                logDutySyncOpenDebug("open-review handler triggered", {
+                    triggered: true,
+                    message_type: data.type,
+                    target_url: targetUrl,
+                    review_id: reviewIdentity.review_id,
+                    updated_at: reviewIdentity.updated_at,
+                });
                 ensureDutySyncFlowTraceId("push", {
                     source: "push",
                     review: data.review || null,
@@ -6005,13 +6062,47 @@
                 try {
                     const parsedUrl = new URL(targetUrl, window.location.origin);
                     if (parsedUrl.origin === window.location.origin) {
+                        logDutySyncOpenDebug("attempt to open review", {
+                            attempted: true,
+                            reason: "resumeDutySyncReviewFromDeepLink",
+                            target_url: targetUrl,
+                            review_id: reviewIdentity.review_id,
+                            updated_at: reviewIdentity.updated_at,
+                        });
                         window.history.replaceState({}, document.title, `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`);
                         await resumeDutySyncReviewFromDeepLink();
+                        logDutySyncOpenDebug("open review result", {
+                            result: "success",
+                            reason: "resume_started",
+                            target_url: targetUrl,
+                            review_id: reviewIdentity.review_id,
+                            updated_at: reviewIdentity.updated_at,
+                        });
                         return;
                     }
+                    logDutySyncOpenDebug("open review result", {
+                        result: "skipped",
+                        reason: "cross_origin_target",
+                        target_url: targetUrl,
+                        review_id: reviewIdentity.review_id,
+                        updated_at: reviewIdentity.updated_at,
+                    });
                 } catch (_error) {
-                    // Fall back to regular navigation below.
+                    logDutySyncOpenDebug("open review result", {
+                        result: "failed",
+                        reason: "invalid_target_url",
+                        target_url: targetUrl,
+                        review_id: reviewIdentity.review_id,
+                        updated_at: reviewIdentity.updated_at,
+                    });
                 }
+                logDutySyncOpenDebug("attempt to open review", {
+                    attempted: false,
+                    reason: "full_navigation_fallback",
+                    target_url: targetUrl,
+                    review_id: reviewIdentity.review_id,
+                    updated_at: reviewIdentity.updated_at,
+                });
                 window.location.href = targetUrl;
             });
             navigator.serviceWorker.addEventListener("controllerchange", () => {
