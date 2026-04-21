@@ -231,14 +231,15 @@ self.addEventListener("notificationclick", (event) => {
   self.__dutySyncDebug("notificationclick fired", { targetUrl: resolvedTargetUrl, traceId });
   let storedTraceLine = "";
   event.waitUntil(
-    writeDutySyncOpenFlowDebug("notificationclick start", {
-      notification_data: notificationData,
-      review_id: reviewIdentity.review_id || null,
-      updated_at: reviewIdentity.updated_at || null,
-      target_url_raw: baseTargetUrl,
-      target_url_enriched: resolvedTargetUrl,
-      trace_id: traceId,
-    })
+    Promise.resolve()
+      .then(() => writeDutySyncOpenFlowDebug("notificationclick start", {
+        notification_data: notificationData,
+        review_id: reviewIdentity.review_id || null,
+        updated_at: reviewIdentity.updated_at || null,
+        target_url_raw: baseTargetUrl,
+        target_url_enriched: resolvedTargetUrl,
+        trace_id: traceId,
+      }))
       .then(() => {
         const parsedUrl = new URL(resolvedTargetUrl, self.location.origin);
         const context = {
@@ -262,91 +263,159 @@ self.addEventListener("notificationclick", (event) => {
             error: String(error),
           }));
       })
+      .then(() => writeDutySyncOpenFlowDebug("before clients.matchAll", {
+        trace_id: traceId,
+      }))
       .then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true }))
       .then((clients) => {
-      const client = clients && clients.length ? clients[0] : null;
-      writeDutySyncOpenFlowDebug("existing client found", {
-        found: !!client,
-        target_client_id: client && client.id ? client.id : null,
-      });
-      if (clients && clients.length) {
+        writeDutySyncOpenFlowDebug("after clients.matchAll", {
+          trace_id: traceId,
+          client_count: clients ? clients.length : 0,
+        });
+        writeDutySyncOpenFlowDebug("before choosing client", {
+          trace_id: traceId,
+          client_count: clients ? clients.length : 0,
+        });
+        const client = clients && clients.length ? clients[0] : null;
+        writeDutySyncOpenFlowDebug("after choosing client", {
+          trace_id: traceId,
+          found: !!client,
+          target_client_id: client && client.id ? client.id : null,
+        });
+        writeDutySyncOpenFlowDebug("existing client found", {
+          found: !!client,
+          target_client_id: client && client.id ? client.id : null,
+        });
+        if (clients && clients.length) {
+          const targetUrl = withDutySyncTrace(resolvedTargetUrl, traceId, [
+            "[SW] notificationclick fired",
+            storedTraceLine,
+            "[SW] client found",
+            "[SW] navigate/openWindow attempted",
+          ]);
+          self.__dutySyncDebug("client found", { clientCount: clients.length, targetUrl });
+          writeDutySyncOpenFlowDebug("before postMessage", {
+            trace_id: traceId,
+            target_client_id: client && client.id ? client.id : null,
+          });
+          const messageSent = postDutySyncOpenReviewMessage(client, targetUrl);
+          writeDutySyncOpenFlowDebug("after postMessage", {
+            trace_id: traceId,
+            sent: messageSent,
+            target_client_id: client && client.id ? client.id : null,
+          });
+          writeDutySyncOpenFlowDebug("duty-sync-open-review message sent", {
+            sent: messageSent,
+            target_client_id: client && client.id ? client.id : null,
+          });
+          if ("navigate" in client) {
+            self.__dutySyncDebug("navigation attempted", { via: "client.navigate", targetUrl });
+            return client.navigate(targetUrl).then((navigatedClient) => {
+              const activeClient = navigatedClient || client;
+              if (activeClient && "focus" in activeClient) {
+                writeDutySyncOpenFlowDebug("before focus", {
+                  trace_id: traceId,
+                  target_client_id: activeClient && activeClient.id ? activeClient.id : null,
+                });
+                return activeClient.focus().then((focusedClient) => {
+                  writeDutySyncOpenFlowDebug("after focus", {
+                    trace_id: traceId,
+                    called: true,
+                    target_client_id: activeClient && activeClient.id ? activeClient.id : null,
+                  });
+                  writeDutySyncOpenFlowDebug("focus called", {
+                    called: true,
+                    target_client_id: activeClient && activeClient.id ? activeClient.id : null,
+                  });
+                  return focusedClient;
+                });
+              }
+              writeDutySyncOpenFlowDebug("after focus", {
+                trace_id: traceId,
+                called: false,
+                target_client_id: activeClient && activeClient.id ? activeClient.id : null,
+              });
+              writeDutySyncOpenFlowDebug("focus called", {
+                called: false,
+                target_client_id: activeClient && activeClient.id ? activeClient.id : null,
+              });
+              return activeClient;
+            });
+          }
+          if (client && "focus" in client) {
+            self.__dutySyncDebug("navigation attempted", { via: "focus-existing-client", targetUrl });
+            writeDutySyncOpenFlowDebug("before focus", {
+              trace_id: traceId,
+              target_client_id: client && client.id ? client.id : null,
+            });
+            return client.focus().then((focusedClient) => {
+              writeDutySyncOpenFlowDebug("after focus", {
+                trace_id: traceId,
+                called: true,
+                target_client_id: client && client.id ? client.id : null,
+              });
+              writeDutySyncOpenFlowDebug("focus called", {
+                called: true,
+                target_client_id: client && client.id ? client.id : null,
+              });
+              return focusedClient;
+            });
+          }
+          writeDutySyncOpenFlowDebug("after focus", {
+            trace_id: traceId,
+            called: false,
+            target_client_id: client && client.id ? client.id : null,
+          });
+          writeDutySyncOpenFlowDebug("focus called", {
+            called: false,
+            target_client_id: client && client.id ? client.id : null,
+          });
+          return client;
+        }
+        writeDutySyncOpenFlowDebug("after postMessage", {
+          trace_id: traceId,
+          sent: false,
+          target_client_id: null,
+        });
+        writeDutySyncOpenFlowDebug("duty-sync-open-review message sent", {
+          sent: false,
+          target_client_id: null,
+        });
+        writeDutySyncOpenFlowDebug("after focus", {
+          trace_id: traceId,
+          called: false,
+          target_client_id: null,
+        });
+        writeDutySyncOpenFlowDebug("focus called", {
+          called: false,
+          target_client_id: null,
+        });
         const targetUrl = withDutySyncTrace(resolvedTargetUrl, traceId, [
           "[SW] notificationclick fired",
           storedTraceLine,
-          "[SW] client found",
+          "[SW] no client found",
           "[SW] navigate/openWindow attempted",
         ]);
-        self.__dutySyncDebug("client found", { clientCount: clients.length, targetUrl });
-        const messageSent = postDutySyncOpenReviewMessage(client, targetUrl);
-        writeDutySyncOpenFlowDebug("duty-sync-open-review message sent", {
-          sent: messageSent,
-          target_client_id: client && client.id ? client.id : null,
-        });
-        if ("navigate" in client) {
-          self.__dutySyncDebug("navigation attempted", { via: "client.navigate", targetUrl });
-          return client.navigate(targetUrl).then((navigatedClient) => {
-            const activeClient = navigatedClient || client;
-            if (activeClient && "focus" in activeClient) {
-              return activeClient.focus().then((focusedClient) => {
-                writeDutySyncOpenFlowDebug("focus called", {
-                  called: true,
-                  target_client_id: activeClient && activeClient.id ? activeClient.id : null,
-                });
-                return focusedClient;
-              });
-            }
-            writeDutySyncOpenFlowDebug("focus called", {
-              called: false,
-              target_client_id: activeClient && activeClient.id ? activeClient.id : null,
-            });
-            return activeClient;
+        self.__dutySyncDebug("no client found", { targetUrl });
+        if (self.clients.openWindow) {
+          self.__dutySyncDebug("navigation attempted", { via: "openWindow", targetUrl });
+          writeDutySyncSwDebug("navigation action", {
+            branch: "openWindow",
+            target_url: targetUrl,
           });
+          return self.clients.openWindow(targetUrl);
         }
-        if (client && "focus" in client) {
-          self.__dutySyncDebug("navigation attempted", { via: "focus-existing-client", targetUrl });
-          return client.focus().then((focusedClient) => {
-            writeDutySyncOpenFlowDebug("focus called", {
-              called: true,
-              target_client_id: client && client.id ? client.id : null,
-            });
-            return focusedClient;
-          });
-        }
-        writeDutySyncOpenFlowDebug("focus called", {
-          called: false,
-          target_client_id: client && client.id ? client.id : null,
-        });
-        return client;
-      }
-      writeDutySyncOpenFlowDebug("duty-sync-open-review message sent", {
-        sent: false,
-        target_client_id: null,
-      });
-      writeDutySyncOpenFlowDebug("focus called", {
-        called: false,
-        target_client_id: null,
-      });
-      const targetUrl = withDutySyncTrace(resolvedTargetUrl, traceId, [
-        "[SW] notificationclick fired",
-        storedTraceLine,
-        "[SW] no client found",
-        "[SW] navigate/openWindow attempted",
-      ]);
-      self.__dutySyncDebug("no client found", { targetUrl });
-      if (self.clients.openWindow) {
-        self.__dutySyncDebug("navigation attempted", { via: "openWindow", targetUrl });
         writeDutySyncSwDebug("navigation action", {
-          branch: "openWindow",
+          branch: "no-client-no-openWindow",
           target_url: targetUrl,
         });
-        return self.clients.openWindow(targetUrl);
-      }
-      writeDutySyncSwDebug("navigation action", {
-        branch: "no-client-no-openWindow",
-        target_url: targetUrl,
-      });
-      return undefined;
-    })
+        return undefined;
+      })
+      .catch((error) => writeDutySyncOpenFlowDebug("notificationclick error", {
+        trace_id: traceId,
+        error: error && error.message ? error.message : String(error),
+        stack: error && error.stack ? String(error.stack) : null,
+      }))
   );
 });
 
