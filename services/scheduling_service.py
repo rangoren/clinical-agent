@@ -531,19 +531,40 @@ def _detect_action(message):
 
 
 def _is_daily_summary_request(message):
-    lowered = _normalize_text(message).lower()
+    lowered = _normalize_scheduling_followup_text(message)
     if any(keyword in lowered for keyword in SUMMARY_KEYWORDS):
         return True
-    return "today" in lowered and any(
-        phrase in lowered
-        for phrase in ("do i have", "meetings", "meeting", "schedule", "events", "what do i", "what's on", "whats on")
+    summary_phrases = (
+        "do i have",
+        "meetings",
+        "meeting",
+        "schedule",
+        "events",
+        "what do i",
+        "what is on",
+        "what's on",
+        "whats on",
+        "show me",
     )
+    if ("today" in lowered or "tomorrow" in lowered) and any(phrase in lowered for phrase in summary_phrases):
+        return True
+    return False
 
 
 def _is_monthly_shift_summary_request(message):
-    lowered = _normalize_text(message).lower()
+    lowered = _normalize_scheduling_followup_text(message)
     if any(marker in lowered for marker in MONTHLY_SHIFT_SUMMARY_MARKERS):
         return True
+    if bool(_extract_month_year(lowered)[0]) and any(
+        phrase in lowered
+        for phrase in ("and ", "for ", "in ", "what about", "show me", "how about")
+    ):
+        asks_shifts_or_context = any(
+            token in lowered
+            for token in ("תורנות", "תורנויות", "תורניות", "shift", "shifts", "on-call", "call")
+        )
+        if asks_shifts_or_context or len(re.findall(r"\w+", lowered, flags=re.UNICODE)) <= 6:
+            return True
     has_month = bool(_extract_month_year(lowered)[0])
     asks_when = any(token in lowered for token in ("מתי", "איזה", "what", "when"))
     asks_shifts = any(
@@ -1105,8 +1126,23 @@ def _message_has_explicit_year(text):
     return bool(re.search(r"\b20\d{2}\b", text or ""))
 
 
-def _looks_like_short_followup(message):
+def _normalize_scheduling_followup_text(message):
     lowered = _normalize_text(message).lower()
+    replacements = {
+        "tommrow": "tomorrow",
+        "tomrrow": "tomorrow",
+        "tmrw": "tomorrow",
+        "tmr": "tomorrow",
+        "nxt month": "next month",
+        "whats": "what is",
+    }
+    for source, target in replacements.items():
+        lowered = lowered.replace(source, target)
+    return lowered
+
+
+def _looks_like_short_followup(message):
+    lowered = _normalize_scheduling_followup_text(message)
     if not lowered:
         return False
     if any(keyword in lowered for keyword in DELETE_KEYWORDS):
@@ -1119,11 +1155,18 @@ def _looks_like_short_followup(message):
 
 
 def _is_scheduling_greeting(message):
-    cleaned = _normalize_text(message).strip().lower()
+    cleaned = _normalize_scheduling_followup_text(message).strip().lower()
     return cleaned in {
         "hi",
         "hello",
         "hey",
+        "yo",
+        "ok",
+        "okay",
+        "ok hello",
+        "ok hi",
+        "hi again",
+        "hello again",
         "hi there",
         "hello there",
         "hey there",
@@ -1132,9 +1175,25 @@ def _is_scheduling_greeting(message):
     }
 
 
+def _is_generic_scheduling_smalltalk(message):
+    cleaned = _normalize_scheduling_followup_text(message).strip().lower()
+    return cleaned in {
+        "ok",
+        "okay",
+        "ok.",
+        "okay.",
+        "thanks",
+        "thank you",
+        "great",
+        "cool",
+        "got it",
+        "understood",
+        "fine",
+    }
+
+
 def _extract_contextual_summary_date(message):
-    lowered = _normalize_text(message).lower()
-    lowered = lowered.replace("tommrow", "tomorrow").replace("tomrrow", "tomorrow")
+    lowered = _normalize_scheduling_followup_text(message)
     if "today" in lowered or "tomorrow" in lowered:
         return _extract_date(lowered)
     if any(f"next {weekday_name}" in lowered for weekday_name in WEEKDAYS):
@@ -2350,14 +2409,17 @@ def _maybe_resolve_scheduling_context_followup(session_id, user_message):
 
     intent = context.get("intent")
     entities = context.get("entities") or {}
+    lowered = _normalize_scheduling_followup_text(user_message)
 
     if intent == "monthly_shift_summary":
-        lowered = _normalize_text(user_message).lower()
         context_month = int(entities.get("month") or 0)
         context_year = int(entities.get("year") or 0)
         if "next month" in lowered and context_month and context_year:
             next_year, next_month = _shift_month(context_year, context_month, 1)
             return _build_monthly_shift_summary_for_month(session_id, next_month, next_year)
+        if "previous month" in lowered and context_month and context_year:
+            prev_year, prev_month = _shift_month(context_year, context_month, -1)
+            return _build_monthly_shift_summary_for_month(session_id, prev_month, prev_year)
         if "this month" in lowered and context_month and context_year:
             return _build_monthly_shift_summary_for_month(session_id, context_month, context_year)
         month, year = _extract_month_year(user_message)
@@ -2395,6 +2457,12 @@ def handle_scheduling_message(session_id, user_message):
         _clear_pending_details_context(session_id)
         return {
             "reply": "I’m here for your schedule. Ask me about shifts, today, tomorrow, or calendar changes.",
+            "scheduling_draft": None,
+        }
+    if _is_generic_scheduling_smalltalk(normalized_user_message):
+        _clear_pending_details_context(session_id)
+        return {
+            "reply": "Still in scheduling mode. You can ask about shifts, dates, tomorrow, next month, or calendar changes.",
             "scheduling_draft": None,
         }
     contextual_followup = _maybe_resolve_scheduling_context_followup(session_id, normalized_user_message)
