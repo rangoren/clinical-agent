@@ -2771,7 +2771,7 @@ def _mcq_threshold_text(item):
     action = _option_text_by_key(item, item.get("correct_answer_key"))
 
     if threshold_type == "lab_trend_threshold" and action:
-        return f"When platelets have fallen into the high-60s and are still dropping, {action.lower()}."
+        return f"Platelets <70,000 and falling -> {action.lower()}."
 
     threshold = _first_nonempty_text(
         item.get("threshold_variable"),
@@ -2784,6 +2784,10 @@ def _mcq_threshold_text(item):
 
 
 def _mcq_practical_rule_text(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+
+    if threshold_type == "lab_trend_threshold":
+        return "If platelets are <70,000 and falling, avoid routine neuraxial placement; if they are stably >=80,000-100,000 without a downward trend, discuss neuraxial options with anesthesia."
     return _first_nonempty_text(
         item.get("board_takeaway"),
         item.get("board_rule"),
@@ -2851,7 +2855,7 @@ def _rule_exception_text(item):
     subtopic = (item.get("subtopic") or "").strip().lower()
 
     if threshold_type == "lab_trend_threshold":
-        return "A stable platelet count in a clearly higher range, without a downward trend or other bleeding concern, may justify re-evaluating neuraxial options with anesthesia."
+        return "Stable platelets >=80,000-100,000 without a downward trend or other bleeding concern may justify re-evaluating neuraxial options with anesthesia."
     if threshold_type in {"age_threshold_rule_application", "age_plus_risk_factor_threshold"} or "aub" in subtopic:
         return "A younger low-risk patient with bleeding can often start with targeted medical or structural workup instead of immediate biopsy."
     if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
