@@ -48,6 +48,9 @@ NO_DUTIES_MESSAGE_HE = "לא שובצת החודש בלוח התורנויות"
 DEFAULT_TEST_DUTY_SHEET_URL = (
     "https://docs.google.com/spreadsheets/d/1L50eFprLasbWbu808emdUa5HFQAtAZjzkbyvhGSG9eQ/edit?gid=0#gid=0"
 )
+DEFAULT_PRODUCTION_DUTY_SHEET_URL = (
+    "https://docs.google.com/spreadsheets/d/1IxVBma2Hkc_tjS-i43Zv_es_HwMqbHWsmLzH6wiM7k4/edit?usp=drivesdk"
+)
 DEFAULT_TEST_DUTY_USER_FULL_NAME = "גורן"
 GOOGLE_SHEETS_METADATA_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
 GOOGLE_SHEETS_VALUES_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{sheet_range}"
@@ -59,6 +62,18 @@ PUSH_OPEN_CONTEXT_FALLBACK_TTL_SECONDS = 300
 
 def _is_debug_env():
     return APP_ENV != "production"
+
+
+def _default_duty_sheet_url():
+    if APP_ENV == "production":
+        return DEFAULT_PRODUCTION_DUTY_SHEET_URL
+    return DEFAULT_TEST_DUTY_SHEET_URL
+
+
+def _duty_sheet_label():
+    if APP_ENV == "production":
+        return "duty sheet"
+    return "test sheet"
 
 
 def _debug_payload(exc):
@@ -314,7 +329,7 @@ def _required_google_sheet_access(session_id):
         return {
             "ok": False,
             "status": "google_connect_required",
-            "reply": "Reconnect Google once to allow Duty Sync to read the test sheet.",
+            "reply": f"Reconnect Google once to allow Duty Sync to read the {_duty_sheet_label()}.",
             "auth_url": connect_result.get("auth_url"),
         }
     if not google_connection_has_scopes(session_id, [GOOGLE_SHEETS_READONLY_SCOPE]):
@@ -322,7 +337,7 @@ def _required_google_sheet_access(session_id):
         return {
             "ok": False,
             "status": "google_reconnect_required",
-            "reply": "Reconnect Google once to allow Duty Sync to read the test sheet.",
+            "reply": f"Reconnect Google once to allow Duty Sync to read the {_duty_sheet_label()}.",
             "auth_url": connect_result.get("auth_url"),
         }
     return {"ok": True}
@@ -798,7 +813,7 @@ def _upsert_connection_state(session_id, payload):
 
 def _resolve_duty_sync_identity(session_id, sheet_url=None, full_name=None):
     existing = _connection_doc(session_id) or {}
-    normalized_sheet_url = normalize_text(sheet_url) or normalize_text(existing.get("sheet_url")) or DEFAULT_TEST_DUTY_SHEET_URL
+    normalized_sheet_url = normalize_text(sheet_url) or normalize_text(existing.get("sheet_url")) or _default_duty_sheet_url()
     normalized_full_name = normalize_text(full_name) or normalize_text(existing.get("full_name")) or DEFAULT_TEST_DUTY_USER_FULL_NAME
     sheet_id = normalize_sheet_id(normalized_sheet_url)
     return normalized_sheet_url, normalized_full_name, sheet_id, existing
@@ -944,7 +959,7 @@ def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=F
             payload={"sheet_id": sheet_id, "error": str(exc), "is_poll": is_poll},
             level="error",
         )
-        return {"status": "failed", "reply": "Duty Sync could not read the test sheet right now."}
+        return {"status": "failed", "reply": f"Duty Sync could not read the {_duty_sheet_label()} right now."}
 
 
 def get_duty_sync_status(session_id):
@@ -976,7 +991,7 @@ def get_duty_sync_status(session_id):
             "requires_google_reconnect": False,
             "current_status": "not_connected",
             "label": "Duty schedule: Not connected",
-            "details": "Connect the test duty sheet once from Settings.",
+            "details": f"Connect the {_duty_sheet_label()} once from Settings.",
             "last_checked_at": None,
         }
 
