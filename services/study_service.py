@@ -2787,9 +2787,12 @@ def _mcq_threshold_text(item):
 
 def _mcq_practical_rule_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
 
     if threshold_type == "lab_trend_threshold":
         return "If platelets are <70,000 and falling, avoid routine neuraxial placement; if they are stably >=80,000-100,000 without a downward trend, discuss neuraxial options with anesthesia."
+    if threshold_type == "response_to_treatment" and topic == "pid":
+        return "If there is no meaningful improvement after 48 hours of IV antibiotics, arrange drainage while continuing antibiotics. If the patient is clearly improving within 24-48 hours, continue antibiotics without drainage."
     if threshold_type == "treatment_response_plus_age":
         return "Trigger: age >=35 or time-sensitive infertility plus repeated failed stimulated IUI cycles. Action: move from more IUI to IVF when another IUI is unlikely to meaningfully improve time-to-pregnancy. Exception: in a younger patient with only 1-2 failed cycles, another IUI can still be reasonable."
     return _first_nonempty_text(
@@ -2817,6 +2820,8 @@ def _mcq_wrong_answer_context_text(item):
         return "It fits better in a 32-year-old with heavy bleeding from a known fibroid and no endometrial cancer risk factors, where initial medical treatment can come before biopsy."
     if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
         return "It fits better in a patient without a recent pregnancy-associated DVT, where estrogen is not contraindicated after thrombosis-risk review."
+    if threshold_type == "response_to_treatment" and topic == "pid":
+        return "It fits better in the opposite scenario: after 24-48 hours of antibiotics the patient is afebrile, pain is clearly improving, and exam findings are trending better, so continued antibiotics without drainage is reasonable."
     if threshold_type == "response_to_treatment":
         return "It fits better after clear treatment failure, such as persistent fever, worsening pain, or no clinical improvement after the expected response window."
     if threshold_type == "treatment_response_plus_age":
@@ -2845,9 +2850,12 @@ def _rule_trigger_text(item):
 
 def _rule_action_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
 
     if threshold_type == "lab_trend_threshold":
         return "Avoid routine neuraxial placement, use alternative analgesia, and keep the obstetric plan moving."
+    if threshold_type == "response_to_treatment" and topic == "pid":
+        return "If there is no meaningful improvement after 48 hours, move to image-guided drainage while continuing antibiotics rather than just extending the same medical therapy."
     if threshold_type == "treatment_response_plus_age":
         return "Escalate to IVF rather than repeating more low-yield IUI, because the clinically useful goal is faster conception with a meaningfully higher success rate per cycle."
     return _first_nonempty_text(
@@ -2870,6 +2878,8 @@ def _rule_exception_text(item):
         return "A younger low-risk patient with bleeding can often start with targeted medical or structural workup instead of immediate biopsy."
     if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
         return "This changes if the patient does not have a recent VTE history that still makes estrogen unsafe."
+    if threshold_type == "response_to_treatment" and topic == "pid":
+        return "Continued antibiotics without drainage is appropriate when the patient is clinically improving within 24-48 hours, even if the abscess is still present on imaging or remains several centimeters in size."
     if threshold_type == "response_to_treatment":
         return "If the patient is worsening or has clearly failed treatment, the right move becomes escalation rather than continuing the same plan."
     if threshold_type == "treatment_response_plus_age":
@@ -2894,6 +2904,7 @@ def _rule_nuance_text(item):
 
 def _mcq_why_correct_here_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
     key_clue = _mcq_key_clue_text(item)
     action = _option_text_by_key(item, item.get("correct_answer_key"))
     explanation = _first_nonempty_text(item.get("explanation"))
@@ -2903,6 +2914,8 @@ def _mcq_why_correct_here_text(item):
 
     if threshold_type == "lab_trend_threshold" and action and tempting_wrong_text:
         return "The real decision driver is neuraxial bleeding risk: a rapid fall to 68,000 outweighs normal coagulation tests and patient comfort, so avoiding neuraxial placement is safer than proceeding with epidural now."
+    if threshold_type == "response_to_treatment" and topic == "pid":
+        return "The principle here is failure of medical therapy after the expected response window: after 48 hours, ongoing fever and pain mean antibiotics alone are not achieving adequate source control, so drainage becomes the better next step."
     if threshold_type == "treatment_response_plus_age":
         return "The real tradeoff here is time-to-pregnancy versus diminishing IUI yield: at age 36 after 3 failed stimulated IUI cycles, another IUI adds delay with a lower expected success rate, whereas IVF offers a meaningfully higher chance of conception sooner."
     if key_clue and action and tempting_wrong_text:
