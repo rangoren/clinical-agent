@@ -2772,6 +2772,8 @@ def _mcq_threshold_text(item):
 
     if threshold_type == "lab_trend_threshold" and action:
         return f"Platelets <70,000 and falling -> {action.lower()}."
+    if threshold_type == "treatment_response_plus_age":
+        return "When age is already time-sensitive and 3 stimulated IUI cycles have failed, the decision should escalate toward IVF because another IUI offers diminishing returns relative to IVF."
 
     threshold = _first_nonempty_text(
         item.get("threshold_variable"),
@@ -2788,6 +2790,8 @@ def _mcq_practical_rule_text(item):
 
     if threshold_type == "lab_trend_threshold":
         return "If platelets are <70,000 and falling, avoid routine neuraxial placement; if they are stably >=80,000-100,000 without a downward trend, discuss neuraxial options with anesthesia."
+    if threshold_type == "treatment_response_plus_age":
+        return "Trigger: age >=35 or time-sensitive infertility plus repeated failed stimulated IUI cycles. Action: move from more IUI to IVF when another IUI is unlikely to meaningfully improve time-to-pregnancy. Exception: in a younger patient with only 1-2 failed cycles, another IUI can still be reasonable."
     return _first_nonempty_text(
         item.get("board_takeaway"),
         item.get("board_rule"),
@@ -2815,6 +2819,8 @@ def _mcq_wrong_answer_context_text(item):
         return "It fits better in a patient without a recent pregnancy-associated DVT, where estrogen is not contraindicated after thrombosis-risk review."
     if threshold_type == "response_to_treatment":
         return "It fits better after clear treatment failure, such as persistent fever, worsening pain, or no clinical improvement after the expected response window."
+    if threshold_type == "treatment_response_plus_age":
+        return "It fits better in a younger patient, for example under 35, after only 1-2 failed stimulated IUI cycles, when the time cost and lower per-cycle success of one more IUI are still acceptable."
     if threshold_type in {"gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
         return "It fits better when maternal or fetal status worsens, for example infection, severe tracing deterioration, or another delivery trigger."
     if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
@@ -2827,6 +2833,8 @@ def _rule_trigger_text(item):
 
     if threshold_type == "lab_trend_threshold":
         return "Severe preeclampsia with platelets falling into the high-60s during labor"
+    if threshold_type == "treatment_response_plus_age":
+        return "Unexplained infertility at age 35+ after several failed stimulated IUI cycles"
     return _first_nonempty_text(
         item.get("threshold_variable"),
         item.get("exam_clue"),
@@ -2840,6 +2848,8 @@ def _rule_action_text(item):
 
     if threshold_type == "lab_trend_threshold":
         return "Avoid routine neuraxial placement, use alternative analgesia, and keep the obstetric plan moving."
+    if threshold_type == "treatment_response_plus_age":
+        return "Escalate to IVF rather than repeating more low-yield IUI, because the clinically useful goal is faster conception with a meaningfully higher success rate per cycle."
     return _first_nonempty_text(
         item.get("board_rule"),
         item.get("board_takeaway"),
@@ -2862,6 +2872,8 @@ def _rule_exception_text(item):
         return "This changes if the patient does not have a recent VTE history that still makes estrogen unsafe."
     if threshold_type == "response_to_treatment":
         return "If the patient is worsening or has clearly failed treatment, the right move becomes escalation rather than continuing the same plan."
+    if threshold_type == "treatment_response_plus_age":
+        return "A patient under 35 with fewer than 3 failed stimulated IUI cycles may still reasonably try another IUI before moving to IVF."
     if threshold_type in {"gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
         return "This rule stops applying once maternal or fetal stability is lost and delivery or escalation is required."
     if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
@@ -2891,6 +2903,8 @@ def _mcq_why_correct_here_text(item):
 
     if threshold_type == "lab_trend_threshold" and action and tempting_wrong_text:
         return "The real decision driver is neuraxial bleeding risk: a rapid fall to 68,000 outweighs normal coagulation tests and patient comfort, so avoiding neuraxial placement is safer than proceeding with epidural now."
+    if threshold_type == "treatment_response_plus_age":
+        return "The real tradeoff here is time-to-pregnancy versus diminishing IUI yield: at age 36 after 3 failed stimulated IUI cycles, another IUI adds delay with a lower expected success rate, whereas IVF offers a meaningfully higher chance of conception sooner."
     if key_clue and action and tempting_wrong_text:
         if tension:
             return f"Even though {tension.lower()}, {key_clue.lower()} is the deciding clue, so {action.lower()} takes priority over {tempting_wrong_text.lower()}."
