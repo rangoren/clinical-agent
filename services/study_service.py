@@ -2793,6 +2793,17 @@ def _mcq_reasoning_case_type(item):
     return "numeric_threshold"
 
 
+def _format_trigger_action_exception(trigger, action, exception):
+    parts = []
+    if trigger:
+        parts.append(f"Trigger: {trigger}")
+    if action:
+        parts.append(f"Action: {action}")
+    if exception:
+        parts.append(f"Exception: {exception}")
+    return " ".join(parts)
+
+
 def _mcq_threshold_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
     action = _option_text_by_key(item, item.get("correct_answer_key"))
@@ -2840,11 +2851,10 @@ def _mcq_practical_rule_text(item):
         return "Trigger: the case still fits the standard management pathway. Action: apply the bundle rather than reacting to a single noisy variable. Exception: leave the bundle only when a true red flag changes management."
     if case_type == "contraindication_risk":
         return "Trigger: the patient meets a contraindication or high-risk eligibility rule. Action: avoid the unsafe option and choose the safer alternative. Exception: if the risk feature is absent, standard options can be reconsidered."
-    return _first_nonempty_text(
-        item.get("board_takeaway"),
-        item.get("board_rule"),
-        item.get("key_takeaway"),
-        item.get("explanation"),
+    return _format_trigger_action_exception(
+        _rule_trigger_text(item),
+        _rule_action_text(item),
+        _rule_exception_text(item),
     )
 
 
@@ -2859,6 +2869,7 @@ def _mcq_wrong_answer_context_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
     topic = (item.get("topic") or "").strip().lower()
     case_type = _mcq_reasoning_case_type(item)
+    key_clue = _mcq_key_clue_text(item)
 
     if threshold_type == "lab_trend_threshold":
         return "It fits better if platelets are stably higher without a downward trend, for example around the low-90s and unchanged, with anesthesia comfortable that neuraxial risk remains acceptable."
@@ -2869,7 +2880,7 @@ def _mcq_wrong_answer_context_text(item):
     if threshold_type == "response_to_treatment" and topic == "pid":
         return "It fits better in the opposite scenario: after 24-48 hours of antibiotics the patient is afebrile, pain is clearly improving, and exam findings are trending better, so continued antibiotics without drainage is reasonable."
     if threshold_type == "response_to_treatment":
-        return "It fits better after clear treatment failure, such as persistent fever, worsening pain, or no clinical improvement after the expected response window."
+        return "It fits better in the opposite scenario: the patient is improving within the expected response window, with symptoms and exam findings trending in the right direction, so continuing the current treatment remains appropriate."
     if threshold_type == "treatment_response_plus_age":
         return "It fits better in a younger patient, for example under 35, after only 1-2 failed stimulated IUI cycles, when the time cost and lower per-cycle success of one more IUI are still acceptable."
     if case_type == "pattern_classification":
@@ -2882,7 +2893,11 @@ def _mcq_wrong_answer_context_text(item):
         return "It fits better when maternal or fetal status worsens, for example infection, severe tracing deterioration, or another delivery trigger."
     if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
         return "It fits better when the reassuring imaging threshold is absent, such as a thicker stripe or a clearly suspicious adnexal pattern."
-    return "That option becomes reasonable only in a different clinical scenario where the stem does not meet the threshold that drives this answer."
+    if case_type == "numeric_threshold" and key_clue:
+        return f"It fits better when the opposite threshold scenario is present rather than {key_clue.lower()}."
+    if case_type == "time_response":
+        return "It fits better when the patient is improving within the expected response window, so continued medical management remains appropriate."
+    return "It fits better in the opposite clinical scenario, where the trigger for this answer is absent and the alternative option becomes the safer next step."
 
 
 def _rule_trigger_text(item):
@@ -2911,6 +2926,7 @@ def _rule_action_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
     topic = (item.get("topic") or "").strip().lower()
     case_type = _mcq_reasoning_case_type(item)
+    action = _option_text_by_key(item, item.get("correct_answer_key"))
 
     if threshold_type == "lab_trend_threshold":
         return "Avoid routine neuraxial placement, use alternative analgesia, and keep the obstetric plan moving."
@@ -2924,11 +2940,16 @@ def _rule_action_text(item):
         return "Stay with the established management bundle until a real trigger forces you out of it."
     if case_type == "contraindication_risk":
         return "Apply the risk rule and avoid the contraindicated option even if a more convenient choice looks tempting."
+    if case_type == "numeric_threshold" and action:
+        return f"Once the threshold is met, {action.lower()}."
+    if case_type == "time_response" and action:
+        return f"Use the response window to decide next steps; if the patient has not improved as expected, {action.lower()}."
     return _first_nonempty_text(
         item.get("board_rule"),
         item.get("board_takeaway"),
         item.get("board_focus"),
         item.get("clinical_consequence"),
+        action,
         item.get("key_fact"),
     )
 
@@ -2998,10 +3019,14 @@ def _mcq_why_correct_here_text(item):
         return "The key principle is bundle logic: when the case still fits the standard pathway, you should complete the evidence-based bundle instead of overreacting to one distracting variable."
     if case_type == "contraindication_risk":
         return "The principle here is eligibility and risk, not convenience: once the contraindication is present, the safer option is correct even if the alternative would otherwise be reasonable."
-    if key_clue and action and tempting_wrong_text:
+    if case_type == "numeric_threshold" and action:
+        return f"The clinical principle is threshold-based action: once the relevant cutoff is crossed, reassuring side details do not undo the need to {action.lower()}."
+    if case_type == "time_response" and action:
+        return f"The clinical principle is trajectory over time: management should follow whether the patient is responding within the expected window, which is why the right move is to {action.lower()}."
+    if key_clue and action:
         if tension:
-            return f"Even though {tension.lower()}, {key_clue.lower()} is the deciding clue, so {action.lower()} takes priority over {tempting_wrong_text.lower()}."
-        return f"Even though {tempting_wrong_text.lower()} is tempting, {key_clue.lower()} is the deciding clue, so {action.lower()} is the right next step."
+            return f"The deciding principle is that {key_clue.lower()} outweighs {tension.lower()}, so the next step is to {action.lower()}."
+        return f"The deciding principle is that {key_clue.lower()} changes management now, so the next step is to {action.lower()}."
     if key_clue and action:
         return f"{key_clue} is the deciding clue here, so {action.lower()} is the right next step."
     return explanation
