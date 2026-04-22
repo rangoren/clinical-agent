@@ -40,7 +40,12 @@ from services.google_calendar_service import (
     sync_google_update_event,
 )
 from services.logging_service import log_event
-from services.scheduling_service import touch_scheduling_context_for_duty_review
+from services.scheduling_service import (
+    _build_calendar_selector_payload,
+    _resolve_reply_calendar_name,
+    _save_preferred_google_calendar,
+    touch_scheduling_context_for_duty_review,
+)
 from settings import APP_ENV
 
 
@@ -182,7 +187,7 @@ def _mark_managed_event_deleted(session_id, duty_key):
     )
 
 
-def _sync_added_duty(session_id, duty):
+def _sync_added_duty(session_id, duty, selected_calendar_id=None):
     managed_doc = _managed_event_doc(session_id, duty.get("duty_key"))
     event_payload = _build_managed_event_payload(session_id, duty)
     if managed_doc and managed_doc.get("status") == "active" and managed_doc.get("provider_event_id"):
@@ -190,10 +195,10 @@ def _sync_added_duty(session_id, duty):
             session_id,
             managed_doc.get("provider_event_id"),
             event_payload,
-            preferred_calendar_id=managed_doc.get("provider_calendar_id"),
+            preferred_calendar_id=managed_doc.get("provider_calendar_id") or selected_calendar_id,
         )
     else:
-        sync_result = sync_google_create_event(session_id, event_payload)
+        sync_result = sync_google_create_event(session_id, event_payload, preferred_calendar_id=selected_calendar_id)
     if sync_result.get("status") != "synced":
         return sync_result
     _touch_managed_event_record(session_id, duty, sync_result, existing_doc=managed_doc, status="active")
@@ -220,7 +225,7 @@ def _sync_removed_duty(session_id, duty):
     return sync_result
 
 
-def _sync_changed_duty(session_id, old_duty, new_duty):
+def _sync_changed_duty(session_id, old_duty, new_duty, selected_calendar_id=None):
     old_key = (old_duty or {}).get("duty_key")
     managed_doc = _managed_event_doc(session_id, old_key)
     event_payload = _build_managed_event_payload(session_id, new_duty)
@@ -229,7 +234,7 @@ def _sync_changed_duty(session_id, old_duty, new_duty):
             session_id,
             managed_doc.get("provider_event_id"),
             event_payload,
-            preferred_calendar_id=managed_doc.get("provider_calendar_id"),
+            preferred_calendar_id=managed_doc.get("provider_calendar_id") or selected_calendar_id,
         )
         if sync_result.get("status") != "synced":
             return sync_result
@@ -258,10 +263,10 @@ def _sync_changed_duty(session_id, old_duty, new_duty):
             },
         )
         return sync_result
-    return _sync_added_duty(session_id, new_duty)
+    return _sync_added_duty(session_id, new_duty, selected_calendar_id=selected_calendar_id)
 
 
-def _apply_review_to_calendar(session_id, review_doc):
+def _apply_review_to_calendar(session_id, review_doc, selected_calendar_id=None):
     if not google_calendar_write_enabled():
         log_event(
             "duty_sync_calendar_write_blocked",
@@ -282,11 +287,11 @@ def _apply_review_to_calendar(session_id, review_doc):
         old_duty = change.get("old_duty") or {}
         new_duty = change.get("new_duty") or {}
         if change_type == "added":
-            sync_result = _sync_added_duty(session_id, new_duty)
+            sync_result = _sync_added_duty(session_id, new_duty, selected_calendar_id=selected_calendar_id)
         elif change_type == "removed":
             sync_result = _sync_removed_duty(session_id, old_duty)
         elif change_type == "changed":
-            sync_result = _sync_changed_duty(session_id, old_duty, new_duty)
+            sync_result = _sync_changed_duty(session_id, old_duty, new_duty, selected_calendar_id=selected_calendar_id)
         else:
             continue
         if sync_result.get("status") != "synced":
@@ -462,6 +467,11 @@ def _serialize_review_doc(review_doc):
         return None
     changes = review_doc.get("detected_changes_json") or []
     included_count = sum(1 for item in changes if item.get("included", True))
+    session_id = review_doc.get("session_id")
+    calendar_selector = _build_calendar_selector_payload(session_id, DUTY_SYNC_CALENDAR_TYPE) if session_id else {
+        "available_calendars": [],
+        "selected_calendar": None,
+    }
     return {
         "review_id": review_doc.get("review_id"),
         "review_type": review_doc.get("review_type") or "incremental",
@@ -475,6 +485,8 @@ def _serialize_review_doc(review_doc):
         "approval_change_keys": [item.get("change_key") for item in changes if item.get("change_key")],
         "approval_changes": changes,
         "changes": changes,
+        "available_calendars": calendar_selector.get("available_calendars") or [],
+        "selected_calendar": calendar_selector.get("selected_calendar"),
     }
 
 
@@ -1104,28 +1116,40 @@ def disconnect_duty_sheet(session_id):
     return {"status": "disconnected", "reply": "Duty Sync disconnected."}
 
 
-def approve_pending_duty_review(session_id, review_id):
+def approve_pending_duty_review(session_id, review_id, selected_calendar_id=None):
     review_doc = duty_sync_pending_reviews_collection.find_one(
         {"session_id": session_id, "review_id": review_id, "status": "pending"}
     )
     if not review_doc:
         return {"status": "not_found", "reply": "No pending duty review was found."}
     pending_payload = _serialize_review_doc(review_doc)
-    calendar_sync_result = _apply_review_to_calendar(session_id, review_doc)
+    calendar_sync_result = _apply_review_to_calendar(session_id, review_doc, selected_calendar_id=selected_calendar_id)
     if calendar_sync_result.get("status") != "synced":
         return calendar_sync_result
+    if selected_calendar_id:
+        _save_preferred_google_calendar(session_id, DUTY_SYNC_CALENDAR_TYPE, selected_calendar_id)
     duties_json = _apply_review_to_snapshot(session_id, review_doc)
     applied = calendar_sync_result.get("applied") or {}
+    reply = _build_calendar_apply_reply(applied, review_doc.get("detected_changes_json") or [])
+    if selected_calendar_id and applied.get("added") and not applied.get("changed") and not applied.get("removed"):
+        calendar_name = _resolve_reply_calendar_name(
+            session_id,
+            selected_calendar_id=selected_calendar_id,
+            fallback_calendar_type=DUTY_SYNC_CALENDAR_TYPE,
+        )
+        if reply.endswith("."):
+            reply = reply[:-1]
+        reply = f'{reply} in your "{calendar_name}" calendar.'
     return _attach_render_debug({
         "status": "approved",
-        "reply": _build_calendar_apply_reply(applied, review_doc.get("detected_changes_json") or []),
+        "reply": reply,
         "approved_duty_count": len(duties_json),
     }, [
         _render_debug_entry("approval executing", pending_payload),
     ])
 
 
-def approve_pending_duty_review_scope(session_id, review_id, change_keys):
+def approve_pending_duty_review_scope(session_id, review_id, change_keys, selected_calendar_id=None):
     review_doc = duty_sync_pending_reviews_collection.find_one(
         {"session_id": session_id, "review_id": review_id, "status": "pending"}
     )
@@ -1136,9 +1160,15 @@ def approve_pending_duty_review_scope(session_id, review_id, change_keys):
     if not selected_changes:
         return {"status": "not_found", "reply": "No matching duty review items were found."}
     scoped_payload = _serialize_review_doc({**review_doc, "detected_changes_json": selected_changes})
-    calendar_sync_result = _apply_review_to_calendar(session_id, {**review_doc, "detected_changes_json": selected_changes})
+    calendar_sync_result = _apply_review_to_calendar(
+        session_id,
+        {**review_doc, "detected_changes_json": selected_changes},
+        selected_calendar_id=selected_calendar_id,
+    )
     if calendar_sync_result.get("status") != "synced":
         return calendar_sync_result
+    if selected_calendar_id:
+        _save_preferred_google_calendar(session_id, DUTY_SYNC_CALENDAR_TYPE, selected_calendar_id)
     duties_json = _apply_review_changes_to_snapshot(
         session_id=session_id,
         source_tab_name=review_doc.get("source_tab_name"),
@@ -1165,9 +1195,20 @@ def approve_pending_duty_review_scope(session_id, review_id, change_keys):
             {"session_id": session_id},
             {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None, "last_push_open_context": None}},
         )
+    reply = _build_calendar_apply_reply(calendar_sync_result.get("applied") or {}, selected_changes)
+    applied = calendar_sync_result.get("applied") or {}
+    if selected_calendar_id and applied.get("added") and not applied.get("changed") and not applied.get("removed"):
+        calendar_name = _resolve_reply_calendar_name(
+            session_id,
+            selected_calendar_id=selected_calendar_id,
+            fallback_calendar_type=DUTY_SYNC_CALENDAR_TYPE,
+        )
+        if reply.endswith("."):
+            reply = reply[:-1]
+        reply = f'{reply} in your "{calendar_name}" calendar.'
     return _attach_render_debug({
         "status": "approved",
-        "reply": _build_calendar_apply_reply(calendar_sync_result.get("applied") or {}, selected_changes),
+        "reply": reply,
         "approved_duty_count": len(duties_json),
         "pending_review": _serialize_review_doc(duty_sync_pending_reviews_collection.find_one({"_id": review_doc["_id"]})) if remaining_changes else None,
     }, [

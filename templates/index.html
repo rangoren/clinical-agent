@@ -5087,6 +5087,10 @@
         function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown") {
             if (!review || !review.review_id) return;
             const renderReview = normalizeDutyReviewForRender(review);
+            let selectedCalendarId = renderReview.selected_calendar ? renderReview.selected_calendar.provider_calendar_id : null;
+            let selectedCalendarName = renderReview.selected_calendar
+                ? (renderReview.selected_calendar.is_primary ? "Primary" : (renderReview.selected_calendar.name || "Primary"))
+                : "Primary";
             const renderSnapshot = buildDutySyncRenderSnapshot(review, renderSource, renderCaller);
             if (renderSnapshot) {
                 persistDutySyncRenderDebugEntries([renderSnapshot]);
@@ -5191,7 +5195,7 @@
                     const approveItemButton = document.createElement("button");
                     approveItemButton.className = "secondary-button";
                     approveItemButton.textContent = getSingleDutyReviewApproveLabel(change);
-                    approveItemButton.addEventListener("click", () => approveDutyReview(scopedReview, card));
+                    approveItemButton.addEventListener("click", () => approveDutyReview(scopedReview, card, selectedCalendarId));
                     actions.appendChild(approveItemButton);
 
                     const ignoreItemButton = document.createElement("button");
@@ -5209,13 +5213,99 @@
             });
             card.appendChild(list);
 
+            if (renderReview.available_calendars && renderReview.available_calendars.length) {
+                const calendarRow = document.createElement("div");
+                calendarRow.className = "draft-inline-row";
+
+                const calendarCopy = document.createElement("div");
+                calendarCopy.className = "draft-inline-copy";
+
+                const calendarLabel = document.createElement("div");
+                calendarLabel.className = "draft-inline-label";
+                calendarLabel.textContent = "Save to";
+
+                const calendarValue = document.createElement("div");
+                calendarValue.className = "draft-inline-value";
+                calendarValue.textContent = selectedCalendarName || "Primary";
+
+                calendarCopy.appendChild(calendarLabel);
+                calendarCopy.appendChild(calendarValue);
+                calendarRow.appendChild(calendarCopy);
+
+                if (renderReview.available_calendars.length > 1) {
+                    const changeButton = document.createElement("button");
+                    changeButton.type = "button";
+                    changeButton.className = "draft-change-button";
+                    changeButton.textContent = "Change";
+                    calendarRow.appendChild(changeButton);
+
+                    const picker = document.createElement("div");
+                    picker.className = "draft-calendar-picker";
+
+                    renderReview.available_calendars.forEach((calendar, index) => {
+                        const option = document.createElement("label");
+                        option.className = "draft-calendar-option";
+
+                        const radio = document.createElement("input");
+                        radio.type = "radio";
+                        radio.name = `duty-review-calendar-${renderReview.review_id}`;
+                        radio.value = calendar.provider_calendar_id || "";
+                        radio.checked = radio.value === selectedCalendarId;
+                        radio.addEventListener("change", () => {
+                            selectedCalendarId = calendar.provider_calendar_id || null;
+                            selectedCalendarName = calendar.is_primary ? "Primary" : (calendar.name || "Calendar");
+                            calendarValue.textContent = selectedCalendarName;
+                            renderReview.selected_calendar = {
+                                provider_calendar_id: selectedCalendarId,
+                                name: calendar.name || "Calendar",
+                                is_primary: !!calendar.is_primary,
+                            };
+                        });
+
+                        const textWrap = document.createElement("div");
+                        const mainText = document.createElement("div");
+                        mainText.textContent = calendar.is_primary ? "Primary" : (calendar.name || "Calendar");
+                        const noteText = document.createElement("div");
+                        noteText.className = "draft-calendar-note";
+                        noteText.textContent = calendar.is_primary ? "Main calendar" : "Secondary calendar";
+
+                        textWrap.appendChild(mainText);
+                        textWrap.appendChild(noteText);
+
+                        option.appendChild(radio);
+                        option.appendChild(textWrap);
+                        picker.appendChild(option);
+
+                        if (!selectedCalendarId && index === 0) {
+                            selectedCalendarId = calendar.provider_calendar_id || null;
+                            selectedCalendarName = calendar.is_primary ? "Primary" : (calendar.name || "Calendar");
+                            calendarValue.textContent = selectedCalendarName;
+                            renderReview.selected_calendar = {
+                                provider_calendar_id: selectedCalendarId,
+                                name: calendar.name || "Calendar",
+                                is_primary: !!calendar.is_primary,
+                            };
+                        }
+                    });
+
+                    changeButton.addEventListener("click", () => {
+                        picker.classList.toggle("visible");
+                    });
+
+                    card.appendChild(calendarRow);
+                    card.appendChild(picker);
+                } else {
+                    card.appendChild(calendarRow);
+                }
+            }
+
             const footerActions = document.createElement("div");
             footerActions.className = "draft-actions";
 
             const approveButton = document.createElement("button");
             approveButton.className = "secondary-button";
             approveButton.textContent = isSingleEventReview ? getSingleDutyReviewApproveLabel(singleChange) : getDutyReviewGroupApproveLabel(renderReview);
-            approveButton.addEventListener("click", () => approveDutyReview(renderReview, card));
+            approveButton.addEventListener("click", () => approveDutyReview(renderReview, card, selectedCalendarId));
 
             const ignoreButton = document.createElement("button");
             ignoreButton.className = "ghost-button";
@@ -5294,7 +5384,7 @@
             }
         }
 
-        async function approveDutyReview(review, card) {
+        async function approveDutyReview(review, card, selectedCalendarId = null) {
             try {
                 const scoped = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
                 const singleScoped = scoped && review.scope_change_keys.length === 1;
@@ -5305,7 +5395,8 @@
                     body: JSON.stringify({
                         session_id: sessionId,
                         review_id: review.review_id,
-                        change_keys: review.scope_change_keys || []
+                        change_keys: review.scope_change_keys || [],
+                        selected_calendar_id: selectedCalendarId
                     })
                 });
                 const data = await response.json();

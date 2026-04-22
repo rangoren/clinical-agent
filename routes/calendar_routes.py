@@ -157,6 +157,7 @@ async def handle_duty_sync_review_approve(request: Request):
             approve_pending_duty_review(
                 session_id=data.get("session_id"),
                 review_id=data.get("review_id"),
+                selected_calendar_id=data.get("selected_calendar_id"),
             )
         )
     except Exception as exc:
@@ -173,6 +174,7 @@ async def handle_duty_sync_review_approve_scope(request: Request):
                 session_id=data.get("session_id"),
                 review_id=data.get("review_id"),
                 change_keys=data.get("change_keys") or [],
+                selected_calendar_id=data.get("selected_calendar_id"),
             )
         )
     except Exception as exc:
