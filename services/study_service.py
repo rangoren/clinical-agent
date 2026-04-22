@@ -3091,8 +3091,11 @@ def _build_rule_reply(item):
 
 def _build_mcq_feedback_reply(item, correct, selected_option=None):
     status = "Correct." if correct else "Incorrect."
+    correct_key = item.get("correct_answer_key")
+    correct_text = _option_text_by_key(item, correct_key)
     lines = [status]
-    lines.extend(_build_mcq_structured_lines(item, include_wrong_answer_context=False))
+    if correct_key and correct_text:
+        lines.append(f"Best answer: {correct_key}: {correct_text}")
     return "\n".join(lines)
 
 
@@ -3115,7 +3118,10 @@ def _build_mcq_explain_reply(item, state):
     elif answered_correctly is False:
         opening = "Why your answer was off:"
     lines.append(opening)
-    lines.extend(_build_mcq_structured_lines(item, include_wrong_answer_context=True))
+    structured_lines = _build_mcq_structured_lines(item, include_wrong_answer_context=True)
+    if structured_lines and structured_lines[0].startswith("Best answer:"):
+        structured_lines = structured_lines[1:]
+    lines.extend(structured_lines)
     return "\n".join(lines)
 
 
@@ -3716,10 +3722,9 @@ def answer_mcq(session_id, content_item_id, selected_option):
         "session_meta": _session_meta_payload(updated_state, policy),
     }
     response["study_followups"] = [
-        {"action": "another_question", "label": "Another question"},
         {"action": "explain_why", "label": "Explain why"},
-        {"action": "show_source", "label": "Show source"},
         {"action": "quick_recap", "label": "Give me the rule"},
+        {"action": "show_source", "label": "Show source"},
     ]
     return response
 
