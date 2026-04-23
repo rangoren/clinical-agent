@@ -2766,12 +2766,63 @@ def _mcq_key_clue_text(item):
     )
 
 
+def _mcq_reasoning_case_type(item):
+    threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
+    template_family = (item.get("template_family") or "").strip().lower()
+
+    if threshold_type in {
+        "lab_trend_threshold",
+        "age_threshold_rule_application",
+        "age_plus_risk_factor_threshold",
+        "ultrasound_threshold",
+    }:
+        return "numeric_threshold"
+    if threshold_type in {"response_to_treatment", "gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
+        return "time_response"
+    if threshold_type == "treatment_response_plus_age":
+        return "escalation_efficiency"
+    if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"}:
+        return "contraindication_risk"
+    if threshold_type == "tracing_pattern_plus_reserve" or topic == "ctg":
+        return "pattern_classification"
+    if template_family in {"conflicting_risk_axes", "timing_threshold"} and any(
+        marker in topic for marker in ("pprom", "pph", "postpartum", "obstetrics")
+    ):
+        return "protocol_bundle"
+    return "numeric_threshold"
+
+
+def _format_trigger_action_exception(trigger, action, exception):
+    parts = []
+    if trigger:
+        parts.append(f"Trigger: {trigger}")
+    if action:
+        parts.append(f"Action: {action}")
+    if exception:
+        parts.append(f"Exception: {exception}")
+    return " ".join(parts)
+
+
 def _mcq_threshold_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
     action = _option_text_by_key(item, item.get("correct_answer_key"))
+    case_type = _mcq_reasoning_case_type(item)
 
     if threshold_type == "lab_trend_threshold" and action:
         return f"Platelets <70,000 and falling -> {action.lower()}."
+    if threshold_type == "treatment_response_plus_age":
+        return "When age is already time-sensitive and 3 stimulated IUI cycles have failed, the decision should escalate toward IVF because another IUI offers diminishing returns relative to IVF."
+    if case_type == "pattern_classification":
+        return "When late decelerations are recurrent but variability remains moderate, treat this as a concerning but not yet terminal pattern: resuscitate and reassess before moving straight to delivery."
+    if case_type == "contraindication_risk":
+        threshold = _first_nonempty_text(item.get("threshold_variable"), item.get("exam_clue"))
+        if threshold and action:
+            return f"If {threshold.lower()}, apply the contraindication rule and {action.lower()}."
+    if case_type == "protocol_bundle":
+        threshold = _first_nonempty_text(item.get("threshold_variable"), item.get("exam_clue"))
+        if threshold and action:
+            return f"If {threshold.lower()}, stay in the standard management bundle and {action.lower()}."
 
     threshold = _first_nonempty_text(
         item.get("threshold_variable"),
@@ -2785,14 +2836,25 @@ def _mcq_threshold_text(item):
 
 def _mcq_practical_rule_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
+    case_type = _mcq_reasoning_case_type(item)
 
     if threshold_type == "lab_trend_threshold":
         return "If platelets are <70,000 and falling, avoid routine neuraxial placement; if they are stably >=80,000-100,000 without a downward trend, discuss neuraxial options with anesthesia."
-    return _first_nonempty_text(
-        item.get("board_takeaway"),
-        item.get("board_rule"),
-        item.get("key_takeaway"),
-        item.get("explanation"),
+    if threshold_type == "response_to_treatment" and topic == "pid":
+        return "If there is no meaningful improvement after 48 hours of IV antibiotics, arrange drainage while continuing antibiotics. If the patient is clearly improving within 24-48 hours, continue antibiotics without drainage."
+    if threshold_type == "treatment_response_plus_age":
+        return "Trigger: age >=35 or time-sensitive infertility plus repeated failed stimulated IUI cycles. Action: move from more IUI to IVF when another IUI is unlikely to meaningfully improve time-to-pregnancy. Exception: in a younger patient with only 1-2 failed cycles, another IUI can still be reasonable."
+    if case_type == "pattern_classification":
+        return "Trigger: recurrent late decelerations with preserved moderate variability. Action: start intrauterine resuscitation and reassess promptly. Exception: if variability becomes absent or the tracing deteriorates to a terminal pattern, move to expedited delivery."
+    if case_type == "protocol_bundle":
+        return "Trigger: the case still fits the standard management pathway. Action: apply the bundle rather than reacting to a single noisy variable. Exception: leave the bundle only when a true red flag changes management."
+    if case_type == "contraindication_risk":
+        return "Trigger: the patient meets a contraindication or high-risk eligibility rule. Action: avoid the unsafe option and choose the safer alternative. Exception: if the risk feature is absent, standard options can be reconsidered."
+    return _format_trigger_action_exception(
+        _rule_trigger_text(item),
+        _rule_action_text(item),
+        _rule_exception_text(item),
     )
 
 
@@ -2806,6 +2868,8 @@ def _mcq_clinical_detail_text(item):
 def _mcq_wrong_answer_context_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
     topic = (item.get("topic") or "").strip().lower()
+    case_type = _mcq_reasoning_case_type(item)
+    key_clue = _mcq_key_clue_text(item)
 
     if threshold_type == "lab_trend_threshold":
         return "It fits better if platelets are stably higher without a downward trend, for example around the low-90s and unchanged, with anesthesia comfortable that neuraxial risk remains acceptable."
@@ -2813,20 +2877,43 @@ def _mcq_wrong_answer_context_text(item):
         return "It fits better in a 32-year-old with heavy bleeding from a known fibroid and no endometrial cancer risk factors, where initial medical treatment can come before biopsy."
     if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
         return "It fits better in a patient without a recent pregnancy-associated DVT, where estrogen is not contraindicated after thrombosis-risk review."
+    if threshold_type == "response_to_treatment" and topic == "pid":
+        return "It fits better in the opposite scenario: after 24-48 hours of antibiotics the patient is afebrile, pain is clearly improving, and exam findings are trending better, so continued antibiotics without drainage is reasonable."
     if threshold_type == "response_to_treatment":
-        return "It fits better after clear treatment failure, such as persistent fever, worsening pain, or no clinical improvement after the expected response window."
+        return "It fits better in the opposite scenario: the patient is improving within the expected response window, with symptoms and exam findings trending in the right direction, so continuing the current treatment remains appropriate."
+    if threshold_type == "treatment_response_plus_age":
+        return "It fits better in a younger patient, for example under 35, after only 1-2 failed stimulated IUI cycles, when the time cost and lower per-cycle success of one more IUI are still acceptable."
+    if case_type == "pattern_classification":
+        return "It fits better in the opposite tracing scenario, such as recurrent variable decelerations or a terminal pattern with absent variability, where the action would shift toward amnioinfusion or expedited delivery instead of simple resuscitation first."
+    if case_type == "protocol_bundle":
+        return "It fits better when the case has left the standard bundle, for example when infection, fetal compromise, or another true escalation trigger is now present."
+    if case_type == "contraindication_risk":
+        return "It fits better when the contraindication is absent, so the previously unsafe option becomes eligible again after risk review."
     if threshold_type in {"gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
         return "It fits better when maternal or fetal status worsens, for example infection, severe tracing deterioration, or another delivery trigger."
     if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
         return "It fits better when the reassuring imaging threshold is absent, such as a thicker stripe or a clearly suspicious adnexal pattern."
-    return "That option becomes reasonable only in a different clinical scenario where the stem does not meet the threshold that drives this answer."
+    if case_type == "numeric_threshold" and key_clue:
+        return f"It fits better when the opposite threshold scenario is present rather than {key_clue.lower()}."
+    if case_type == "time_response":
+        return "It fits better when the patient is improving within the expected response window, so continued medical management remains appropriate."
+    return "It fits better in the opposite clinical scenario, where the trigger for this answer is absent and the alternative option becomes the safer next step."
 
 
 def _rule_trigger_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
+    case_type = _mcq_reasoning_case_type(item)
 
     if threshold_type == "lab_trend_threshold":
         return "Severe preeclampsia with platelets falling into the high-60s during labor"
+    if threshold_type == "treatment_response_plus_age":
+        return "Unexplained infertility at age 35+ after several failed stimulated IUI cycles"
+    if case_type == "pattern_classification":
+        return "A concerning tracing pattern with preserved reserve, such as recurrent late decelerations but still-moderate variability"
+    if case_type == "protocol_bundle":
+        return "A case that still fits the standard treatment pathway despite distracting noise"
+    if case_type == "contraindication_risk":
+        return "A patient who meets a contraindication or high-risk eligibility rule"
     return _first_nonempty_text(
         item.get("threshold_variable"),
         item.get("exam_clue"),
@@ -2837,14 +2924,32 @@ def _rule_trigger_text(item):
 
 def _rule_action_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
+    case_type = _mcq_reasoning_case_type(item)
+    action = _option_text_by_key(item, item.get("correct_answer_key"))
 
     if threshold_type == "lab_trend_threshold":
         return "Avoid routine neuraxial placement, use alternative analgesia, and keep the obstetric plan moving."
+    if threshold_type == "response_to_treatment" and topic == "pid":
+        return "If there is no meaningful improvement after 48 hours, move to image-guided drainage while continuing antibiotics rather than just extending the same medical therapy."
+    if threshold_type == "treatment_response_plus_age":
+        return "Escalate to IVF rather than repeating more low-yield IUI, because the clinically useful goal is faster conception with a meaningfully higher success rate per cycle."
+    if case_type == "pattern_classification":
+        return "Classify the pattern first, then act on the classification: resuscitate and reassess a concerning-but-not-terminal tracing, but expedite delivery once the tracing becomes truly terminal."
+    if case_type == "protocol_bundle":
+        return "Stay with the established management bundle until a real trigger forces you out of it."
+    if case_type == "contraindication_risk":
+        return "Apply the risk rule and avoid the contraindicated option even if a more convenient choice looks tempting."
+    if case_type == "numeric_threshold" and action:
+        return f"Once the threshold is met, {action.lower()}."
+    if case_type == "time_response" and action:
+        return f"Use the response window to decide next steps; if the patient has not improved as expected, {action.lower()}."
     return _first_nonempty_text(
         item.get("board_rule"),
         item.get("board_takeaway"),
         item.get("board_focus"),
         item.get("clinical_consequence"),
+        action,
         item.get("key_fact"),
     )
 
@@ -2853,6 +2958,7 @@ def _rule_exception_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
     topic = (item.get("topic") or "").strip().lower()
     subtopic = (item.get("subtopic") or "").strip().lower()
+    case_type = _mcq_reasoning_case_type(item)
 
     if threshold_type == "lab_trend_threshold":
         return "Stable platelets >=80,000-100,000 without a downward trend or other bleeding concern may justify re-evaluating neuraxial options with anesthesia."
@@ -2860,8 +2966,18 @@ def _rule_exception_text(item):
         return "A younger low-risk patient with bleeding can often start with targeted medical or structural workup instead of immediate biopsy."
     if threshold_type in {"timing_after_recent_vte", "recent_vte_vs_postpartum_context", "contraindication_vs_context"} or topic == "contraception":
         return "This changes if the patient does not have a recent VTE history that still makes estrogen unsafe."
+    if threshold_type == "response_to_treatment" and topic == "pid":
+        return "Continued antibiotics without drainage is appropriate when the patient is clinically improving within 24-48 hours, even if the abscess is still present on imaging or remains several centimeters in size."
     if threshold_type == "response_to_treatment":
         return "If the patient is worsening or has clearly failed treatment, the right move becomes escalation rather than continuing the same plan."
+    if threshold_type == "treatment_response_plus_age":
+        return "A patient under 35 with fewer than 3 failed stimulated IUI cycles may still reasonably try another IUI before moving to IVF."
+    if case_type == "pattern_classification":
+        return "Once variability is lost, decelerations become prolonged, or the tracing otherwise becomes Category III / terminal, resuscitation alone is no longer enough."
+    if case_type == "protocol_bundle":
+        return "Exit the bundle when a true red flag appears, not just because of one noisy finding."
+    if case_type == "contraindication_risk":
+        return "If the contraindicating risk factor is not actually present, the safer alternative rule may no longer apply."
     if threshold_type in {"gestational_age_plus_stability", "gestational_age_plus_clinical_trajectory"}:
         return "This rule stops applying once maternal or fetal stability is lost and delivery or escalation is required."
     if threshold_type in {"ultrasound_threshold", "imaging_risk_pattern"}:
@@ -2882,6 +2998,8 @@ def _rule_nuance_text(item):
 
 def _mcq_why_correct_here_text(item):
     threshold_type = (item.get("threshold_type") or "").strip().lower()
+    topic = (item.get("topic") or "").strip().lower()
+    case_type = _mcq_reasoning_case_type(item)
     key_clue = _mcq_key_clue_text(item)
     action = _option_text_by_key(item, item.get("correct_answer_key"))
     explanation = _first_nonempty_text(item.get("explanation"))
@@ -2891,10 +3009,24 @@ def _mcq_why_correct_here_text(item):
 
     if threshold_type == "lab_trend_threshold" and action and tempting_wrong_text:
         return "The real decision driver is neuraxial bleeding risk: a rapid fall to 68,000 outweighs normal coagulation tests and patient comfort, so avoiding neuraxial placement is safer than proceeding with epidural now."
-    if key_clue and action and tempting_wrong_text:
+    if threshold_type == "response_to_treatment" and topic == "pid":
+        return "The principle here is failure of medical therapy after the expected response window: after 48 hours, ongoing fever and pain mean antibiotics alone are not achieving adequate source control, so drainage becomes the better next step."
+    if threshold_type == "treatment_response_plus_age":
+        return "The real tradeoff here is time-to-pregnancy versus diminishing IUI yield: at age 36 after 3 failed stimulated IUI cycles, another IUI adds delay with a lower expected success rate, whereas IVF offers a meaningfully higher chance of conception sooner."
+    if case_type == "pattern_classification":
+        return "The reasoning here is classification before action: recurrent late decelerations indicate uteroplacental stress, but preserved moderate variability means reserve is still present, so the correct move is resuscitation and reassessment rather than immediate delivery."
+    if case_type == "protocol_bundle":
+        return "The key principle is bundle logic: when the case still fits the standard pathway, you should complete the evidence-based bundle instead of overreacting to one distracting variable."
+    if case_type == "contraindication_risk":
+        return "The principle here is eligibility and risk, not convenience: once the contraindication is present, the safer option is correct even if the alternative would otherwise be reasonable."
+    if case_type == "numeric_threshold" and action:
+        return f"The clinical principle is threshold-based action: once the relevant cutoff is crossed, reassuring side details do not undo the need to {action.lower()}."
+    if case_type == "time_response" and action:
+        return f"The clinical principle is trajectory over time: management should follow whether the patient is responding within the expected window, which is why the right move is to {action.lower()}."
+    if key_clue and action:
         if tension:
-            return f"Even though {tension.lower()}, {key_clue.lower()} is the deciding clue, so {action.lower()} takes priority over {tempting_wrong_text.lower()}."
-        return f"Even though {tempting_wrong_text.lower()} is tempting, {key_clue.lower()} is the deciding clue, so {action.lower()} is the right next step."
+            return f"The deciding principle is that {key_clue.lower()} outweighs {tension.lower()}, so the next step is to {action.lower()}."
+        return f"The deciding principle is that {key_clue.lower()} changes management now, so the next step is to {action.lower()}."
     if key_clue and action:
         return f"{key_clue} is the deciding clue here, so {action.lower()} is the right next step."
     return explanation
@@ -2959,8 +3091,11 @@ def _build_rule_reply(item):
 
 def _build_mcq_feedback_reply(item, correct, selected_option=None):
     status = "Correct." if correct else "Incorrect."
+    correct_key = item.get("correct_answer_key")
+    correct_text = _option_text_by_key(item, correct_key)
     lines = [status]
-    lines.extend(_build_mcq_structured_lines(item, include_wrong_answer_context=False))
+    if correct_key and correct_text:
+        lines.append(f"Best answer: {correct_key}: {correct_text}")
     return "\n".join(lines)
 
 
@@ -2983,7 +3118,10 @@ def _build_mcq_explain_reply(item, state):
     elif answered_correctly is False:
         opening = "Why your answer was off:"
     lines.append(opening)
-    lines.extend(_build_mcq_structured_lines(item, include_wrong_answer_context=True))
+    structured_lines = _build_mcq_structured_lines(item, include_wrong_answer_context=True)
+    if structured_lines and structured_lines[0].startswith("Best answer:"):
+        structured_lines = structured_lines[1:]
+    lines.extend(structured_lines)
     return "\n".join(lines)
 
 
@@ -3254,6 +3392,37 @@ def get_idle_study_cards(session_id):
             if len(cards) == 3:
                 break
 
+    if len(cards) < 3:
+        relaxed_fallback_pool = _get_items(exclude_ids=used_ids)
+        scored_relaxed_fallback = sorted(
+            relaxed_fallback_pool,
+            key=lambda item: _selection_score(
+                item,
+                state,
+                preferred_topic=preferred_topic,
+                preferred_template_family=preferred_template_family,
+                preferred_decision_pressure=preferred_decision_pressure,
+                preferred_difficulty_level=target_level,
+            ),
+            reverse=True,
+        )
+        for item in scored_relaxed_fallback:
+            if item["id"] in used_ids:
+                continue
+            used_ids.add(item["id"])
+            cards.append(
+                _build_card(
+                    f"relaxed_fallback_{item['id']}",
+                    "practice" if item["item_type"] == "mcq" else "pearl",
+                    item,
+                    "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
+                    "1-min practice" if item["item_type"] == "mcq" else "Quick takeaway",
+                    "Start" if item["item_type"] == "mcq" else "Open",
+                )
+            )
+            if len(cards) == 3:
+                break
+
     shown_history = _trim_history((state.get("cards_shown_history") or []) + [card["content_item_id"] for card in cards], 18)
     _save_state(
         session_id,
@@ -3302,6 +3471,12 @@ def _build_study_item_payload(item):
                 "question_quality_score_10": item.get("question_quality_score_10"),
                 "question_style": item.get("question_style"),
                 "decision_point": item.get("decision_point"),
+                "actions": [
+                    {"action": "another_question", "label": "Another question"},
+                    {"action": "explain_why", "label": "Explain why"},
+                    {"action": "show_source", "label": "Show source"},
+                    {"action": "quick_recap", "label": "Give me the rule"},
+                ],
             }
         )
     else:

@@ -1940,7 +1940,7 @@
         let dutySyncSwVersion = "unknown";
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
-        const studyCardsCacheKey = "entry_study_cards_v1";
+        const studyCardsCacheKey = "entry_study_cards_{{ app_version }}";
         const dutySyncPollingIntervalMs = "{{ app_env }}" === "production" ? 45 * 60 * 1000 : 5 * 60 * 1000;
         const dutySyncDevLogStorageKey = "duty-sync-dev-console";
         const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
@@ -2271,6 +2271,10 @@
             refreshEntryGuidanceVisibility();
         }
 
+        function clearStudyInteractionCards() {
+            document.querySelectorAll(".study-flow-card, .study-followup-card").forEach((node) => node.remove());
+        }
+
         function invalidateStudyCardsRequests() {
             studyCardsRequestToken += 1;
             studyCardsRequested = false;
@@ -2297,7 +2301,7 @@
             pendingStudyCardsTimer = setTimeout(() => {
                 pendingStudyCardsTimer = null;
                 maybeShowStudyCards(force);
-            }, 120);
+            }, 0);
         }
 
         function shouldShowStudyCards(manual = false) {
@@ -5087,6 +5091,10 @@
         function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown") {
             if (!review || !review.review_id) return;
             const renderReview = normalizeDutyReviewForRender(review);
+            let selectedCalendarId = renderReview.selected_calendar ? renderReview.selected_calendar.provider_calendar_id : null;
+            let selectedCalendarName = renderReview.selected_calendar
+                ? (renderReview.selected_calendar.is_primary ? "Primary" : (renderReview.selected_calendar.name || "Primary"))
+                : "Primary";
             const renderSnapshot = buildDutySyncRenderSnapshot(review, renderSource, renderCaller);
             if (renderSnapshot) {
                 persistDutySyncRenderDebugEntries([renderSnapshot]);
@@ -5191,7 +5199,7 @@
                     const approveItemButton = document.createElement("button");
                     approveItemButton.className = "secondary-button";
                     approveItemButton.textContent = getSingleDutyReviewApproveLabel(change);
-                    approveItemButton.addEventListener("click", () => approveDutyReview(scopedReview, card));
+                    approveItemButton.addEventListener("click", () => approveDutyReview(scopedReview, card, selectedCalendarId));
                     actions.appendChild(approveItemButton);
 
                     const ignoreItemButton = document.createElement("button");
@@ -5209,13 +5217,99 @@
             });
             card.appendChild(list);
 
+            if (renderReview.available_calendars && renderReview.available_calendars.length) {
+                const calendarRow = document.createElement("div");
+                calendarRow.className = "draft-inline-row";
+
+                const calendarCopy = document.createElement("div");
+                calendarCopy.className = "draft-inline-copy";
+
+                const calendarLabel = document.createElement("div");
+                calendarLabel.className = "draft-inline-label";
+                calendarLabel.textContent = "Save to";
+
+                const calendarValue = document.createElement("div");
+                calendarValue.className = "draft-inline-value";
+                calendarValue.textContent = selectedCalendarName || "Primary";
+
+                calendarCopy.appendChild(calendarLabel);
+                calendarCopy.appendChild(calendarValue);
+                calendarRow.appendChild(calendarCopy);
+
+                if (renderReview.available_calendars.length > 1) {
+                    const changeButton = document.createElement("button");
+                    changeButton.type = "button";
+                    changeButton.className = "draft-change-button";
+                    changeButton.textContent = "Change";
+                    calendarRow.appendChild(changeButton);
+
+                    const picker = document.createElement("div");
+                    picker.className = "draft-calendar-picker";
+
+                    renderReview.available_calendars.forEach((calendar, index) => {
+                        const option = document.createElement("label");
+                        option.className = "draft-calendar-option";
+
+                        const radio = document.createElement("input");
+                        radio.type = "radio";
+                        radio.name = `duty-review-calendar-${renderReview.review_id}`;
+                        radio.value = calendar.provider_calendar_id || "";
+                        radio.checked = radio.value === selectedCalendarId;
+                        radio.addEventListener("change", () => {
+                            selectedCalendarId = calendar.provider_calendar_id || null;
+                            selectedCalendarName = calendar.is_primary ? "Primary" : (calendar.name || "Calendar");
+                            calendarValue.textContent = selectedCalendarName;
+                            renderReview.selected_calendar = {
+                                provider_calendar_id: selectedCalendarId,
+                                name: calendar.name || "Calendar",
+                                is_primary: !!calendar.is_primary,
+                            };
+                        });
+
+                        const textWrap = document.createElement("div");
+                        const mainText = document.createElement("div");
+                        mainText.textContent = calendar.is_primary ? "Primary" : (calendar.name || "Calendar");
+                        const noteText = document.createElement("div");
+                        noteText.className = "draft-calendar-note";
+                        noteText.textContent = calendar.is_primary ? "Main calendar" : "Secondary calendar";
+
+                        textWrap.appendChild(mainText);
+                        textWrap.appendChild(noteText);
+
+                        option.appendChild(radio);
+                        option.appendChild(textWrap);
+                        picker.appendChild(option);
+
+                        if (!selectedCalendarId && index === 0) {
+                            selectedCalendarId = calendar.provider_calendar_id || null;
+                            selectedCalendarName = calendar.is_primary ? "Primary" : (calendar.name || "Calendar");
+                            calendarValue.textContent = selectedCalendarName;
+                            renderReview.selected_calendar = {
+                                provider_calendar_id: selectedCalendarId,
+                                name: calendar.name || "Calendar",
+                                is_primary: !!calendar.is_primary,
+                            };
+                        }
+                    });
+
+                    changeButton.addEventListener("click", () => {
+                        picker.classList.toggle("visible");
+                    });
+
+                    card.appendChild(calendarRow);
+                    card.appendChild(picker);
+                } else {
+                    card.appendChild(calendarRow);
+                }
+            }
+
             const footerActions = document.createElement("div");
             footerActions.className = "draft-actions";
 
             const approveButton = document.createElement("button");
             approveButton.className = "secondary-button";
             approveButton.textContent = isSingleEventReview ? getSingleDutyReviewApproveLabel(singleChange) : getDutyReviewGroupApproveLabel(renderReview);
-            approveButton.addEventListener("click", () => approveDutyReview(renderReview, card));
+            approveButton.addEventListener("click", () => approveDutyReview(renderReview, card, selectedCalendarId));
 
             const ignoreButton = document.createElement("button");
             ignoreButton.className = "ghost-button";
@@ -5294,7 +5388,7 @@
             }
         }
 
-        async function approveDutyReview(review, card) {
+        async function approveDutyReview(review, card, selectedCalendarId = null) {
             try {
                 const scoped = Array.isArray(review.scope_change_keys) && review.scope_change_keys.length > 0 && review.review_type !== "monthly_rollover";
                 const singleScoped = scoped && review.scope_change_keys.length === 1;
@@ -5305,7 +5399,8 @@
                     body: JSON.stringify({
                         session_id: sessionId,
                         review_id: review.review_id,
-                        change_keys: review.scope_change_keys || []
+                        change_keys: review.scope_change_keys || [],
+                        selected_calendar_id: selectedCalendarId
                     })
                 });
                 const data = await response.json();
@@ -5842,14 +5937,19 @@
             return card;
         }
 
-        function buildStudyActionsBar(contentItemId, actions) {
+        function buildStudyActionsBar(contentItemId, actions, options = {}) {
             const wrapper = document.createElement("div");
             wrapper.className = "study-actions";
+            const removeOnClick = options.removeOnClick !== false;
             actions.forEach((action) => {
                 const button = document.createElement("button");
                 button.className = "secondary-button";
                 button.textContent = action.label;
-                button.addEventListener("click", () => handleStudyAction(contentItemId, action.action));
+                button.addEventListener("click", () => handleStudyAction(
+                    contentItemId,
+                    action.action,
+                    removeOnClick ? wrapper.closest(".study-flow-card, .study-followup-card") : null
+                ));
                 wrapper.appendChild(button);
             });
             return wrapper;
@@ -5884,6 +5984,39 @@
             }
             chat.appendChild(card);
             scrollChatToBottom();
+        }
+
+        function renderMcqFeedbackOnCard(card, contentItemId, reply, actions) {
+            if (!card) return;
+
+            const existingFeedback = card.querySelector(".study-answer-feedback");
+            if (existingFeedback) {
+                existingFeedback.remove();
+            }
+            const existingActions = card.querySelector(".study-actions");
+            if (existingActions) {
+                existingActions.remove();
+            }
+            const existingHint = card.querySelector(".study-mobile-hint");
+            if (existingHint) {
+                existingHint.remove();
+            }
+
+            if (reply) {
+                const feedback = document.createElement("div");
+                feedback.className = "study-flow-text study-answer-feedback";
+                feedback.style.whiteSpace = "pre-wrap";
+                feedback.textContent = reply;
+                card.appendChild(feedback);
+            }
+
+            if (actions && actions.length) {
+                card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false }));
+                const hint = buildStudyMobileHint(actions);
+                if (hint) {
+                    card.appendChild(hint);
+                }
+            }
         }
 
         async function openStudyCard(cardType, contentItemId) {
@@ -5955,13 +6088,8 @@
                 if (requestMode !== "clinical" || appMode !== requestMode || requestToken !== chatRenderContextToken) {
                     return;
                 }
-                if (data.reply && !data.study_item) {
-                    appendAssistantMessage(data.reply);
-                }
+                renderMcqFeedbackOnCard(card, contentItemId, data.reply || "", data.study_followups || []);
                 hideSessionBanner();
-                if (data.study_followups) {
-                    appendStudyFollowupCard(contentItemId, data.study_followups);
-                }
                 if (data.sources && data.sources.length) {
                     appendSourcesCard(data.sources);
                 }
@@ -5970,10 +6098,13 @@
             }
         }
 
-        async function handleStudyAction(contentItemId, action) {
+        async function handleStudyAction(contentItemId, action, sourceCard = null) {
             const requestMode = appMode;
             const requestToken = chatRenderContextToken;
             try {
+                if (sourceCard) {
+                    sourceCard.remove();
+                }
                 const response = await fetch("/study/action", {
                     method: "POST",
                     headers: {
@@ -6143,7 +6274,7 @@
                 await refreshDutySyncStatus();
                 setComposerEnabled(true);
                 if (!data.reply) {
-                    scheduleDeferredStudyCardsLoad(true);
+                    maybeShowStudyCards(true);
                 }
                 refreshEntryGuidanceVisibility();
                 attemptInitialComposerFocus();
@@ -6223,6 +6354,7 @@
 
             dismissStudyCards();
             clearStudyCards();
+            clearStudyInteractionCards();
             appendUserMessage(message);
             input.value = "";
             autoResizeInput();
@@ -6404,6 +6536,7 @@
             if (this.value.trim()) {
                 dismissEntryGuidance();
                 dismissStudyCards();
+                clearStudyInteractionCards();
             } else {
                 maybeShowStudyCards();
                 refreshEntryGuidanceVisibility();
