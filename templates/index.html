@@ -1940,7 +1940,7 @@
         let dutySyncSwVersion = "unknown";
         const pullShowThreshold = 12;
         const pullArmThreshold = 56;
-        const studyCardsCacheKey = "entry_study_cards_v1";
+        const studyCardsCacheKey = "entry_study_cards_{{ app_version }}";
         const dutySyncPollingIntervalMs = "{{ app_env }}" === "production" ? 45 * 60 * 1000 : 5 * 60 * 1000;
         const dutySyncDevLogStorageKey = "duty-sync-dev-console";
         const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
