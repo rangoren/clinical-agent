@@ -3759,9 +3759,10 @@ def answer_mcq(session_id, content_item_id, selected_option):
         "session_meta": _session_meta_payload(updated_state, policy),
     }
     response["study_followups"] = [
+        {"action": "another_question", "label": "Another question"},
         {"action": "explain_why", "label": "Explain why"},
-        {"action": "quick_recap", "label": "Give me the rule"},
         {"action": "show_source", "label": "Show source"},
+        {"action": "quick_recap", "label": "Give me the rule"},
     ]
     return response
 

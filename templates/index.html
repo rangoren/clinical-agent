@@ -5916,13 +5916,6 @@
                 card.querySelectorAll(".study-option-button").forEach((button) => {
                     button.addEventListener("click", () => submitStudyAnswer(studyItem.content_item_id, button.dataset.optionKey, card));
                 });
-                if (studyItem.actions && studyItem.actions.length) {
-                    card.appendChild(buildStudyActionsBar(studyItem.content_item_id, studyItem.actions));
-                    const hint = buildStudyMobileHint(studyItem.actions);
-                    if (hint) {
-                        card.appendChild(hint);
-                    }
-                }
             } else {
                 const bulletsHtml = (studyItem.bullets || []).map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("");
                 card.innerHTML = `
@@ -5944,14 +5937,19 @@
             return card;
         }
 
-        function buildStudyActionsBar(contentItemId, actions) {
+        function buildStudyActionsBar(contentItemId, actions, options = {}) {
             const wrapper = document.createElement("div");
             wrapper.className = "study-actions";
+            const removeOnClick = options.removeOnClick !== false;
             actions.forEach((action) => {
                 const button = document.createElement("button");
                 button.className = "secondary-button";
                 button.textContent = action.label;
-                button.addEventListener("click", () => handleStudyAction(contentItemId, action.action, wrapper.closest(".study-flow-card, .study-followup-card")));
+                button.addEventListener("click", () => handleStudyAction(
+                    contentItemId,
+                    action.action,
+                    removeOnClick ? wrapper.closest(".study-flow-card, .study-followup-card") : null
+                ));
                 wrapper.appendChild(button);
             });
             return wrapper;
@@ -5986,6 +5984,39 @@
             }
             chat.appendChild(card);
             scrollChatToBottom();
+        }
+
+        function renderMcqFeedbackOnCard(card, contentItemId, reply, actions) {
+            if (!card) return;
+
+            const existingFeedback = card.querySelector(".study-answer-feedback");
+            if (existingFeedback) {
+                existingFeedback.remove();
+            }
+            const existingActions = card.querySelector(".study-actions");
+            if (existingActions) {
+                existingActions.remove();
+            }
+            const existingHint = card.querySelector(".study-mobile-hint");
+            if (existingHint) {
+                existingHint.remove();
+            }
+
+            if (reply) {
+                const feedback = document.createElement("div");
+                feedback.className = "study-flow-text study-answer-feedback";
+                feedback.style.whiteSpace = "pre-wrap";
+                feedback.textContent = reply;
+                card.appendChild(feedback);
+            }
+
+            if (actions && actions.length) {
+                card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false }));
+                const hint = buildStudyMobileHint(actions);
+                if (hint) {
+                    card.appendChild(hint);
+                }
+            }
         }
 
         async function openStudyCard(cardType, contentItemId) {
@@ -6057,13 +6088,8 @@
                 if (requestMode !== "clinical" || appMode !== requestMode || requestToken !== chatRenderContextToken) {
                     return;
                 }
-                if (data.reply && !data.study_item) {
-                    appendAssistantMessage(data.reply);
-                }
+                renderMcqFeedbackOnCard(card, contentItemId, data.reply || "", data.study_followups || []);
                 hideSessionBanner();
-                if (data.study_followups) {
-                    appendStudyFollowupCard(contentItemId, data.study_followups);
-                }
                 if (data.sources && data.sources.length) {
                     appendSourcesCard(data.sources);
                 }
