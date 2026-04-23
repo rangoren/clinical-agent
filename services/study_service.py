@@ -3471,6 +3471,9 @@ def _build_study_item_payload(item):
                 "question_quality_score_10": item.get("question_quality_score_10"),
                 "question_style": item.get("question_style"),
                 "decision_point": item.get("decision_point"),
+                "actions": [
+                    {"action": "another_question", "label": "Another question"},
+                ],
             }
         )
     else:

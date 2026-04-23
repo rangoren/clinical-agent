@@ -5912,6 +5912,13 @@
                 card.querySelectorAll(".study-option-button").forEach((button) => {
                     button.addEventListener("click", () => submitStudyAnswer(studyItem.content_item_id, button.dataset.optionKey, card));
                 });
+                if (studyItem.actions && studyItem.actions.length) {
+                    card.appendChild(buildStudyActionsBar(studyItem.content_item_id, studyItem.actions));
+                    const hint = buildStudyMobileHint(studyItem.actions);
+                    if (hint) {
+                        card.appendChild(hint);
+                    }
+                }
             } else {
                 const bulletsHtml = (studyItem.bullets || []).map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("");
                 card.innerHTML = `
