@@ -3392,6 +3392,37 @@ def get_idle_study_cards(session_id):
             if len(cards) == 3:
                 break
 
+    if len(cards) < 3:
+        relaxed_fallback_pool = _get_items(exclude_ids=used_ids)
+        scored_relaxed_fallback = sorted(
+            relaxed_fallback_pool,
+            key=lambda item: _selection_score(
+                item,
+                state,
+                preferred_topic=preferred_topic,
+                preferred_template_family=preferred_template_family,
+                preferred_decision_pressure=preferred_decision_pressure,
+                preferred_difficulty_level=target_level,
+            ),
+            reverse=True,
+        )
+        for item in scored_relaxed_fallback:
+            if item["id"] in used_ids:
+                continue
+            used_ids.add(item["id"])
+            cards.append(
+                _build_card(
+                    f"relaxed_fallback_{item['id']}",
+                    "practice" if item["item_type"] == "mcq" else "pearl",
+                    item,
+                    "Quick MCQ" if item["item_type"] == "mcq" else "Quick Pearl",
+                    "1-min practice" if item["item_type"] == "mcq" else "Quick takeaway",
+                    "Start" if item["item_type"] == "mcq" else "Open",
+                )
+            )
+            if len(cards) == 3:
+                break
+
     shown_history = _trim_history((state.get("cards_shown_history") or []) + [card["content_item_id"] for card in cards], 18)
     _save_state(
         session_id,
