@@ -3473,6 +3473,9 @@ def _build_study_item_payload(item):
                 "decision_point": item.get("decision_point"),
                 "actions": [
                     {"action": "another_question", "label": "Another question"},
+                    {"action": "explain_why", "label": "Explain why"},
+                    {"action": "show_source", "label": "Show source"},
+                    {"action": "quick_recap", "label": "Give me the rule"},
                 ],
             }
         )

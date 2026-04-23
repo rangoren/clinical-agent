@@ -2271,6 +2271,10 @@
             refreshEntryGuidanceVisibility();
         }
 
+        function clearStudyInteractionCards() {
+            document.querySelectorAll(".study-flow-card, .study-followup-card").forEach((node) => node.remove());
+        }
+
         function invalidateStudyCardsRequests() {
             studyCardsRequestToken += 1;
             studyCardsRequested = false;
@@ -2297,7 +2301,7 @@
             pendingStudyCardsTimer = setTimeout(() => {
                 pendingStudyCardsTimer = null;
                 maybeShowStudyCards(force);
-            }, 120);
+            }, 0);
         }
 
         function shouldShowStudyCards(manual = false) {
@@ -5947,7 +5951,7 @@
                 const button = document.createElement("button");
                 button.className = "secondary-button";
                 button.textContent = action.label;
-                button.addEventListener("click", () => handleStudyAction(contentItemId, action.action));
+                button.addEventListener("click", () => handleStudyAction(contentItemId, action.action, wrapper.closest(".study-flow-card, .study-followup-card")));
                 wrapper.appendChild(button);
             });
             return wrapper;
@@ -6068,10 +6072,13 @@
             }
         }
 
-        async function handleStudyAction(contentItemId, action) {
+        async function handleStudyAction(contentItemId, action, sourceCard = null) {
             const requestMode = appMode;
             const requestToken = chatRenderContextToken;
             try {
+                if (sourceCard) {
+                    sourceCard.remove();
+                }
                 const response = await fetch("/study/action", {
                     method: "POST",
                     headers: {
@@ -6241,7 +6248,7 @@
                 await refreshDutySyncStatus();
                 setComposerEnabled(true);
                 if (!data.reply) {
-                    scheduleDeferredStudyCardsLoad(true);
+                    maybeShowStudyCards(true);
                 }
                 refreshEntryGuidanceVisibility();
                 attemptInitialComposerFocus();
@@ -6321,6 +6328,7 @@
 
             dismissStudyCards();
             clearStudyCards();
+            clearStudyInteractionCards();
             appendUserMessage(message);
             input.value = "";
             autoResizeInput();
@@ -6502,6 +6510,7 @@
             if (this.value.trim()) {
                 dismissEntryGuidance();
                 dismissStudyCards();
+                clearStudyInteractionCards();
             } else {
                 maybeShowStudyCards();
                 refreshEntryGuidanceVisibility();
