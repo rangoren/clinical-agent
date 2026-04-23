@@ -1971,16 +1971,20 @@
             if (!chat) return;
 
             const scrollNow = () => {
-                chat.scrollTop = chat.scrollHeight;
+                const previousBehavior = chat.style.scrollBehavior;
+                chat.style.scrollBehavior = "auto";
+                chat.scrollTop = chat.scrollHeight + 1000;
+                chat.scrollTo({ top: chat.scrollHeight + 1000, behavior: "auto" });
                 const lastChild = chat.lastElementChild;
                 if (lastChild) {
-                    lastChild.scrollIntoView({ block: "end", inline: "nearest", behavior: "smooth" });
+                    lastChild.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
                 }
                 const appShell = document.querySelector(".app-shell");
                 if (appShell) {
-                    appShell.scrollTop = appShell.scrollHeight;
+                    appShell.scrollTop = appShell.scrollHeight + 1000;
                 }
-                window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+                window.scrollTo({ top: document.documentElement.scrollHeight + 1000, behavior: "auto" });
+                chat.style.scrollBehavior = previousBehavior;
             };
 
             scrollNow();
@@ -1990,6 +1994,8 @@
             });
             setTimeout(scrollNow, 120);
             setTimeout(scrollNow, 260);
+            setTimeout(scrollNow, 520);
+            setTimeout(scrollNow, 900);
         }
 
         function setStatus(_text) {}
@@ -2219,6 +2225,10 @@
                 if (!parsed || !Array.isArray(parsed.cards) || parsed.cards.length === 0) {
                     return null;
                 }
+                if ((parsed.cards[0] || {}).type !== "practice") {
+                    localStorage.removeItem(studyCardsCacheKey);
+                    return null;
+                }
                 return parsed.cards;
             } catch (_error) {
                 return null;
@@ -2322,10 +2332,16 @@
                 return;
             }
 
+            const orderedCards = [...cards].sort((left, right) => {
+                if (left.type === "practice" && right.type !== "practice") return -1;
+                if (right.type === "practice" && left.type !== "practice") return 1;
+                return 0;
+            });
+
             const grid = document.createElement("div");
             grid.className = "study-cards-grid";
 
-            cards.forEach((card) => {
+            orderedCards.forEach((card) => {
                 const typeLabel = card.type === "practice"
                     ? "Practice"
                     : card.type === "pearl"
@@ -2350,7 +2366,7 @@
             shell.innerHTML = "";
             shell.appendChild(grid);
             shell.classList.add("visible");
-            saveCachedStudyCards(cards);
+            saveCachedStudyCards(orderedCards);
             refreshEntryGuidanceVisibility();
         }
 

@@ -2382,6 +2382,10 @@ def _get_cached_idle_cards(state):
     generated_at = state.get("idle_cards_cache_generated_at")
     if not cards or not generated_at:
         return None
+    if not isinstance(cards, list) or not cards:
+        return None
+    if (cards[0] or {}).get("type") != "practice":
+        return None
 
     try:
         age_seconds = (_utc_now() - generated_at).total_seconds()
