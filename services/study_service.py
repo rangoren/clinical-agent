@@ -3298,6 +3298,23 @@ def get_idle_study_cards(session_id):
     if practice_item:
         used_ids.add(practice_item["id"])
         cards.append(_build_card("practice_card", "practice", practice_item, "Quick MCQ", "1-min practice", "Start"))
+    elif mcq_pool:
+        fallback_practice_item = _pick_targeted_item(
+            session_id,
+            state,
+            [item for item in mcq_pool if item["id"] not in used_ids],
+            "practice_fallback",
+            preferred_item_type="mcq",
+            preferred_topic=preferred_topic,
+            preferred_template_family=preferred_template_family,
+            preferred_decision_pressure=preferred_decision_pressure,
+            preferred_difficulty_level=target_level,
+            preferred_question_style=target_style,
+            reinforcement=reinforcement,
+        )
+        if fallback_practice_item:
+            used_ids.add(fallback_practice_item["id"])
+            cards.append(_build_card("practice_card", "practice", fallback_practice_item, "Quick MCQ", "1-min practice", "Start"))
 
     challenge_level = min(policy["max_level"], target_level + 1)
     challenge_style = _target_question_style(state, challenge_level, available_styles)
