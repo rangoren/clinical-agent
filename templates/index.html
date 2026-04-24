@@ -6168,6 +6168,7 @@
                 if (sourceCard && !removeOnClick && data.study_followups) {
                     appendStudyFollowupCard(contentItemId, data.study_followups, usedActions);
                 }
+                scrollChatToBottom();
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
