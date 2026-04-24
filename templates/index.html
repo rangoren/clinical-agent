@@ -5915,6 +5915,7 @@
             const card = document.createElement("div");
             card.className = "study-flow-card";
             card.dataset.contentItemId = studyItem.content_item_id;
+            card.dataset.usedActions = JSON.stringify([]);
 
             if (studyItem.item_type === "mcq") {
                 const optionsHtml = (studyItem.options || []).map((option) => `
@@ -5988,21 +5989,35 @@
             if (!actions || !actions.length) return;
             if (appMode !== "clinical") return;
             document.querySelectorAll(`.study-followup-card[data-content-item-id="${CSS.escape(contentItemId)}"]`).forEach((node) => node.remove());
+            const usedActions = arguments.length > 2 && Array.isArray(arguments[2]) ? arguments[2] : [];
+            const filteredActions = actions.filter((action) => !usedActions.includes(action.action));
+            if (!filteredActions.length) return;
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
             card.className = "study-followup-card";
             card.dataset.contentItemId = contentItemId;
+            card.dataset.usedActions = JSON.stringify(usedActions);
             const title = document.createElement("p");
             title.className = "study-flow-title";
             title.textContent = "Keep going";
             card.appendChild(title);
-            card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false, sourceCard: card, keepCardUntilAnotherQuestion: true }));
-            const hint = buildStudyMobileHint(actions);
+            card.appendChild(buildStudyActionsBar(contentItemId, filteredActions, { removeOnClick: false, sourceCard: card, keepCardUntilAnotherQuestion: true }));
+            const hint = buildStudyMobileHint(filteredActions);
             if (hint) {
                 card.appendChild(hint);
             }
             chat.appendChild(card);
             scrollChatToBottom();
+        }
+
+        function readUsedStudyActions(card) {
+            if (!card || !card.dataset.usedActions) return [];
+            try {
+                const parsed = JSON.parse(card.dataset.usedActions);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_error) {
+                return [];
+            }
         }
 
         function renderMcqFeedbackOnCard(card, contentItemId, reply, actions) {
@@ -6121,6 +6136,7 @@
             const requestMode = appMode;
             const requestToken = chatRenderContextToken;
             try {
+                const usedActions = Array.from(new Set([...readUsedStudyActions(sourceCard), action]));
                 if (removeOnClick && sourceCard) {
                     sourceCard.remove();
                 }
@@ -6144,7 +6160,7 @@
                 }
                 hideSessionBanner();
                 if (sourceCard && !removeOnClick && data.study_followups) {
-                    appendStudyFollowupCard(contentItemId, data.study_followups);
+                    appendStudyFollowupCard(contentItemId, data.study_followups, usedActions);
                 }
                 if (data.study_item) {
                     appendStudyInteractionCard(data.study_item);
