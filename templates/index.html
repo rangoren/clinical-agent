@@ -5996,7 +5996,7 @@
             title.className = "study-flow-title";
             title.textContent = "Keep going";
             card.appendChild(title);
-            card.appendChild(buildStudyActionsBar(contentItemId, actions));
+            card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false, sourceCard: card, keepCardUntilAnotherQuestion: true }));
             const hint = buildStudyMobileHint(actions);
             if (hint) {
                 card.appendChild(hint);
