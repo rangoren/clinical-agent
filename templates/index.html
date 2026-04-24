@@ -5987,9 +5987,11 @@
         function appendStudyFollowupCard(contentItemId, actions) {
             if (!actions || !actions.length) return;
             if (appMode !== "clinical") return;
+            document.querySelectorAll(`.study-followup-card[data-content-item-id="${CSS.escape(contentItemId)}"]`).forEach((node) => node.remove());
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
             card.className = "study-followup-card";
+            card.dataset.contentItemId = contentItemId;
             const title = document.createElement("p");
             title.className = "study-flow-title";
             title.textContent = "Keep going";
@@ -6027,25 +6029,6 @@
                 card.appendChild(feedback);
             }
 
-            if (actions && actions.length) {
-                card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false, sourceCard: card, keepCardUntilAnotherQuestion: true }));
-                const hint = buildStudyMobileHint(actions);
-                if (hint) {
-                    card.appendChild(hint);
-                }
-            }
-        }
-
-        function updateStudyActionsOnCard(card, contentItemId, actions) {
-            if (!card) return;
-            const existingActions = card.querySelector(".study-actions");
-            if (existingActions) {
-                existingActions.remove();
-            }
-            const existingHint = card.querySelector(".study-mobile-hint");
-            if (existingHint) {
-                existingHint.remove();
-            }
             if (actions && actions.length) {
                 card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false, sourceCard: card, keepCardUntilAnotherQuestion: true }));
                 const hint = buildStudyMobileHint(actions);
@@ -6161,7 +6144,7 @@
                 }
                 hideSessionBanner();
                 if (sourceCard && !removeOnClick && data.study_followups) {
-                    updateStudyActionsOnCard(sourceCard, contentItemId, data.study_followups);
+                    appendStudyFollowupCard(contentItemId, data.study_followups);
                 }
                 if (data.study_item) {
                     appendStudyInteractionCard(data.study_item);
