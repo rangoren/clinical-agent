@@ -5964,7 +5964,8 @@
                 button.addEventListener("click", () => handleStudyAction(
                     contentItemId,
                     action.action,
-                    removeOnClick ? wrapper.closest(".study-flow-card, .study-followup-card") : null
+                    options.sourceCard || wrapper.closest(".study-flow-card, .study-followup-card"),
+                    removeOnClick || (options.keepCardUntilAnotherQuestion === true && action.action === "another_question")
                 ));
                 wrapper.appendChild(button);
             });
@@ -6027,7 +6028,26 @@
             }
 
             if (actions && actions.length) {
-                card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false }));
+                card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false, sourceCard: card, keepCardUntilAnotherQuestion: true }));
+                const hint = buildStudyMobileHint(actions);
+                if (hint) {
+                    card.appendChild(hint);
+                }
+            }
+        }
+
+        function updateStudyActionsOnCard(card, contentItemId, actions) {
+            if (!card) return;
+            const existingActions = card.querySelector(".study-actions");
+            if (existingActions) {
+                existingActions.remove();
+            }
+            const existingHint = card.querySelector(".study-mobile-hint");
+            if (existingHint) {
+                existingHint.remove();
+            }
+            if (actions && actions.length) {
+                card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false, sourceCard: card, keepCardUntilAnotherQuestion: true }));
                 const hint = buildStudyMobileHint(actions);
                 if (hint) {
                     card.appendChild(hint);
@@ -6114,11 +6134,11 @@
             }
         }
 
-        async function handleStudyAction(contentItemId, action, sourceCard = null) {
+        async function handleStudyAction(contentItemId, action, sourceCard = null, removeOnClick = true) {
             const requestMode = appMode;
             const requestToken = chatRenderContextToken;
             try {
-                if (sourceCard) {
+                if (removeOnClick && sourceCard) {
                     sourceCard.remove();
                 }
                 const response = await fetch("/study/action", {
@@ -6140,6 +6160,9 @@
                     appendAssistantMessage(data.reply);
                 }
                 hideSessionBanner();
+                if (sourceCard && !removeOnClick && data.study_followups) {
+                    updateStudyActionsOnCard(sourceCard, contentItemId, data.study_followups);
+                }
                 if (data.study_item) {
                     appendStudyInteractionCard(data.study_item);
                 }
