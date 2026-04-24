@@ -6020,6 +6020,19 @@
             }
         }
 
+        function nudgeStudyCardIntoView(card) {
+            if (!card) return;
+            const scrollNow = () => {
+                card.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
+                scrollChatToBottom();
+            };
+            scrollNow();
+            requestAnimationFrame(scrollNow);
+            setTimeout(scrollNow, 120);
+            setTimeout(scrollNow, 260);
+            setTimeout(scrollNow, 520);
+        }
+
         function renderMcqFeedbackOnCard(card, contentItemId, reply, actions) {
             if (!card) return;
 
@@ -6051,6 +6064,8 @@
                     card.appendChild(hint);
                 }
             }
+
+            nudgeStudyCardIntoView(card);
         }
 
         async function openStudyCard(cardType, contentItemId) {
@@ -6087,7 +6102,6 @@
                 hideSessionBanner();
                 if (data.study_item) {
                     appendStudyInteractionCard(data.study_item);
-                    scrollChatToBottom();
                 }
                 if (data.sources && data.sources.length) {
                     appendSourcesCard(data.sources);
@@ -6128,6 +6142,7 @@
                 if (data.sources && data.sources.length) {
                     appendSourcesCard(data.sources);
                 }
+                nudgeStudyCardIntoView(card);
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
@@ -6169,7 +6184,7 @@
                 if (sourceCard && !removeOnClick && data.study_followups) {
                     appendStudyFollowupCard(contentItemId, data.study_followups, usedActions);
                 }
-                scrollChatToBottom();
+                nudgeStudyCardIntoView(sourceCard);
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
