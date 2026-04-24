@@ -2413,17 +2413,18 @@
             if (!shell) return;
             const hasExistingCards = shell.children.length > 0;
             const cachedCards = !hasExistingCards ? loadCachedStudyCards() : null;
+            const hasVisibleCards = hasExistingCards || (cachedCards && cachedCards.length);
 
             if (!hasExistingCards && cachedCards && cachedCards.length) {
                 renderStudyCards(cachedCards);
             }
 
-            if (hasExistingCards || (cachedCards && cachedCards.length)) {
+            if (hasVisibleCards) {
                 shell.classList.add("visible");
                 refreshEntryGuidanceVisibility();
             }
 
-            if (!force && (hasExistingCards || (cachedCards && cachedCards.length))) {
+            if (!force && hasVisibleCards) {
                 shell.classList.add("visible");
                 refreshEntryGuidanceVisibility();
                 return;
@@ -2432,7 +2433,7 @@
             if (studyCardsRequested) return;
             studyCardsRequested = true;
             const requestToken = ++studyCardsRequestToken;
-            if (!hasExistingCards) {
+            if (!hasVisibleCards) {
                 renderStudyCardPlaceholders();
             } else {
                 shell.classList.add("visible");
