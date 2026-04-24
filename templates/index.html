@@ -6087,6 +6087,7 @@
                 hideSessionBanner();
                 if (data.study_item) {
                     appendStudyInteractionCard(data.study_item);
+                    scrollChatToBottom();
                 }
                 if (data.sources && data.sources.length) {
                     appendSourcesCard(data.sources);
