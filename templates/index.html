@@ -1913,6 +1913,8 @@
         let studyCardsRequested = false;
         let studyCardsDismissed = false;
         let studyCardsRequestToken = 0;
+        let pendingStudyCardsPromise = null;
+        let pendingStudyCardsResult = null;
         let entryGuidanceDismissed = false;
         let composerModeStripOpen = false;
         let pullRefreshState = "idle";
@@ -1971,16 +1973,20 @@
             if (!chat) return;
 
             const scrollNow = () => {
-                chat.scrollTop = chat.scrollHeight;
+                const previousBehavior = chat.style.scrollBehavior;
+                chat.style.scrollBehavior = "auto";
+                chat.scrollTop = chat.scrollHeight + 1000;
+                chat.scrollTo({ top: chat.scrollHeight + 1000, behavior: "auto" });
                 const lastChild = chat.lastElementChild;
                 if (lastChild) {
-                    lastChild.scrollIntoView({ block: "end", inline: "nearest", behavior: "smooth" });
+                    lastChild.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
                 }
                 const appShell = document.querySelector(".app-shell");
                 if (appShell) {
-                    appShell.scrollTop = appShell.scrollHeight;
+                    appShell.scrollTop = appShell.scrollHeight + 1000;
                 }
-                window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+                window.scrollTo({ top: document.documentElement.scrollHeight + 1000, behavior: "auto" });
+                chat.style.scrollBehavior = previousBehavior;
             };
 
             scrollNow();
@@ -1990,6 +1996,8 @@
             });
             setTimeout(scrollNow, 120);
             setTimeout(scrollNow, 260);
+            setTimeout(scrollNow, 520);
+            setTimeout(scrollNow, 900);
         }
 
         function setStatus(_text) {}
@@ -2200,6 +2208,7 @@
                 input.blur();
             }
             await maybeShowStudyCards(true);
+            scrollChatToBottom();
             updateComposerState();
         }
 
@@ -2217,6 +2226,10 @@
                 if (!raw) return null;
                 const parsed = JSON.parse(raw);
                 if (!parsed || !Array.isArray(parsed.cards) || parsed.cards.length === 0) {
+                    return null;
+                }
+                if ((parsed.cards[0] || {}).type !== "practice") {
+                    localStorage.removeItem(studyCardsCacheKey);
                     return null;
                 }
                 return parsed.cards;
@@ -2304,6 +2317,33 @@
             }, 0);
         }
 
+        function requestStudyCardsData() {
+            if (pendingStudyCardsResult) {
+                return Promise.resolve(pendingStudyCardsResult);
+            }
+            if (pendingStudyCardsPromise) {
+                return pendingStudyCardsPromise;
+            }
+            pendingStudyCardsPromise = fetch("/study/cards", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    session_id: sessionId
+                })
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    pendingStudyCardsResult = data;
+                    return data;
+                })
+                .finally(() => {
+                    pendingStudyCardsPromise = null;
+                });
+            return pendingStudyCardsPromise;
+        }
+
         function shouldShowStudyCards(manual = false) {
             const input = document.getElementById("input");
             if (appMode !== "clinical" || !input || input.value.trim()) return false;
@@ -2322,10 +2362,16 @@
                 return;
             }
 
+            const orderedCards = [...cards].sort((left, right) => {
+                if (left.type === "practice" && right.type !== "practice") return -1;
+                if (right.type === "practice" && left.type !== "practice") return 1;
+                return 0;
+            });
+
             const grid = document.createElement("div");
             grid.className = "study-cards-grid";
 
-            cards.forEach((card) => {
+            orderedCards.forEach((card) => {
                 const typeLabel = card.type === "practice"
                     ? "Practice"
                     : card.type === "pearl"
@@ -2350,7 +2396,7 @@
             shell.innerHTML = "";
             shell.appendChild(grid);
             shell.classList.add("visible");
-            saveCachedStudyCards(cards);
+            saveCachedStudyCards(orderedCards);
             refreshEntryGuidanceVisibility();
         }
 
@@ -2397,17 +2443,18 @@
             if (!shell) return;
             const hasExistingCards = shell.children.length > 0;
             const cachedCards = !hasExistingCards ? loadCachedStudyCards() : null;
+            const hasVisibleCards = hasExistingCards || (cachedCards && cachedCards.length);
 
             if (!hasExistingCards && cachedCards && cachedCards.length) {
                 renderStudyCards(cachedCards);
             }
 
-            if (hasExistingCards || (cachedCards && cachedCards.length)) {
+            if (hasVisibleCards) {
                 shell.classList.add("visible");
                 refreshEntryGuidanceVisibility();
             }
 
-            if (!force && (hasExistingCards || (cachedCards && cachedCards.length))) {
+            if (!force && hasVisibleCards) {
                 shell.classList.add("visible");
                 refreshEntryGuidanceVisibility();
                 return;
@@ -2416,7 +2463,7 @@
             if (studyCardsRequested) return;
             studyCardsRequested = true;
             const requestToken = ++studyCardsRequestToken;
-            if (!hasExistingCards) {
+            if (!hasVisibleCards) {
                 renderStudyCardPlaceholders();
             } else {
                 shell.classList.add("visible");
@@ -2424,20 +2471,12 @@
             }
 
             try {
-                const response = await fetch("/study/cards", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        session_id: sessionId
-                    })
-                });
-                const data = await response.json();
+                const data = await requestStudyCardsData();
                 if (requestToken !== studyCardsRequestToken) {
                     return;
                 }
                 studyCardsRequested = false;
+                pendingStudyCardsResult = null;
                 if (!shouldShowStudyCards(force)) {
                     hideStudyCards();
                     return;
@@ -5899,6 +5938,7 @@
             const card = document.createElement("div");
             card.className = "study-flow-card";
             card.dataset.contentItemId = studyItem.content_item_id;
+            card.dataset.usedActions = JSON.stringify([]);
 
             if (studyItem.item_type === "mcq") {
                 const optionsHtml = (studyItem.options || []).map((option) => `
@@ -5948,7 +5988,8 @@
                 button.addEventListener("click", () => handleStudyAction(
                     contentItemId,
                     action.action,
-                    removeOnClick ? wrapper.closest(".study-flow-card, .study-followup-card") : null
+                    options.sourceCard || wrapper.closest(".study-flow-card, .study-followup-card"),
+                    removeOnClick || (options.keepCardUntilAnotherQuestion === true && action.action === "another_question")
                 ));
                 wrapper.appendChild(button);
             });
@@ -5970,20 +6011,49 @@
         function appendStudyFollowupCard(contentItemId, actions) {
             if (!actions || !actions.length) return;
             if (appMode !== "clinical") return;
+            document.querySelectorAll(`.study-followup-card[data-content-item-id="${CSS.escape(contentItemId)}"]`).forEach((node) => node.remove());
+            const usedActions = arguments.length > 2 && Array.isArray(arguments[2]) ? arguments[2] : [];
+            const filteredActions = actions.filter((action) => !usedActions.includes(action.action));
+            if (!filteredActions.length) return;
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
             card.className = "study-followup-card";
+            card.dataset.contentItemId = contentItemId;
+            card.dataset.usedActions = JSON.stringify(usedActions);
             const title = document.createElement("p");
             title.className = "study-flow-title";
             title.textContent = "Keep going";
             card.appendChild(title);
-            card.appendChild(buildStudyActionsBar(contentItemId, actions));
-            const hint = buildStudyMobileHint(actions);
+            card.appendChild(buildStudyActionsBar(contentItemId, filteredActions, { removeOnClick: false, sourceCard: card, keepCardUntilAnotherQuestion: true }));
+            const hint = buildStudyMobileHint(filteredActions);
             if (hint) {
                 card.appendChild(hint);
             }
             chat.appendChild(card);
             scrollChatToBottom();
+        }
+
+        function readUsedStudyActions(card) {
+            if (!card || !card.dataset.usedActions) return [];
+            try {
+                const parsed = JSON.parse(card.dataset.usedActions);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_error) {
+                return [];
+            }
+        }
+
+        function nudgeStudyCardIntoView(card) {
+            if (!card) return;
+            const scrollNow = () => {
+                card.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
+                scrollChatToBottom();
+            };
+            scrollNow();
+            requestAnimationFrame(scrollNow);
+            setTimeout(scrollNow, 120);
+            setTimeout(scrollNow, 260);
+            setTimeout(scrollNow, 520);
         }
 
         function renderMcqFeedbackOnCard(card, contentItemId, reply, actions) {
@@ -6011,12 +6081,14 @@
             }
 
             if (actions && actions.length) {
-                card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false }));
+                card.appendChild(buildStudyActionsBar(contentItemId, actions, { removeOnClick: false, sourceCard: card, keepCardUntilAnotherQuestion: true }));
                 const hint = buildStudyMobileHint(actions);
                 if (hint) {
                     card.appendChild(hint);
                 }
             }
+
+            nudgeStudyCardIntoView(card);
         }
 
         async function openStudyCard(cardType, contentItemId) {
@@ -6093,16 +6165,18 @@
                 if (data.sources && data.sources.length) {
                     appendSourcesCard(data.sources);
                 }
+                nudgeStudyCardIntoView(card);
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
         }
 
-        async function handleStudyAction(contentItemId, action, sourceCard = null) {
+        async function handleStudyAction(contentItemId, action, sourceCard = null, removeOnClick = true) {
             const requestMode = appMode;
             const requestToken = chatRenderContextToken;
             try {
-                if (sourceCard) {
+                const usedActions = Array.from(new Set([...readUsedStudyActions(sourceCard), action]));
+                if (removeOnClick && sourceCard) {
                     sourceCard.remove();
                 }
                 const response = await fetch("/study/action", {
@@ -6130,6 +6204,10 @@
                 if (data.sources && data.sources.length) {
                     appendSourcesCard(data.sources);
                 }
+                if (sourceCard && !removeOnClick && data.study_followups) {
+                    appendStudyFollowupCard(contentItemId, data.study_followups, usedActions);
+                }
+                nudgeStudyCardIntoView(sourceCard);
             } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
@@ -6270,12 +6348,11 @@
                 if (data.reply) {
                     appendAssistantMessage(data.reply);
                 }
+                const studyCardsLoadPromise = !data.reply ? maybeShowStudyCards(true) : Promise.resolve();
                 await refreshCalendarStatus();
                 await refreshDutySyncStatus();
+                await studyCardsLoadPromise;
                 setComposerEnabled(true);
-                if (!data.reply) {
-                    maybeShowStudyCards(true);
-                }
                 refreshEntryGuidanceVisibility();
                 attemptInitialComposerFocus();
             } catch (error) {
@@ -6412,6 +6489,8 @@
                         appendStudyFollowupCard(studyItemId, data.study_followups);
                     }
                 }
+
+                scrollChatToBottom();
 
                 if (data.suggested_save) {
                     appendSuggestedSaveCard(data.suggested_save);
@@ -6764,6 +6843,7 @@
             renderStudyCards(initialCachedStudyCards);
         } else if (appMode === "clinical") {
             renderStudyCardPlaceholders();
+            requestStudyCardsData().catch(() => {});
         }
         refreshEntryGuidanceVisibility();
         {% if app_env != "production" and app_env != "development" %}

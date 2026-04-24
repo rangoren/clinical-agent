@@ -2382,6 +2382,10 @@ def _get_cached_idle_cards(state):
     generated_at = state.get("idle_cards_cache_generated_at")
     if not cards or not generated_at:
         return None
+    if not isinstance(cards, list) or not cards:
+        return None
+    if (cards[0] or {}).get("type") != "practice":
+        return None
 
     try:
         age_seconds = (_utc_now() - generated_at).total_seconds()
@@ -3099,6 +3103,17 @@ def _build_mcq_feedback_reply(item, correct, selected_option=None):
     return "\n".join(lines)
 
 
+def _mcq_followup_actions(exclude_actions=None):
+    excluded = set(exclude_actions or [])
+    actions = [
+        {"action": "explain_why", "label": "Explain why"},
+        {"action": "quick_recap", "label": "Give me the rule"},
+        {"action": "show_source", "label": "Show source"},
+        {"action": "another_question", "label": "Another question"},
+    ]
+    return [action for action in actions if action["action"] not in excluded]
+
+
 def _board_rule_text(item):
     rule = (item.get("board_takeaway") or item.get("board_rule") or "").strip()
     if rule:
@@ -3298,6 +3313,23 @@ def get_idle_study_cards(session_id):
     if practice_item:
         used_ids.add(practice_item["id"])
         cards.append(_build_card("practice_card", "practice", practice_item, "Quick MCQ", "1-min practice", "Start"))
+    elif mcq_pool:
+        fallback_practice_item = _pick_targeted_item(
+            session_id,
+            state,
+            [item for item in mcq_pool if item["id"] not in used_ids],
+            "practice_fallback",
+            preferred_item_type="mcq",
+            preferred_topic=preferred_topic,
+            preferred_template_family=preferred_template_family,
+            preferred_decision_pressure=preferred_decision_pressure,
+            preferred_difficulty_level=target_level,
+            preferred_question_style=target_style,
+            reinforcement=reinforcement,
+        )
+        if fallback_practice_item:
+            used_ids.add(fallback_practice_item["id"])
+            cards.append(_build_card("practice_card", "practice", fallback_practice_item, "Quick MCQ", "1-min practice", "Start"))
 
     challenge_level = min(policy["max_level"], target_level + 1)
     challenge_style = _target_question_style(state, challenge_level, available_styles)
@@ -3471,12 +3503,7 @@ def _build_study_item_payload(item):
                 "question_quality_score_10": item.get("question_quality_score_10"),
                 "question_style": item.get("question_style"),
                 "decision_point": item.get("decision_point"),
-                "actions": [
-                    {"action": "another_question", "label": "Another question"},
-                    {"action": "explain_why", "label": "Explain why"},
-                    {"action": "show_source", "label": "Show source"},
-                    {"action": "quick_recap", "label": "Give me the rule"},
-                ],
+                "actions": _mcq_followup_actions(),
             }
         )
     else:
@@ -3758,12 +3785,7 @@ def answer_mcq(session_id, content_item_id, selected_option):
         },
         "session_meta": _session_meta_payload(updated_state, policy),
     }
-    response["study_followups"] = [
-        {"action": "another_question", "label": "Another question"},
-        {"action": "explain_why", "label": "Explain why"},
-        {"action": "show_source", "label": "Show source"},
-        {"action": "quick_recap", "label": "Give me the rule"},
-    ]
+    response["study_followups"] = _mcq_followup_actions()
     return response
 
 
@@ -3847,10 +3869,14 @@ def handle_study_action(session_id, content_item_id, action):
 
     if action == "show_source":
         log_event("source_requested", session_id, {"content_item_id": item["id"], "topic": item["topic"]})
-        return {
+        response = {
             "reply": None,
             "sources": _source_payload(item),
         }
+        if item["item_type"] == "mcq":
+            response["study_context_item_id"] = item["id"]
+            response["study_followups"] = _mcq_followup_actions({"show_source"})
+        return response
 
     if action == "repeat_weak_topic":
         weak_topics = ((state.get("study_session_last_summary") or {}).get("weak_topics") or [])
@@ -3878,11 +3904,19 @@ def handle_study_action(session_id, content_item_id, action):
 
     if action == "explain_why":
         if item["item_type"] == "mcq":
-            return {"reply": _build_mcq_explain_reply(item, state)}
+            return {
+                "reply": _build_mcq_explain_reply(item, state),
+                "study_context_item_id": item["id"],
+                "study_followups": _mcq_followup_actions({"explain_why"}),
+            }
         return {"reply": _build_rule_reply(item)}
 
     if action == "quick_recap":
-        return {"reply": _build_rule_reply(item)}
+        response = {"reply": _build_rule_reply(item)}
+        if item["item_type"] == "mcq":
+            response["study_context_item_id"] = item["id"]
+            response["study_followups"] = _mcq_followup_actions({"quick_recap"})
+        return response
 
     if action == "another_question":
         next_item = _pick_next_session_item(session_id, state, policy, anchor_topic=item.get("topic")) or _pick_related_item(session_id, item, "mcq", exclude_self=True)
