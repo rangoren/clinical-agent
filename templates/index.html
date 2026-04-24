@@ -6326,12 +6326,11 @@
                 if (data.reply) {
                     appendAssistantMessage(data.reply);
                 }
+                const studyCardsLoadPromise = !data.reply ? maybeShowStudyCards(true) : Promise.resolve();
                 await refreshCalendarStatus();
                 await refreshDutySyncStatus();
+                await studyCardsLoadPromise;
                 setComposerEnabled(true);
-                if (!data.reply) {
-                    maybeShowStudyCards(true);
-                }
                 refreshEntryGuidanceVisibility();
                 attemptInitialComposerFocus();
             } catch (error) {
