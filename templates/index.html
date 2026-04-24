@@ -1913,6 +1913,8 @@
         let studyCardsRequested = false;
         let studyCardsDismissed = false;
         let studyCardsRequestToken = 0;
+        let pendingStudyCardsPromise = null;
+        let pendingStudyCardsResult = null;
         let entryGuidanceDismissed = false;
         let composerModeStripOpen = false;
         let pullRefreshState = "idle";
@@ -2314,6 +2316,33 @@
             }, 0);
         }
 
+        function requestStudyCardsData() {
+            if (pendingStudyCardsResult) {
+                return Promise.resolve(pendingStudyCardsResult);
+            }
+            if (pendingStudyCardsPromise) {
+                return pendingStudyCardsPromise;
+            }
+            pendingStudyCardsPromise = fetch("/study/cards", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    session_id: sessionId
+                })
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    pendingStudyCardsResult = data;
+                    return data;
+                })
+                .finally(() => {
+                    pendingStudyCardsPromise = null;
+                });
+            return pendingStudyCardsPromise;
+        }
+
         function shouldShowStudyCards(manual = false) {
             const input = document.getElementById("input");
             if (appMode !== "clinical" || !input || input.value.trim()) return false;
@@ -2441,20 +2470,12 @@
             }
 
             try {
-                const response = await fetch("/study/cards", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        session_id: sessionId
-                    })
-                });
-                const data = await response.json();
+                const data = await requestStudyCardsData();
                 if (requestToken !== studyCardsRequestToken) {
                     return;
                 }
                 studyCardsRequested = false;
+                pendingStudyCardsResult = null;
                 if (!shouldShowStudyCards(force)) {
                     hideStudyCards();
                     return;
@@ -6821,6 +6842,7 @@
             renderStudyCards(initialCachedStudyCards);
         } else if (appMode === "clinical") {
             renderStudyCardPlaceholders();
+            requestStudyCardsData().catch(() => {});
         }
         refreshEntryGuidanceVisibility();
         {% if app_env != "production" and app_env != "development" %}
