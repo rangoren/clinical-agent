@@ -6350,19 +6350,9 @@
                 }
                 setComposerEnabled(true);
                 updateComposerState();
-                if (
-                    !data.reply &&
-                    data.study_cards &&
-                    Array.isArray(data.study_cards.cards) &&
-                    data.study_cards.cards.length &&
-                    shouldShowStudyCards(true)
-                ) {
-                    pendingStudyCardsResult = data.study_cards;
-                    renderStudyCards(data.study_cards.cards);
-                }
                 await refreshCalendarStatus();
                 await refreshDutySyncStatus();
-                if (!data.reply && (!data.study_cards || !Array.isArray(data.study_cards.cards) || !data.study_cards.cards.length)) {
+                if (!data.reply) {
                     await maybeShowStudyCards(true);
                 }
                 refreshEntryGuidanceVisibility();

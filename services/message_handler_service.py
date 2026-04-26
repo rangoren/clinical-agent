@@ -39,7 +39,7 @@ from services.prompt_service import (
     build_textbook_system_prompt,
 )
 from services.response_service import generate_reply
-from services.study_service import get_idle_study_cards, resolve_study_chat_message
+from services.study_service import resolve_study_chat_message
 from services.text_formatting import format_basic_clinical_response, format_response
 from services.textbook_runtime_service import (
     build_gabbe_textbook_context,
@@ -474,11 +474,7 @@ def get_session_state(session_id):
 
     touch_user_profile(session_id)
     log_event("session_bootstrap", session_id, {"state": "ready"})
-    return {
-        "state": "ready",
-        "needs_onboarding": False,
-        "study_cards": get_idle_study_cards(session_id),
-    }
+    return {"state": "ready", "needs_onboarding": False}
 
 
 def continue_onboarding(session_id):
