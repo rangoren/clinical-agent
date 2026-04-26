@@ -6306,7 +6306,6 @@
             await restoreDutySyncPushContextFromStorage();
             studyCardsDismissed = false;
             cancelDeferredStudyCardsLoad();
-            setComposerEnabled(false);
             setStatus("Checking");
             refreshEntryGuidanceVisibility();
 
@@ -6334,6 +6333,7 @@
 
                 if (data.state === "incomplete_onboarding") {
                     clearStudyCards();
+                    setComposerEnabled(false);
                     showSessionBanner(
                         "You didn’t finish onboarding last time.",
                         `
@@ -6839,6 +6839,7 @@
         }
         renderModeState();
         autoResizeInput();
+        setComposerEnabled(true);
         updateComposerState();
         const initialCachedStudyCards = loadCachedStudyCards();
         if (appMode === "clinical" && initialCachedStudyCards && initialCachedStudyCards.length) {
