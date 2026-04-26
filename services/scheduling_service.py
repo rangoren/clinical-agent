@@ -2476,12 +2476,12 @@ def _infer_duty_stats_analysis(text):
         return "weekend_count"
     if "trend" in lowered or "מגמה" in lowered:
         return "trend"
+    if "average" in lowered or "ממוצע" in lowered:
+        return "monthly_average"
     if any(marker in lowered for marker in ("by month", "per month", "each month", "לפי חודש", "לכל חודש")):
         return "monthly_breakdown"
     if any(marker in lowered for marker in ("by weekday", "by day", "per weekday", "לפי יום", "לפי ימי")):
         return "weekday_breakdown"
-    if "average" in lowered or "ממוצע" in lowered:
-        return "monthly_average"
     if _extract_stats_weekday_filter(text) is not None:
         return "weekday_count"
     return "total_count"
@@ -2619,7 +2619,14 @@ def _build_historical_duty_basis(category, start_date, end_date):
 
 
 def _render_historical_duty_stats_reply(category, analysis, start_date, end_date, range_label, duty_dates, weekday_filter=None, comparison_years=None):
-    if not duty_dates:
+    filtered_dates = list(duty_dates)
+    weekday_name = None
+    if weekday_filter is not None:
+        weekday_name = datetime(2026, 4, 20 + weekday_filter).strftime("%A")
+        if analysis in {"weekday_count", "monthly_average", "monthly_breakdown", "total_count", "trend", "busiest_month"}:
+            filtered_dates = [duty_date for duty_date in duty_dates if duty_date.weekday() == weekday_filter]
+
+    if not filtered_dates:
         return {
             "reply": (
                 "I couldn’t find any matching duty events for that period.\n\n"
@@ -2629,8 +2636,7 @@ def _render_historical_duty_stats_reply(category, analysis, start_date, end_date
         }
 
     if analysis == "weekday_count" and weekday_filter is not None:
-        count = sum(1 for duty_date in duty_dates if duty_date.weekday() == weekday_filter)
-        weekday_name = datetime(2026, 4, 20 + weekday_filter).strftime("%A")
+        count = len(filtered_dates)
         return {
             "reply": (
                 f"You had {count} {weekday_name} {_category_label_for_reply(category)} in {range_label}.\n\n"
@@ -2665,14 +2671,15 @@ def _render_historical_duty_stats_reply(category, analysis, start_date, end_date
 
     if analysis == "busiest_month":
         month_counts = {}
-        for duty_date in duty_dates:
+        for duty_date in filtered_dates:
             month_key = duty_date.strftime("%Y-%m")
             month_counts[month_key] = month_counts.get(month_key, 0) + 1
         busiest_month = max(month_counts, key=month_counts.get)
         busiest_month_label = datetime.strptime(busiest_month, "%Y-%m").strftime("%B %Y")
+        qualifier = f" for {weekday_name} " if weekday_name else " "
         return {
             "reply": (
-                f"{busiest_month_label} was your busiest month for {_category_label_for_reply(category)}, with {month_counts[busiest_month]}.\n\n"
+                f"{busiest_month_label} was your busiest month{qualifier}for {_category_label_for_reply(category)}, with {month_counts[busiest_month]}.\n\n"
                 + _build_historical_duty_basis(category, start_date, end_date)
             ),
             "scheduling_draft": None,
@@ -2680,10 +2687,11 @@ def _render_historical_duty_stats_reply(category, analysis, start_date, end_date
 
     if analysis == "monthly_breakdown":
         month_counts = {}
-        for duty_date in duty_dates:
+        for duty_date in filtered_dates:
             month_key = duty_date.strftime("%Y-%m")
             month_counts[month_key] = month_counts.get(month_key, 0) + 1
-        lines = [f"Here is your monthly {_category_label_for_reply(category)} breakdown:"]
+        prefix = f"{weekday_name} " if weekday_name else ""
+        lines = [f"Here is your monthly {prefix}{_category_label_for_reply(category)} breakdown:"]
         for month_key in sorted(month_counts):
             month_label = datetime.strptime(month_key, "%Y-%m").strftime("%B %Y")
             lines.append(f"- {month_label}: {month_counts[month_key]}")
@@ -2705,15 +2713,16 @@ def _render_historical_duty_stats_reply(category, analysis, start_date, end_date
 
     if analysis == "monthly_average":
         month_counts = {}
-        for duty_date in duty_dates:
+        for duty_date in filtered_dates:
             month_key = duty_date.strftime("%Y-%m")
             month_counts[month_key] = month_counts.get(month_key, 0) + 1
         months_with_data = len(month_counts)
         average = (sum(month_counts.values()) / months_with_data) if months_with_data else 0
+        prefix = f"{weekday_name} " if weekday_name else ""
         return {
             "reply": (
-                f"Your average was {average:.1f} {_category_label_for_reply(category)} per month in {range_label}.\n\n"
-                f"Basis: Searched all accessible calendars for {_category_label_for_reply(category)} from "
+                f"Your average was {average:.1f} {prefix}{_category_label_for_reply(category)} per month in {range_label}.\n\n"
+                f"Basis: Searched all accessible calendars for {prefix}{_category_label_for_reply(category)} from "
                 f'{start_date.strftime("%b")} {start_date.day}, {start_date.year} to '
                 f'{end_date.strftime("%b")} {end_date.day}, {end_date.year}, deduplicated by start date, and averaged across {months_with_data} month'
                 f'{"s" if months_with_data != 1 else ""} with data.'
@@ -2723,7 +2732,7 @@ def _render_historical_duty_stats_reply(category, analysis, start_date, end_date
 
     if analysis == "trend":
         month_counts = {}
-        for duty_date in duty_dates:
+        for duty_date in filtered_dates:
             month_key = duty_date.strftime("%Y-%m")
             month_counts[month_key] = month_counts.get(month_key, 0) + 1
         ordered_months = sorted(month_counts)
@@ -2742,7 +2751,7 @@ def _render_historical_duty_stats_reply(category, analysis, start_date, end_date
 
     return {
         "reply": (
-            f"You had {len(duty_dates)} {_category_label_for_reply(category)} in {range_label}.\n\n"
+            f"You had {len(filtered_dates)} {f'{weekday_name} ' if weekday_name else ''}{_category_label_for_reply(category)} in {range_label}.\n\n"
             + _build_historical_duty_basis(category, start_date, end_date)
         ),
         "scheduling_draft": None,
