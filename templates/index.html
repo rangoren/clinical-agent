@@ -1908,6 +1908,7 @@
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
         let appMode = "clinical";
+        let pendingSchedulingRedirectMessage = null;
         let chatRenderContextToken = 0;
         let googleCalendarConnected = false;
         let studyCardsRequested = false;
@@ -5552,6 +5553,14 @@
             bootstrapSession();
         }
 
+        function openSchedulingForRedirectedQuestion(button) {
+            const message = String((button && button.dataset && button.dataset.redirectMessage) || "").trim();
+            if (message) {
+                pendingSchedulingRedirectMessage = message;
+            }
+            switchAppMode("scheduling");
+        }
+
         function resetChatSurfaceForPushModeTransition() {
             chatRenderContextToken += 1;
             const chat = document.getElementById("chat");
@@ -5651,6 +5660,13 @@
         function appendAssistantMessage(message, variant = "") {
             dismissStudyCards();
             return appendMessage("assistant", formatAssistantMessageHtml(message), variant);
+        }
+
+        function bindSchedulingRedirectMessage(row, message) {
+            if (!row || !message) return;
+            const button = row.querySelector("[data-scheduling-redirect-button]");
+            if (!button) return;
+            button.dataset.redirectMessage = message;
         }
 
         function appendUserMessage(message) {
@@ -6352,6 +6368,12 @@
                 updateComposerState();
                 await refreshCalendarStatus();
                 await refreshDutySyncStatus();
+                if (appMode === "scheduling" && pendingSchedulingRedirectMessage) {
+                    const redirectMessage = pendingSchedulingRedirectMessage;
+                    pendingSchedulingRedirectMessage = null;
+                    await sendMessage(redirectMessage);
+                    return;
+                }
                 if (!data.reply) {
                     await maybeShowStudyCards(true);
                 }
@@ -6422,11 +6444,11 @@
             }
         }
 
-        async function sendMessage() {
+        async function sendMessage(prefilledMessage = null) {
             if (!chatReady) return;
 
             const input = document.getElementById("input");
-            const message = input.value.trim();
+            const message = typeof prefilledMessage === "string" ? prefilledMessage.trim() : input.value.trim();
             if (!message) return;
             const requestMode = appMode;
             const requestToken = chatRenderContextToken;
@@ -6460,6 +6482,9 @@
                     return;
                 }
                 const assistantRow = appendAssistantMessage(data.reply);
+                if (data.scheduling_redirect_message) {
+                    bindSchedulingRedirectMessage(assistantRow, data.scheduling_redirect_message);
+                }
 
                 if (data.undo) {
                     const label = data.undo_type === "protocol"

@@ -89,6 +89,7 @@ def _build_message_response(
     needs_onboarding=False,
     sources=None,
     suggested_save=None,
+    scheduling_redirect_message=None,
 ):
     normalized_reply = reply
     if not _reply_has_visible_text(normalized_reply):
@@ -106,6 +107,7 @@ def _build_message_response(
         "needs_onboarding": needs_onboarding,
         "sources": sources or [],
         "suggested_save": suggested_save,
+        "scheduling_redirect_message": scheduling_redirect_message,
     }
 
 
@@ -797,7 +799,7 @@ def _build_scheduling_redirect_reply():
         "<p>That looks like a scheduling question, not a clinical one.</p>"
         "<p>Want to switch to Scheduling so I can check it there?</p>"
         '<div class="utility-actions" style="margin-top: 20px;">'
-        '<button class="secondary-button" onclick="switchAppMode(\'scheduling\')">Open Scheduling</button>'
+        '<button class="secondary-button" data-scheduling-redirect-button="true" onclick="openSchedulingForRedirectedQuestion(this)">Open Scheduling</button>'
         "</div>"
     )
 
@@ -817,6 +819,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         return _build_message_response(
             reply=reply,
             assistant_message_id=assistant_message_id,
+            scheduling_redirect_message=user_message,
         )
 
     if _looks_like_profile_status_question(user_message):
