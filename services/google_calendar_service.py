@@ -30,6 +30,8 @@ GOOGLE_SCOPES = [GOOGLE_CALENDAR_SCOPE, GOOGLE_SHEETS_READONLY_SCOPE]
 GOOGLE_SCOPE = " ".join(GOOGLE_SCOPES)
 GOOGLE_HTTP_TIMEOUT_SECONDS = 8
 APP_ZONEINFO = ZoneInfo(APP_TIMEZONE)
+GOOGLE_HISTORY_CACHE_TTL_SECONDS = 300
+_google_history_cache = {}
 
 
 def _utcnow():
@@ -50,6 +52,33 @@ def _google_events_url(calendar_id, event_id=None):
     if not event_id:
         return base_url
     return f"{base_url}/{quote(event_id, safe='')}"
+
+
+def _history_cache_key(session_id, start_at, end_at):
+    return (
+        session_id,
+        _as_google_utc(start_at),
+        _as_google_utc(end_at),
+    )
+
+
+def _get_cached_google_history(session_id, start_at, end_at):
+    cache_key = _history_cache_key(session_id, start_at, end_at)
+    cached = _google_history_cache.get(cache_key)
+    if not cached:
+        return None
+    age_seconds = (_utcnow() - cached["cached_at"]).total_seconds()
+    if age_seconds < 0 or age_seconds > GOOGLE_HISTORY_CACHE_TTL_SECONDS:
+        _google_history_cache.pop(cache_key, None)
+        return None
+    return cached["events"]
+
+
+def _store_cached_google_history(session_id, start_at, end_at, events):
+    _google_history_cache[_history_cache_key(session_id, start_at, end_at)] = {
+        "cached_at": _utcnow(),
+        "events": events,
+    }
 
 
 def _normalize_google_datetime(raw_value):
@@ -477,6 +506,92 @@ def _get_selected_google_calendar_id(session_id, calendar_type, preferred_calend
 def _get_all_google_calendar_ids(session_id):
     calendars = get_google_calendars(session_id)
     return [calendar.get("provider_calendar_id") for calendar in calendars if calendar.get("provider_calendar_id")]
+
+
+def _google_get_json_with_refresh(session_id, connection, url, params):
+    response = requests.get(
+        url,
+        headers=_auth_headers(connection["access_token"]),
+        params=params,
+        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+    )
+    if response.status_code == 401:
+        refreshed_access_token = _refresh_google_access_token(session_id, connection)
+        if refreshed_access_token:
+            response = requests.get(
+                url,
+                headers=_auth_headers(refreshed_access_token),
+                params=params,
+                timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+            )
+    response.raise_for_status()
+    return response.json()
+
+
+def _list_google_calendar_events(session_id, connection, calendar_id, start_at, end_at):
+    if not calendar_id:
+        return []
+
+    items = []
+    page_token = None
+    while True:
+        payload = _google_get_json_with_refresh(
+            session_id,
+            connection,
+            _google_events_url(calendar_id),
+            {
+                "timeMin": _as_google_utc(start_at),
+                "timeMax": _as_google_utc(end_at),
+                "singleEvents": "true",
+                "orderBy": "startTime",
+                "maxResults": 2500,
+                "pageToken": page_token,
+                "fields": "items(id,summary,status,start/dateTime,end/dateTime),nextPageToken",
+            },
+        )
+        items.extend(payload.get("items", []))
+        page_token = payload.get("nextPageToken")
+        if not page_token:
+            break
+    return items
+
+
+def list_google_calendar_events_across_calendars(session_id, start_at, end_at):
+    cached_events = _get_cached_google_history(session_id, start_at, end_at)
+    if cached_events is not None:
+        return cached_events
+
+    connection = _get_connection(session_id)
+    if not connection:
+        return []
+
+    calendars = get_google_calendars(session_id)
+    all_events = []
+    for calendar in calendars:
+        calendar_id = calendar.get("provider_calendar_id")
+        if not calendar_id:
+            continue
+        for item in _list_google_calendar_events(session_id, connection, calendar_id, start_at, end_at):
+            start_value = item.get("start", {}).get("dateTime")
+            end_value = item.get("end", {}).get("dateTime")
+            start_dt = _normalize_google_datetime(start_value)
+            end_dt = _normalize_google_datetime(end_value)
+            if not start_dt or not end_dt:
+                continue
+            all_events.append(
+                {
+                    "provider_calendar_id": calendar_id,
+                    "calendar_name": calendar.get("name", "Google Calendar"),
+                    "provider_event_id": item.get("id"),
+                    "title": item.get("summary") or "",
+                    "status": item.get("status") or "confirmed",
+                    "start_at": start_dt,
+                    "end_at": end_dt,
+                }
+            )
+
+    _store_cached_google_history(session_id, start_at, end_at, all_events)
+    return all_events
 
 
 def _post_event(session_id, event_payload, calendar_type, preferred_calendar_id=None):

@@ -18,6 +18,7 @@ from services.google_calendar_service import (
     get_google_calendar_name,
     get_google_calendars,
     has_google_calendar_connection,
+    list_google_calendar_events_across_calendars,
     sync_google_create_event,
     sync_google_delete_event,
     sync_google_update_event,
@@ -108,6 +109,18 @@ MONTHS = {
     "נובמבר": 11,
     "דצמבר": 12,
 }
+HISTORICAL_DUTY_TERMS = (
+    "duty",
+    "duties",
+    "shift",
+    "shifts",
+    "on call",
+    "on-call",
+    "תורנות",
+    "תורנויות",
+    "כוננות",
+)
+WEEKEND_MARKERS = ("weekend", "weekends", "סופש", "סוף שבוע", "סופי שבוע")
 DELETE_KEYWORDS = (
     "delete",
     "remove",
@@ -2397,6 +2410,376 @@ def _build_monthly_shift_summary(session_id, message):
     return _build_monthly_shift_summary_for_month(session_id, month, year)
 
 
+def _extract_year_mentions(text):
+    return [int(match) for match in re.findall(r"\b(20\d{2})\b", text or "")]
+
+
+def _start_of_day(target_date):
+    return datetime(target_date.year, target_date.month, target_date.day, tzinfo=APP_TIMEZONE)
+
+
+def _end_of_day(target_date):
+    return _start_of_day(target_date) + timedelta(days=1)
+
+
+def _shift_calendar_month(year, month, delta):
+    month_index = ((year * 12) + (month - 1)) + delta
+    shifted_year = month_index // 12
+    shifted_month = (month_index % 12) + 1
+    return shifted_year, shifted_month
+
+
+def _resolve_last_full_months_range(month_count, today):
+    last_full_month_year, last_full_month = _shift_calendar_month(today.year, today.month, -1)
+    start_year, start_month = _shift_calendar_month(last_full_month_year, last_full_month, -(month_count - 1))
+    start_date = datetime(start_year, start_month, 1).date()
+    end_day = monthrange(last_full_month_year, last_full_month)[1]
+    end_date = datetime(last_full_month_year, last_full_month, end_day).date()
+    return start_date, end_date
+
+
+def _extract_stats_weekday_filter(text):
+    lowered = (text or "").lower()
+    weekday_patterns = {
+        0: (r"\bmondays?\b", r"\bmondays\b", r"יום שני", r"\bשני\b"),
+        1: (r"\btuesdays?\b", r"\bיום שלישי\b", r"\bשלישי\b"),
+        2: (r"\bwednesdays?\b", r"\bיום רביעי\b", r"\bרביעי\b"),
+        3: (r"\bthursdays?\b", r"\bיום חמישי\b", r"\bחמישי\b"),
+        4: (r"\bfridays?\b", r"\bיום שישי\b", r"\bשישי\b"),
+        5: (r"\bsaturdays?\b", r"\bשבת\b"),
+        6: (r"\bsundays?\b", r"\bיום ראשון\b", r"\bראשון\b"),
+    }
+    for weekday_index, patterns in weekday_patterns.items():
+        if any(re.search(pattern, lowered) for pattern in patterns):
+            return weekday_index
+    return None
+
+
+def _infer_duty_stats_category(text):
+    lowered = (text or "").lower()
+    if "מחלקות" in lowered or "department duty" in lowered or "department duties" in lowered:
+        return "department"
+    if "חצי" in lowered or "half duty" in lowered or "half duties" in lowered:
+        return "half"
+    return "regular"
+
+
+def _infer_duty_stats_analysis(text):
+    lowered = (text or "").lower()
+    if any(marker in lowered for marker in ("compare", "comparison", "versus", " vs ", "לעומת", "בהשוואה")):
+        return "comparison"
+    if "busiest weekday" in lowered or "busiest day" in lowered or "which weekday" in lowered:
+        return "busiest_weekday"
+    if "busiest month" in lowered:
+        return "busiest_month"
+    if any(marker in lowered for marker in WEEKEND_MARKERS):
+        return "weekend_count"
+    if "trend" in lowered or "מגמה" in lowered:
+        return "trend"
+    if any(marker in lowered for marker in ("by month", "per month", "each month", "לפי חודש", "לכל חודש")):
+        return "monthly_breakdown"
+    if any(marker in lowered for marker in ("by weekday", "by day", "per weekday", "לפי יום", "לפי ימי")):
+        return "weekday_breakdown"
+    if "average" in lowered or "ממוצע" in lowered:
+        return "monthly_average"
+    if _extract_stats_weekday_filter(text) is not None:
+        return "weekday_count"
+    return "total_count"
+
+
+def _is_historical_duty_stats_request(text):
+    lowered = (text or "").lower()
+    if not any(term in lowered for term in HISTORICAL_DUTY_TERMS):
+        return False
+    if _extract_stats_weekday_filter(text) is not None:
+        return True
+    return any(
+        marker in lowered
+        for marker in (
+            "how many",
+            "count",
+            "total",
+            "average",
+            "busiest",
+            "weekend",
+            "trend",
+            "compare",
+            "comparison",
+            "last year",
+            "this year",
+            "previous",
+            "last 3 months",
+            "last 6 months",
+            "between",
+            "in 20",
+            "בשנה",
+            "השנה",
+            "שנה שעברה",
+            "בין",
+            "כמה",
+            "סך",
+            "ממוצע",
+        )
+    )
+
+
+def _resolve_historical_duty_date_range(text):
+    lowered = (text or "").lower()
+    today = _utcnow().date()
+
+    if "this year" in lowered or "מתחילת השנה" in lowered or "השנה" in lowered:
+        return datetime(today.year, 1, 1).date(), today, "this year"
+
+    if "last year" in lowered or "שנה שעברה" in lowered:
+        last_year = today.year - 1
+        return datetime(last_year, 1, 1).date(), datetime(last_year, 12, 31).date(), str(last_year)
+
+    month_window_match = re.search(r"\b(?:last|previous)\s+(\d{1,2})\s+months?\b", lowered)
+    if month_window_match:
+        months = max(1, int(month_window_match.group(1)))
+        start_date, end_date = _resolve_last_full_months_range(months, today)
+        return start_date, end_date, f"the last {months} full month{'s' if months != 1 else ''}"
+    if "שלושת החודשים האחרונים" in lowered:
+        start_date, end_date = _resolve_last_full_months_range(3, today)
+        return start_date, end_date, "the last 3 full months"
+
+    if "between" in lowered or "בין" in lowered:
+        all_dates = _extract_all_dates(text)
+        if len(all_dates) >= 2:
+            start_date, end_date = sorted(all_dates[:2])
+            return start_date, end_date, f"{start_date.strftime('%b')} {start_date.day}, {start_date.year} to {end_date.strftime('%b')} {end_date.day}, {end_date.year}"
+
+    month, year = _extract_month_year(text)
+    if month and year:
+        end_day = monthrange(year, month)[1]
+        start_date = datetime(year, month, 1).date()
+        end_date = datetime(year, month, end_day).date()
+        return start_date, end_date, start_date.strftime("%B %Y")
+
+    year_mentions = _extract_year_mentions(text)
+    if year_mentions:
+        year = year_mentions[0]
+        return datetime(year, 1, 1).date(), datetime(year, 12, 31).date(), str(year)
+
+    start_date, end_date = _resolve_last_full_months_range(3, today)
+    return start_date, end_date, f"{start_date.strftime('%b')} {start_date.day}, {start_date.year} to {end_date.strftime('%b')} {end_date.day}, {end_date.year}"
+
+
+def _classify_duty_event_title(title):
+    lowered = re.sub(r"\s+", " ", str(title or "").strip().lower())
+    if "תורנות" not in lowered:
+        return None
+    if "מחלקות" in lowered:
+        return "department"
+    if "חצי" in lowered:
+        return "half"
+    return "regular"
+
+
+def _load_historical_duty_event_dates(session_id, category, start_date, end_date):
+    start_at = _start_of_day(start_date)
+    end_at = _end_of_day(end_date)
+    events = list_google_calendar_events_across_calendars(session_id, start_at, end_at)
+    seen_dates = set()
+    matched_dates = []
+    for event in events:
+        if (event.get("status") or "").lower() == "cancelled":
+            continue
+        event_category = _classify_duty_event_title(event.get("title"))
+        if event_category != category:
+            continue
+        event_start = event.get("start_at")
+        if not event_start:
+            continue
+        event_date = event_start.date()
+        if event_date < start_date or event_date > end_date:
+            continue
+        dedupe_key = (event_date.isoformat(), event_category)
+        if dedupe_key in seen_dates:
+            continue
+        seen_dates.add(dedupe_key)
+        matched_dates.append(event_date)
+    return sorted(matched_dates)
+
+
+def _category_label_for_reply(category):
+    return {
+        "regular": "regular duties",
+        "half": "half duties",
+        "department": "department duties",
+    }.get(category, "duties")
+
+
+def _build_historical_duty_basis(category, start_date, end_date):
+    return (
+        f'Basis: Searched all accessible calendars for {_category_label_for_reply(category)} '
+        f'from {start_date.strftime("%b")} {start_date.day}, {start_date.year} to '
+        f'{end_date.strftime("%b")} {end_date.day}, {end_date.year}, deduplicated by start date.'
+    )
+
+
+def _render_historical_duty_stats_reply(category, analysis, start_date, end_date, range_label, duty_dates, weekday_filter=None, comparison_years=None):
+    if not duty_dates:
+        return {
+            "reply": (
+                "I couldn’t find any matching duty events for that period.\n\n"
+                + _build_historical_duty_basis(category, start_date, end_date)
+            ),
+            "scheduling_draft": None,
+        }
+
+    if analysis == "weekday_count" and weekday_filter is not None:
+        count = sum(1 for duty_date in duty_dates if duty_date.weekday() == weekday_filter)
+        weekday_name = datetime(2026, 4, 20 + weekday_filter).strftime("%A")
+        return {
+            "reply": (
+                f"You had {count} {weekday_name} {_category_label_for_reply(category)} in {range_label}.\n\n"
+                + _build_historical_duty_basis(category, start_date, end_date)
+            ),
+            "scheduling_draft": None,
+        }
+
+    if analysis == "weekend_count":
+        count = sum(1 for duty_date in duty_dates if duty_date.weekday() in {5, 6})
+        return {
+            "reply": (
+                f"You had {count} weekend {_category_label_for_reply(category)} in {range_label}.\n\n"
+                + _build_historical_duty_basis(category, start_date, end_date)
+            ),
+            "scheduling_draft": None,
+        }
+
+    if analysis == "busiest_weekday":
+        weekday_counts = {}
+        for duty_date in duty_dates:
+            weekday_counts[duty_date.weekday()] = weekday_counts.get(duty_date.weekday(), 0) + 1
+        busiest_weekday = max(weekday_counts, key=weekday_counts.get)
+        weekday_name = datetime(2026, 4, 20 + busiest_weekday).strftime("%A")
+        return {
+            "reply": (
+                f"{weekday_name} was your busiest weekday for {_category_label_for_reply(category)} in {range_label}, with {weekday_counts[busiest_weekday]}.\n\n"
+                + _build_historical_duty_basis(category, start_date, end_date)
+            ),
+            "scheduling_draft": None,
+        }
+
+    if analysis == "busiest_month":
+        month_counts = {}
+        for duty_date in duty_dates:
+            month_key = duty_date.strftime("%Y-%m")
+            month_counts[month_key] = month_counts.get(month_key, 0) + 1
+        busiest_month = max(month_counts, key=month_counts.get)
+        busiest_month_label = datetime.strptime(busiest_month, "%Y-%m").strftime("%B %Y")
+        return {
+            "reply": (
+                f"{busiest_month_label} was your busiest month for {_category_label_for_reply(category)}, with {month_counts[busiest_month]}.\n\n"
+                + _build_historical_duty_basis(category, start_date, end_date)
+            ),
+            "scheduling_draft": None,
+        }
+
+    if analysis == "monthly_breakdown":
+        month_counts = {}
+        for duty_date in duty_dates:
+            month_key = duty_date.strftime("%Y-%m")
+            month_counts[month_key] = month_counts.get(month_key, 0) + 1
+        lines = [f"Here is your monthly {_category_label_for_reply(category)} breakdown:"]
+        for month_key in sorted(month_counts):
+            month_label = datetime.strptime(month_key, "%Y-%m").strftime("%B %Y")
+            lines.append(f"- {month_label}: {month_counts[month_key]}")
+        lines.append("")
+        lines.append(_build_historical_duty_basis(category, start_date, end_date))
+        return {"reply": "\n".join(lines), "scheduling_draft": None}
+
+    if analysis == "weekday_breakdown":
+        weekday_counts = {index: 0 for index in range(7)}
+        for duty_date in duty_dates:
+            weekday_counts[duty_date.weekday()] += 1
+        lines = [f"Here is your weekday breakdown for {_category_label_for_reply(category)}:"]
+        for weekday_index in range(7):
+            weekday_name = datetime(2026, 4, 20 + weekday_index).strftime("%A")
+            lines.append(f"- {weekday_name}: {weekday_counts[weekday_index]}")
+        lines.append("")
+        lines.append(_build_historical_duty_basis(category, start_date, end_date))
+        return {"reply": "\n".join(lines), "scheduling_draft": None}
+
+    if analysis == "monthly_average":
+        month_counts = {}
+        for duty_date in duty_dates:
+            month_key = duty_date.strftime("%Y-%m")
+            month_counts[month_key] = month_counts.get(month_key, 0) + 1
+        months_with_data = len(month_counts)
+        average = (sum(month_counts.values()) / months_with_data) if months_with_data else 0
+        return {
+            "reply": (
+                f"Your average was {average:.1f} {_category_label_for_reply(category)} per month in {range_label}.\n\n"
+                f"Basis: Searched all accessible calendars for {_category_label_for_reply(category)} from "
+                f'{start_date.strftime("%b")} {start_date.day}, {start_date.year} to '
+                f'{end_date.strftime("%b")} {end_date.day}, {end_date.year}, deduplicated by start date, and averaged across {months_with_data} month'
+                f'{"s" if months_with_data != 1 else ""} with data.'
+            ),
+            "scheduling_draft": None,
+        }
+
+    if analysis == "trend":
+        month_counts = {}
+        for duty_date in duty_dates:
+            month_key = duty_date.strftime("%Y-%m")
+            month_counts[month_key] = month_counts.get(month_key, 0) + 1
+        ordered_months = sorted(month_counts)
+        if len(ordered_months) < 2:
+            trend_reply = "I can see matching duty events, but there isn’t enough month-to-month spread yet to call a trend."
+        else:
+            first_value = month_counts[ordered_months[0]]
+            last_value = month_counts[ordered_months[-1]]
+            if last_value > first_value:
+                trend_reply = f"Your {_category_label_for_reply(category)} trend is up overall across that period."
+            elif last_value < first_value:
+                trend_reply = f"Your {_category_label_for_reply(category)} trend is down overall across that period."
+            else:
+                trend_reply = f"Your {_category_label_for_reply(category)} trend looks broadly flat across that period."
+        return {"reply": f"{trend_reply}\n\n{_build_historical_duty_basis(category, start_date, end_date)}", "scheduling_draft": None}
+
+    return {
+        "reply": (
+            f"You had {len(duty_dates)} {_category_label_for_reply(category)} in {range_label}.\n\n"
+            + _build_historical_duty_basis(category, start_date, end_date)
+        ),
+        "scheduling_draft": None,
+    }
+
+
+def _build_historical_duty_stats_reply(session_id, user_message):
+    category = _infer_duty_stats_category(user_message)
+    analysis = _infer_duty_stats_analysis(user_message)
+    start_date, end_date, range_label = _resolve_historical_duty_date_range(user_message)
+    weekday_filter = _extract_stats_weekday_filter(user_message)
+
+    if analysis == "comparison":
+        years = sorted(set(_extract_year_mentions(user_message)))
+        if len(years) >= 2:
+            comparison_lines = []
+            for year in years[:2]:
+                year_start = datetime(year, 1, 1).date()
+                year_end = datetime(year, 12, 31).date()
+                year_dates = _load_historical_duty_event_dates(session_id, category, year_start, year_end)
+                comparison_lines.append(f"- {year}: {len(year_dates)} {_category_label_for_reply(category)}")
+            comparison_lines.append("")
+            comparison_lines.append(f"Basis: Searched all accessible calendars for {_category_label_for_reply(category)} in each full year, deduplicated by start date.")
+            return {"reply": "\n".join(comparison_lines), "scheduling_draft": None}
+
+    duty_dates = _load_historical_duty_event_dates(session_id, category, start_date, end_date)
+    return _render_historical_duty_stats_reply(
+        category=category,
+        analysis=analysis,
+        start_date=start_date,
+        end_date=end_date,
+        range_label=range_label,
+        duty_dates=duty_dates,
+        weekday_filter=weekday_filter,
+    )
+
+
 def _shift_month(year, month, delta):
     index = ((year * 12) + (month - 1)) + delta
     return index // 12, (index % 12) + 1
@@ -2469,6 +2852,14 @@ def handle_scheduling_message(session_id, user_message):
     if contextual_followup:
         _clear_pending_details_context(session_id)
         return contextual_followup
+
+    if _is_historical_duty_stats_request(normalized_user_message):
+        if not has_google_calendar_connection(session_id):
+            return {
+                "reply": "Connect your Google Calendar in Settings first, then I can analyze your historical duty stats here.",
+                "scheduling_draft": None,
+            }
+        return _build_historical_duty_stats_reply(session_id, normalized_user_message)
 
     if _is_monthly_shift_summary_request(normalized_user_message):
         return _build_monthly_shift_summary(session_id, normalized_user_message)
