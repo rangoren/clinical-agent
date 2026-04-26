@@ -796,7 +796,7 @@ def _build_scheduling_redirect_reply():
     return (
         "<p>That looks like a scheduling question, not a clinical one.</p>"
         "<p>Want to switch to Scheduling so I can check it there?</p>"
-        '<div class="utility-actions">'
+        '<div class="utility-actions" style="margin-top: 20px;">'
         '<button class="secondary-button" onclick="switchAppMode(\'scheduling\')">Open Scheduling</button>'
         "</div>"
     )
