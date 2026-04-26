@@ -6348,6 +6348,8 @@
                 if (data.reply) {
                     appendAssistantMessage(data.reply);
                 }
+                setComposerEnabled(true);
+                updateComposerState();
                 if (
                     !data.reply &&
                     data.study_cards &&
@@ -6360,7 +6362,6 @@
                 }
                 await refreshCalendarStatus();
                 await refreshDutySyncStatus();
-                setComposerEnabled(true);
                 if (!data.reply && (!data.study_cards || !Array.isArray(data.study_cards.cards) || !data.study_cards.cards.length)) {
                     await maybeShowStudyCards(true);
                 }
