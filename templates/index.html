@@ -6097,7 +6097,11 @@
                     <ul class="study-flow-list">${bulletsHtml}</ul>
                 `;
                 if (studyItem.actions && studyItem.actions.length) {
-                    card.appendChild(buildStudyActionsBar(studyItem.content_item_id, studyItem.actions));
+                    card.appendChild(buildStudyActionsBar(studyItem.content_item_id, studyItem.actions, {
+                        removeOnClick: false,
+                        sourceCard: card,
+                        closeOnActions: ["another_pearl"],
+                    }));
                     const hint = buildStudyMobileHint(studyItem.actions);
                     if (hint) {
                         card.appendChild(hint);
@@ -6114,6 +6118,7 @@
             const wrapper = document.createElement("div");
             wrapper.className = "study-actions";
             const removeOnClick = options.removeOnClick !== false;
+            const closeOnActions = Array.isArray(options.closeOnActions) ? options.closeOnActions : [];
             actions.forEach((action) => {
                 const button = document.createElement("button");
                 button.className = "secondary-button";
@@ -6122,7 +6127,9 @@
                     contentItemId,
                     action.action,
                     options.sourceCard || wrapper.closest(".study-flow-card, .study-followup-card"),
-                    removeOnClick || (options.keepCardUntilAnotherQuestion === true && action.action === "another_question")
+                    removeOnClick
+                    || (options.keepCardUntilAnotherQuestion === true && action.action === "another_question")
+                    || closeOnActions.includes(action.action)
                 ));
                 wrapper.appendChild(button);
             });
