@@ -2201,6 +2201,10 @@
         }
 
         async function openStudyCardsFromComposer() {
+            if (appMode === "scheduling") {
+                await openSchedulingQuickCardsFromComposer();
+                return;
+            }
             if (appMode !== "clinical") return;
             studyCardsDismissed = false;
             setComposerModeStripOpen(false);
@@ -2402,18 +2406,19 @@
             refreshEntryGuidanceVisibility();
         }
 
-        function shouldShowSchedulingQuickCards() {
+        function shouldShowSchedulingQuickCards(force = false) {
             const input = document.getElementById("input");
             if (appMode !== "scheduling" || !input || input.value.trim()) return false;
             if (document.getElementById("thinking-row")) return false;
+            if (force) return true;
             const chat = document.getElementById("chat");
             if (chat && chat.children.length > 0) return false;
             return true;
         }
 
-        function renderSchedulingQuickCards(cards) {
+        function renderSchedulingQuickCards(cards, force = false) {
             const shell = getStudyCardsShell();
-            if (!shell || !cards || cards.length === 0 || !shouldShowSchedulingQuickCards()) {
+            if (!shell || !cards || cards.length === 0 || !shouldShowSchedulingQuickCards(force)) {
                 clearStudyCards();
                 return;
             }
@@ -2466,6 +2471,34 @@
                 scrollChatToBottom();
             } catch (error) {
                 setThinkingState(false);
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function openSchedulingQuickCardsFromComposer() {
+            if (appMode !== "scheduling") return;
+            setComposerModeStripOpen(false);
+            dismissEntryGuidance();
+            const input = document.getElementById("input");
+            if (input) {
+                input.blur();
+            }
+            try {
+                const response = await fetch("/session-state", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        app_mode: "scheduling"
+                    })
+                });
+                const data = await response.json();
+                renderSchedulingQuickCards(data.quick_cards || [], true);
+                scrollChatToBottom();
+                updateComposerState();
+            } catch (error) {
                 appendAssistantMessage("Error: " + error, "error");
             }
         }
@@ -2587,7 +2620,7 @@
             document.getElementById("composer-mode-scheduling").classList.toggle("active", appMode === "scheduling");
             const openCardsButton = document.getElementById("composer-open-cards");
             if (openCardsButton) {
-                openCardsButton.disabled = appMode !== "clinical";
+                openCardsButton.disabled = appMode !== "clinical" && appMode !== "scheduling";
             }
             document.getElementById("settings-shell").classList.toggle("visible", appMode === "scheduling");
             const versionStamp = document.getElementById("version-stamp");
