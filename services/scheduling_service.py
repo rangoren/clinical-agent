@@ -14,6 +14,7 @@ from db import (
 )
 from services.scheduling_extraction_service import extract_scheduling_intent
 from services.logging_service import log_event
+from services.textbook_runtime_service import detect_textbook_request
 from services.google_calendar_service import (
     get_google_calendar_name,
     get_google_calendars,
@@ -2855,7 +2856,11 @@ def _looks_like_clinical_question_for_scheduling_redirect(session_id, user_messa
         or _is_bulk_shift_delete_request(normalized)
     ):
         return False
+    textbook_request = detect_textbook_request(normalized)
+    if textbook_request and textbook_request.get("supported"):
+        return True
     clinical_markers = (
+        "pph",
         "patient",
         "pregnant",
         "bleeding",
