@@ -2154,12 +2154,12 @@ def _sync_status_suffix(sync_status, *, plural=False):
     return ""
 
 
-def _build_calendar_selector_payload(session_id, calendar_type):
+def _build_calendar_selector_payload(session_id, calendar_type, preferred_calendar_id=None):
     calendars = get_google_calendars(session_id)
     if not calendars:
         return {"available_calendars": [], "selected_calendar": None}
 
-    preferred_calendar_id = _get_preferred_google_calendar(session_id, calendar_type)
+    preferred_calendar_id = preferred_calendar_id or _get_preferred_google_calendar(session_id, calendar_type)
     selected_calendar = None
 
     if preferred_calendar_id:

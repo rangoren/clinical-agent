@@ -462,13 +462,37 @@ def _review_summary(changes):
     return summary
 
 
+def _review_default_calendar_id(session_id, review_doc):
+    if not session_id or not review_doc:
+        return None
+    matched_calendar_ids = set()
+    for change in review_doc.get("detected_changes_json") or []:
+        if not change.get("included", True):
+            continue
+        old_duty = change.get("old_duty") or {}
+        new_duty = change.get("new_duty") or {}
+        duty_key = old_duty.get("duty_key") or new_duty.get("duty_key")
+        managed_doc = _managed_event_doc(session_id, duty_key)
+        provider_calendar_id = (managed_doc or {}).get("provider_calendar_id")
+        if provider_calendar_id:
+            matched_calendar_ids.add(provider_calendar_id)
+    if len(matched_calendar_ids) == 1:
+        return next(iter(matched_calendar_ids))
+    return None
+
+
 def _serialize_review_doc(review_doc):
     if not review_doc:
         return None
     changes = review_doc.get("detected_changes_json") or []
     included_count = sum(1 for item in changes if item.get("included", True))
     session_id = review_doc.get("session_id")
-    calendar_selector = _build_calendar_selector_payload(session_id, DUTY_SYNC_CALENDAR_TYPE) if session_id else {
+    review_calendar_id = _review_default_calendar_id(session_id, review_doc) if session_id else None
+    calendar_selector = _build_calendar_selector_payload(
+        session_id,
+        DUTY_SYNC_CALENDAR_TYPE,
+        preferred_calendar_id=review_calendar_id,
+    ) if session_id else {
         "available_calendars": [],
         "selected_calendar": None,
     }
