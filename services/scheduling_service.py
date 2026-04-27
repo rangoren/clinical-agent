@@ -2843,6 +2843,57 @@ def build_scheduling_welcome(session_id):
     return "Connect your calendar in Settings to start creating and syncing events."
 
 
+def _looks_like_clinical_question_for_scheduling_redirect(session_id, user_message):
+    normalized = (user_message or "").strip()
+    if not normalized:
+        return False
+    lowered = normalized.lower()
+    if (
+        _is_historical_duty_stats_request(normalized)
+        or _is_monthly_shift_summary_request(normalized)
+        or _is_daily_summary_request(normalized)
+        or _is_bulk_shift_delete_request(normalized)
+    ):
+        return False
+    clinical_markers = (
+        "patient",
+        "pregnant",
+        "bleeding",
+        "bp",
+        "blood pressure",
+        "pain",
+        "fever",
+        "headache",
+        "ultrasound",
+        "management",
+        "next step",
+        "postpartum",
+        "labor",
+        "delivery",
+        "ectopic",
+        "preeclampsia",
+        "ivf",
+        "iui",
+        "ovulation",
+        "cervix",
+        "cervical",
+        "pap smear",
+        "hpv",
+        "screening",
+    )
+    return any(marker in lowered for marker in clinical_markers)
+
+
+def _build_clinical_redirect_reply():
+    return (
+        "<p>That looks like a clinical question, not a scheduling one.</p>"
+        "<p>Want to switch to Clinical so I can answer it there?</p>"
+        '<div class="utility-actions" style="margin-top: 20px;">'
+        '<button class="secondary-button" data-clinical-redirect-button="true" onclick="openClinicalForRedirectedQuestion(this)">Open Clinical</button>'
+        "</div>"
+    )
+
+
 def handle_scheduling_message(session_id, user_message):
     normalized_user_message = _normalize_scheduling_aliases(session_id, user_message)
     if _is_scheduling_greeting(normalized_user_message):
@@ -2856,6 +2907,13 @@ def handle_scheduling_message(session_id, user_message):
         return {
             "reply": "Want me to check another month or a specific date?",
             "scheduling_draft": None,
+        }
+    if _looks_like_clinical_question_for_scheduling_redirect(session_id, normalized_user_message):
+        _clear_pending_details_context(session_id)
+        return {
+            "reply": _build_clinical_redirect_reply(),
+            "scheduling_draft": None,
+            "clinical_redirect_message": user_message,
         }
     contextual_followup = _maybe_resolve_scheduling_context_followup(session_id, normalized_user_message)
     if contextual_followup:

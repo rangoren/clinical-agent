@@ -1908,6 +1908,7 @@
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
         let appMode = "clinical";
+        let pendingClinicalRedirectMessage = null;
         let pendingSchedulingRedirectMessage = null;
         let chatRenderContextToken = 0;
         let googleCalendarConnected = false;
@@ -5561,6 +5562,14 @@
             switchAppMode("scheduling");
         }
 
+        function openClinicalForRedirectedQuestion(button) {
+            const message = String((button && button.dataset && button.dataset.redirectMessage) || "").trim();
+            if (message) {
+                pendingClinicalRedirectMessage = message;
+            }
+            switchAppMode("clinical");
+        }
+
         function resetChatSurfaceForPushModeTransition() {
             chatRenderContextToken += 1;
             const chat = document.getElementById("chat");
@@ -5665,6 +5674,13 @@
         function bindSchedulingRedirectMessage(row, message) {
             if (!row || !message) return;
             const button = row.querySelector("[data-scheduling-redirect-button]");
+            if (!button) return;
+            button.dataset.redirectMessage = message;
+        }
+
+        function bindClinicalRedirectMessage(row, message) {
+            if (!row || !message) return;
+            const button = row.querySelector("[data-clinical-redirect-button]");
             if (!button) return;
             button.dataset.redirectMessage = message;
         }
@@ -6366,6 +6382,12 @@
                 }
                 setComposerEnabled(true);
                 updateComposerState();
+                if (appMode === "clinical" && pendingClinicalRedirectMessage) {
+                    const redirectMessage = pendingClinicalRedirectMessage;
+                    pendingClinicalRedirectMessage = null;
+                    await sendMessage(redirectMessage);
+                    return;
+                }
                 await refreshCalendarStatus();
                 await refreshDutySyncStatus();
                 if (appMode === "scheduling" && pendingSchedulingRedirectMessage) {
@@ -6484,6 +6506,9 @@
                 const assistantRow = appendAssistantMessage(data.reply);
                 if (data.scheduling_redirect_message) {
                     bindSchedulingRedirectMessage(assistantRow, data.scheduling_redirect_message);
+                }
+                if (data.clinical_redirect_message) {
+                    bindClinicalRedirectMessage(assistantRow, data.clinical_redirect_message);
                 }
 
                 if (data.undo) {
