@@ -2402,6 +2402,74 @@
             refreshEntryGuidanceVisibility();
         }
 
+        function shouldShowSchedulingQuickCards() {
+            const input = document.getElementById("input");
+            if (appMode !== "scheduling" || !input || input.value.trim()) return false;
+            if (document.getElementById("thinking-row")) return false;
+            const chat = document.getElementById("chat");
+            if (chat && chat.children.length > 0) return false;
+            return true;
+        }
+
+        function renderSchedulingQuickCards(cards) {
+            const shell = getStudyCardsShell();
+            if (!shell || !cards || cards.length === 0 || !shouldShowSchedulingQuickCards()) {
+                clearStudyCards();
+                return;
+            }
+
+            const grid = document.createElement("div");
+            grid.className = "study-cards-grid";
+
+            cards.forEach((card) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "study-entry-card";
+                button.innerHTML = `
+                    <div class="study-entry-top">
+                        <span class="study-entry-type">${escapeHtml(card.type_label || "Scheduling")}</span>
+                    </div>
+                    <p class="study-entry-topic">${escapeHtml(card.topic || "")}</p>
+                    <p class="study-entry-title">${escapeHtml(card.title || "")}</p>
+                    <p class="study-entry-subtitle">${escapeHtml(card.subtitle || "")}</p>
+                    <span class="study-entry-cta">${escapeHtml(card.cta || "")}</span>
+                `;
+                button.addEventListener("click", () => openSchedulingQuickCard(card.intent_type, card.quick_key));
+                grid.appendChild(button);
+            });
+
+            shell.innerHTML = "";
+            shell.appendChild(grid);
+            shell.classList.add("visible");
+            refreshEntryGuidanceVisibility();
+        }
+
+        async function openSchedulingQuickCard(intentType, quickKey) {
+            if (appMode !== "scheduling") return;
+            clearStudyCards();
+            setThinkingState(true);
+            try {
+                const response = await fetch("/calendar/quick-card/run", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        intent_type: intentType,
+                        quick_key: quickKey
+                    })
+                });
+                const data = await response.json();
+                setThinkingState(false);
+                appendAssistantMessage(data.reply, data.status === "error" ? "error" : "system");
+                scrollChatToBottom();
+            } catch (error) {
+                setThinkingState(false);
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
         function renderStudyCardPlaceholders() {
             const shell = getStudyCardsShell();
             if (!shell || !shouldShowStudyCards()) return;
@@ -6388,15 +6456,18 @@
                     await sendMessage(redirectMessage);
                     return;
                 }
-                await refreshCalendarStatus();
-                await refreshDutySyncStatus();
                 if (appMode === "scheduling" && pendingSchedulingRedirectMessage) {
                     const redirectMessage = pendingSchedulingRedirectMessage;
                     pendingSchedulingRedirectMessage = null;
                     await sendMessage(redirectMessage);
                     return;
                 }
-                if (!data.reply) {
+                if (appMode === "scheduling" && !data.reply && data.quick_cards && data.quick_cards.length) {
+                    renderSchedulingQuickCards(data.quick_cards);
+                }
+                await refreshCalendarStatus();
+                await refreshDutySyncStatus();
+                if (!data.reply && appMode === "clinical") {
                     await maybeShowStudyCards(true);
                 }
                 refreshEntryGuidanceVisibility();
