@@ -12,6 +12,8 @@ from db import (
     scheduling_drafts_collection,
     scheduling_preferences_collection,
 )
+from services.chat_service import load_chat
+from services.intent_service import classify_message_intent
 from services.scheduling_extraction_service import extract_scheduling_intent
 from services.logging_service import log_event
 from services.textbook_runtime_service import detect_textbook_request
@@ -2844,49 +2846,35 @@ def build_scheduling_welcome(session_id):
     return "Connect your calendar in Settings to start creating and syncing events."
 
 
-def _looks_like_clinical_question_for_scheduling_redirect(session_id, user_message):
+def _looks_like_explicit_scheduling_request(user_message, extraction=None):
     normalized = (user_message or "").strip()
     if not normalized:
         return False
-    lowered = normalized.lower()
     if (
         _is_historical_duty_stats_request(normalized)
         or _is_monthly_shift_summary_request(normalized)
         or _is_daily_summary_request(normalized)
         or _is_bulk_shift_delete_request(normalized)
     ):
+        return True
+    if extraction and extraction.get("action") and extraction.get("confidence") in {"high", "medium"}:
+        return True
+    return False
+
+
+def _looks_like_clinical_question_for_scheduling_redirect(session_id, user_message):
+    normalized = (user_message or "").strip()
+    if not normalized:
         return False
     textbook_request = detect_textbook_request(normalized)
     if textbook_request and textbook_request.get("supported"):
         return True
-    clinical_markers = (
-        "pph",
-        "patient",
-        "pregnant",
-        "bleeding",
-        "bp",
-        "blood pressure",
-        "pain",
-        "fever",
-        "headache",
-        "ultrasound",
-        "management",
-        "next step",
-        "postpartum",
-        "labor",
-        "delivery",
-        "ectopic",
-        "preeclampsia",
-        "ivf",
-        "iui",
-        "ovulation",
-        "cervix",
-        "cervical",
-        "pap smear",
-        "hpv",
-        "screening",
+    chat_history = load_chat(session_id, limit=8)
+    classifier_result = classify_message_intent(normalized, chat_history)
+    return (
+        classifier_result.get("label") == "clinical_consult"
+        and classifier_result.get("confidence") in {"high", "medium"}
     )
-    return any(marker in lowered for marker in clinical_markers)
 
 
 def _build_clinical_redirect_reply():
@@ -2913,17 +2901,26 @@ def handle_scheduling_message(session_id, user_message):
             "reply": "Want me to check another month or a specific date?",
             "scheduling_draft": None,
         }
-    if _looks_like_clinical_question_for_scheduling_redirect(session_id, normalized_user_message):
+    contextual_followup = _maybe_resolve_scheduling_context_followup(session_id, normalized_user_message)
+    if contextual_followup:
+        _clear_pending_details_context(session_id)
+        return contextual_followup
+
+    pending_context = _get_pending_details_context(session_id)
+    pending_message = (pending_context or {}).get("raw_message")
+    last_reference = _get_last_scheduling_reference(session_id)
+    extraction = extract_scheduling_intent(normalized_user_message, pending_message=pending_message, last_reference=last_reference)
+
+    if (
+        not _looks_like_explicit_scheduling_request(normalized_user_message, extraction)
+        and _looks_like_clinical_question_for_scheduling_redirect(session_id, normalized_user_message)
+    ):
         _clear_pending_details_context(session_id)
         return {
             "reply": _build_clinical_redirect_reply(),
             "scheduling_draft": None,
             "clinical_redirect_message": user_message,
         }
-    contextual_followup = _maybe_resolve_scheduling_context_followup(session_id, normalized_user_message)
-    if contextual_followup:
-        _clear_pending_details_context(session_id)
-        return contextual_followup
 
     if _is_historical_duty_stats_request(normalized_user_message):
         if not has_google_calendar_connection(session_id):
@@ -2983,10 +2980,6 @@ def handle_scheduling_message(session_id, user_message):
             },
         }
 
-    pending_context = _get_pending_details_context(session_id)
-    pending_message = (pending_context or {}).get("raw_message")
-    last_reference = _get_last_scheduling_reference(session_id)
-    extraction = extract_scheduling_intent(normalized_user_message, pending_message=pending_message, last_reference=last_reference)
     use_llm_extraction = _should_use_llm_extraction(extraction)
 
     log_event(
