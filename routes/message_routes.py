@@ -3,7 +3,13 @@ from fastapi.responses import JSONResponse
 
 from services.logging_service import log_event
 from services.message_handler_service import continue_onboarding, get_session_state, process_message, reset_session, start_clean_chat_mode
-from services.scheduling_service import build_scheduling_welcome, confirm_scheduling_draft, dismiss_scheduling_draft, handle_scheduling_message
+from services.scheduling_service import (
+    build_scheduling_welcome,
+    confirm_scheduling_draft,
+    dismiss_scheduling_draft,
+    get_scheduling_quick_cards,
+    handle_scheduling_message,
+)
 from settings import APP_ENV
 
 
@@ -48,7 +54,15 @@ async def handle_session_state(request: Request):
         session_id = data.get("session_id")
         app_mode = data.get("app_mode", "clinical")
         if app_mode == "scheduling":
-            return JSONResponse({"state": "ready", "needs_onboarding": False, "reply": build_scheduling_welcome(session_id)})
+            reply = build_scheduling_welcome(session_id)
+            return JSONResponse(
+                {
+                    "state": "ready",
+                    "needs_onboarding": False,
+                    "reply": reply,
+                    "quick_cards": [] if reply else get_scheduling_quick_cards(session_id),
+                }
+            )
         session_state = get_session_state(session_id)
         return JSONResponse(session_state)
     except Exception as exc:

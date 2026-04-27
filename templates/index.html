@@ -1908,6 +1908,8 @@
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
         let appMode = "clinical";
+        let pendingClinicalRedirectMessage = null;
+        let pendingSchedulingRedirectMessage = null;
         let chatRenderContextToken = 0;
         let googleCalendarConnected = false;
         let studyCardsRequested = false;
@@ -2199,6 +2201,10 @@
         }
 
         async function openStudyCardsFromComposer() {
+            if (appMode === "scheduling") {
+                await openSchedulingQuickCardsFromComposer();
+                return;
+            }
             if (appMode !== "clinical") return;
             studyCardsDismissed = false;
             setComposerModeStripOpen(false);
@@ -2400,6 +2406,103 @@
             refreshEntryGuidanceVisibility();
         }
 
+        function shouldShowSchedulingQuickCards(force = false) {
+            const input = document.getElementById("input");
+            if (appMode !== "scheduling" || !input || input.value.trim()) return false;
+            if (document.getElementById("thinking-row")) return false;
+            if (force) return true;
+            const chat = document.getElementById("chat");
+            if (chat && chat.children.length > 0) return false;
+            return true;
+        }
+
+        function renderSchedulingQuickCards(cards, force = false) {
+            const shell = getStudyCardsShell();
+            if (!shell || !cards || cards.length === 0 || !shouldShowSchedulingQuickCards(force)) {
+                clearStudyCards();
+                return;
+            }
+
+            const grid = document.createElement("div");
+            grid.className = "study-cards-grid";
+
+            cards.forEach((card) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "study-entry-card";
+                button.innerHTML = `
+                    <div class="study-entry-top">
+                        <span class="study-entry-type">${escapeHtml(card.type_label || "Scheduling")}</span>
+                    </div>
+                    <p class="study-entry-topic">${escapeHtml(card.topic || "")}</p>
+                    <p class="study-entry-title">${escapeHtml(card.title || "")}</p>
+                    <p class="study-entry-subtitle">${escapeHtml(card.subtitle || "")}</p>
+                    <span class="study-entry-cta">${escapeHtml(card.cta || "")}</span>
+                `;
+                button.addEventListener("click", () => openSchedulingQuickCard(card.intent_type, card.quick_key));
+                grid.appendChild(button);
+            });
+
+            shell.innerHTML = "";
+            shell.appendChild(grid);
+            shell.classList.add("visible");
+            refreshEntryGuidanceVisibility();
+        }
+
+        async function openSchedulingQuickCard(intentType, quickKey) {
+            if (appMode !== "scheduling") return;
+            clearStudyCards();
+            setThinkingState(true);
+            try {
+                const response = await fetch("/calendar/quick-card/run", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        intent_type: intentType,
+                        quick_key: quickKey
+                    })
+                });
+                const data = await response.json();
+                setThinkingState(false);
+                appendAssistantMessage(data.reply, data.status === "error" ? "error" : "system");
+                scrollChatToBottom();
+            } catch (error) {
+                setThinkingState(false);
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        async function openSchedulingQuickCardsFromComposer() {
+            if (appMode !== "scheduling") return;
+            setComposerModeStripOpen(false);
+            dismissEntryGuidance();
+            const input = document.getElementById("input");
+            if (input) {
+                input.blur();
+            }
+            try {
+                const response = await fetch("/session-state", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        app_mode: "scheduling"
+                    })
+                });
+                const data = await response.json();
+                renderSchedulingQuickCards(data.quick_cards || [], true);
+                scrollChatToBottom();
+                updateComposerState();
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
         function renderStudyCardPlaceholders() {
             const shell = getStudyCardsShell();
             if (!shell || !shouldShowStudyCards()) return;
@@ -2517,7 +2620,7 @@
             document.getElementById("composer-mode-scheduling").classList.toggle("active", appMode === "scheduling");
             const openCardsButton = document.getElementById("composer-open-cards");
             if (openCardsButton) {
-                openCardsButton.disabled = appMode !== "clinical";
+                openCardsButton.disabled = appMode !== "clinical" && appMode !== "scheduling";
             }
             document.getElementById("settings-shell").classList.toggle("visible", appMode === "scheduling");
             const versionStamp = document.getElementById("version-stamp");
@@ -5552,6 +5655,22 @@
             bootstrapSession();
         }
 
+        function openSchedulingForRedirectedQuestion(button) {
+            const message = String((button && button.dataset && button.dataset.redirectMessage) || "").trim();
+            if (message) {
+                pendingSchedulingRedirectMessage = message;
+            }
+            switchAppMode("scheduling");
+        }
+
+        function openClinicalForRedirectedQuestion(button) {
+            const message = String((button && button.dataset && button.dataset.redirectMessage) || "").trim();
+            if (message) {
+                pendingClinicalRedirectMessage = message;
+            }
+            switchAppMode("clinical");
+        }
+
         function resetChatSurfaceForPushModeTransition() {
             chatRenderContextToken += 1;
             const chat = document.getElementById("chat");
@@ -5651,6 +5770,20 @@
         function appendAssistantMessage(message, variant = "") {
             dismissStudyCards();
             return appendMessage("assistant", formatAssistantMessageHtml(message), variant);
+        }
+
+        function bindSchedulingRedirectMessage(row, message) {
+            if (!row || !message) return;
+            const button = row.querySelector("[data-scheduling-redirect-button]");
+            if (!button) return;
+            button.dataset.redirectMessage = message;
+        }
+
+        function bindClinicalRedirectMessage(row, message) {
+            if (!row || !message) return;
+            const button = row.querySelector("[data-clinical-redirect-button]");
+            if (!button) return;
+            button.dataset.redirectMessage = message;
         }
 
         function appendUserMessage(message) {
@@ -5964,7 +6097,11 @@
                     <ul class="study-flow-list">${bulletsHtml}</ul>
                 `;
                 if (studyItem.actions && studyItem.actions.length) {
-                    card.appendChild(buildStudyActionsBar(studyItem.content_item_id, studyItem.actions));
+                    card.appendChild(buildStudyActionsBar(studyItem.content_item_id, studyItem.actions, {
+                        removeOnClick: false,
+                        sourceCard: card,
+                        closeOnActions: ["another_pearl"],
+                    }));
                     const hint = buildStudyMobileHint(studyItem.actions);
                     if (hint) {
                         card.appendChild(hint);
@@ -5981,6 +6118,7 @@
             const wrapper = document.createElement("div");
             wrapper.className = "study-actions";
             const removeOnClick = options.removeOnClick !== false;
+            const closeOnActions = Array.isArray(options.closeOnActions) ? options.closeOnActions : [];
             actions.forEach((action) => {
                 const button = document.createElement("button");
                 button.className = "secondary-button";
@@ -5989,7 +6127,9 @@
                     contentItemId,
                     action.action,
                     options.sourceCard || wrapper.closest(".study-flow-card, .study-followup-card"),
-                    removeOnClick || (options.keepCardUntilAnotherQuestion === true && action.action === "another_question")
+                    removeOnClick
+                    || (options.keepCardUntilAnotherQuestion === true && action.action === "another_question")
+                    || closeOnActions.includes(action.action)
                 ));
                 wrapper.appendChild(button);
             });
@@ -6306,7 +6446,6 @@
             await restoreDutySyncPushContextFromStorage();
             studyCardsDismissed = false;
             cancelDeferredStudyCardsLoad();
-            setComposerEnabled(false);
             setStatus("Checking");
             refreshEntryGuidanceVisibility();
 
@@ -6334,6 +6473,7 @@
 
                 if (data.state === "incomplete_onboarding") {
                     clearStudyCards();
+                    setComposerEnabled(false);
                     showSessionBanner(
                         "You didn’t finish onboarding last time.",
                         `
@@ -6348,11 +6488,28 @@
                 if (data.reply) {
                     appendAssistantMessage(data.reply);
                 }
-                const studyCardsLoadPromise = !data.reply ? maybeShowStudyCards(true) : Promise.resolve();
+                setComposerEnabled(true);
+                updateComposerState();
+                if (appMode === "clinical" && pendingClinicalRedirectMessage) {
+                    const redirectMessage = pendingClinicalRedirectMessage;
+                    pendingClinicalRedirectMessage = null;
+                    await sendMessage(redirectMessage);
+                    return;
+                }
+                if (appMode === "scheduling" && pendingSchedulingRedirectMessage) {
+                    const redirectMessage = pendingSchedulingRedirectMessage;
+                    pendingSchedulingRedirectMessage = null;
+                    await sendMessage(redirectMessage);
+                    return;
+                }
+                if (appMode === "scheduling" && !data.reply && data.quick_cards && data.quick_cards.length) {
+                    renderSchedulingQuickCards(data.quick_cards);
+                }
                 await refreshCalendarStatus();
                 await refreshDutySyncStatus();
-                await studyCardsLoadPromise;
-                setComposerEnabled(true);
+                if (!data.reply && appMode === "clinical") {
+                    await maybeShowStudyCards(true);
+                }
                 refreshEntryGuidanceVisibility();
                 attemptInitialComposerFocus();
             } catch (error) {
@@ -6420,11 +6577,11 @@
             }
         }
 
-        async function sendMessage() {
+        async function sendMessage(prefilledMessage = null) {
             if (!chatReady) return;
 
             const input = document.getElementById("input");
-            const message = input.value.trim();
+            const message = typeof prefilledMessage === "string" ? prefilledMessage.trim() : input.value.trim();
             if (!message) return;
             const requestMode = appMode;
             const requestToken = chatRenderContextToken;
@@ -6458,6 +6615,12 @@
                     return;
                 }
                 const assistantRow = appendAssistantMessage(data.reply);
+                if (data.scheduling_redirect_message) {
+                    bindSchedulingRedirectMessage(assistantRow, data.scheduling_redirect_message);
+                }
+                if (data.clinical_redirect_message) {
+                    bindClinicalRedirectMessage(assistantRow, data.clinical_redirect_message);
+                }
 
                 if (data.undo) {
                     const label = data.undo_type === "protocol"
@@ -6837,6 +7000,7 @@
         }
         renderModeState();
         autoResizeInput();
+        setComposerEnabled(true);
         updateComposerState();
         const initialCachedStudyCards = loadCachedStudyCards();
         if (appMode === "clinical" && initialCachedStudyCards && initialCachedStudyCards.length) {

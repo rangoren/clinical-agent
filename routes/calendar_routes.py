@@ -23,6 +23,7 @@ from services.duty_sync_service import (
     toggle_pending_review_change,
 )
 from services.logging_service import log_event
+from services.scheduling_service import run_scheduling_quick_card
 from services.web_push_service import (
     delete_web_push_subscription,
     get_web_push_status,
@@ -32,6 +33,22 @@ from services.web_push_service import (
 
 
 router = APIRouter()
+
+
+@router.post("/calendar/quick-card/run")
+async def handle_calendar_quick_card_run(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            run_scheduling_quick_card(
+                session_id=data.get("session_id"),
+                intent_type=data.get("intent_type"),
+                quick_key=data.get("quick_key"),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/quick-card/run", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
 
 
 @router.post("/calendar/status")

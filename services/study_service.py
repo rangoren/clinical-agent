@@ -345,6 +345,7 @@ MAX_CONSECUTIVE_TOPIC_REPEATS = 2
 STYLE_HISTORY_WINDOW = 12
 LEVEL_HISTORY_WINDOW = 12
 IDLE_CARDS_CACHE_TTL_SECONDS = 300
+_study_seed_ensured = False
 SOURCE_DATE_PLACEHOLDERS = {"2025-01-01"}
 
 
@@ -1637,6 +1638,13 @@ def _next_difficulty_level_after_answer(state, policy, answered_levels, answered
 
 
 def ensure_study_content_seed():
+    global _study_seed_ensured
+    if _study_seed_ensured:
+        return
+    sentinel_item_id = STUDY_SEED_ITEMS[0]["id"] if STUDY_SEED_ITEMS else None
+    if sentinel_item_id and study_content_collection.find_one({"id": sentinel_item_id}, {"_id": 1}):
+        _study_seed_ensured = True
+        return
     now = _utc_now()
     for item in STUDY_SEED_ITEMS:
         payload = dict(item)
@@ -1649,6 +1657,7 @@ def ensure_study_content_seed():
             },
             upsert=True,
         )
+    _study_seed_ensured = True
 
 
 def _normalize_study_item(item):
