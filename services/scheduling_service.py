@@ -2837,12 +2837,15 @@ def _load_historical_duty_records(session_id, category, start_date, end_date):
         if dedupe_key in seen_dates:
             continue
         seen_dates.add(dedupe_key)
-        matched.append({"date": event_date})
+        matched.append({
+            "date": event_date,
+            "title": event.get("title") or "תורנות",
+        })
     return sorted(matched, key=lambda item: item["date"])
 
 
 def _format_quick_card_date(duty_date):
-    return duty_date.strftime("%A · %b %d")
+    return duty_date.strftime("%a %d %b")
 
 
 def _quick_result_html(title, subline, main_lines, basis, sections=None, breakdown_rows=None):
@@ -2889,9 +2892,17 @@ def _render_month_overview_quick_result(session_id):
     upcoming = [item for item in records if item["date"] >= today]
     sections = []
     if completed:
-        sections.append({"label": "Completed", "items": [f"{_format_quick_card_date(item['date'])} · Duty" for item in completed[:5]], "more_count": max(0, len(completed) - 5)})
+        sections.append({
+            "label": "Completed",
+            "items": [f"{_format_quick_card_date(item['date'])} · {item.get('title') or 'תורנות'}" for item in completed[:5]],
+            "more_count": max(0, len(completed) - 5),
+        })
     if upcoming:
-        sections.append({"label": "Upcoming", "items": [f"{_format_quick_card_date(item['date'])} · Duty" for item in upcoming[:5]], "more_count": max(0, len(upcoming) - 5)})
+        sections.append({
+            "label": "Upcoming",
+            "items": [f"{_format_quick_card_date(item['date'])} · {item.get('title') or 'תורנות'}" for item in upcoming[:5]],
+            "more_count": max(0, len(upcoming) - 5),
+        })
     return {
         "reply": _quick_result_html(
             "This Month",
