@@ -2850,12 +2850,58 @@ def _looks_like_explicit_scheduling_request(user_message, extraction=None):
     normalized = (user_message or "").strip()
     if not normalized:
         return False
+    lowered = normalized.lower()
     if (
         _is_historical_duty_stats_request(normalized)
         or _is_monthly_shift_summary_request(normalized)
         or _is_daily_summary_request(normalized)
         or _is_bulk_shift_delete_request(normalized)
     ):
+        return True
+    scheduling_markers = (
+        "calendar",
+        "event",
+        "events",
+        "schedule",
+        "meeting",
+        "meetings",
+        "appointment",
+        "appointments",
+        "today",
+        "tomorrow",
+        "shift",
+        "shifts",
+        "on-call",
+        "on call",
+        "delete",
+        "remove",
+        "move",
+        "reschedule",
+        "update",
+        "change",
+        "create",
+        "add",
+        "date",
+        "time",
+        "יומן",
+        "אירוע",
+        "אירועים",
+        "פגישה",
+        "פגישות",
+        "תורנות",
+        "תורנויות",
+        "תורנית",
+        "מחר",
+        "היום",
+        "מחק",
+        "לבטל",
+        "תוסיף",
+        "תקבע",
+        "תזמן",
+        "שעה",
+        "תאריך",
+    )
+    if any(marker in lowered for marker in scheduling_markers):
         return True
     if extraction and extraction.get("action") and extraction.get("confidence") in {"high", "medium"}:
         return True
@@ -2913,7 +2959,12 @@ def handle_scheduling_message(session_id, user_message):
 
     if (
         not _looks_like_explicit_scheduling_request(normalized_user_message, extraction)
-        and _looks_like_clinical_question_for_scheduling_redirect(session_id, normalized_user_message)
+        and (
+            _looks_like_clinical_question_for_scheduling_redirect(session_id, normalized_user_message)
+            or extraction is None
+            or extraction.get("confidence") == "low"
+            or not extraction.get("action")
+        )
     ):
         _clear_pending_details_context(session_id)
         return {
