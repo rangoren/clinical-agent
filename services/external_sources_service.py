@@ -274,6 +274,7 @@ EXTERNAL_SOURCE_CATALOG = [
         "source_type": "external guideline",
         "keywords": [
             "ectopic", "pregnancy of unknown location", "pul", "beta hcg", "hcg", "ultrasound", "tvus",
+            "beta-hcg", "intrauterine pregnancy on ultrasound", "discriminatory zone",
             "positive pregnancy test", "no intrauterine pregnancy", "no iup", "serial hcg", "repeat hcg",
             "48 hours", "spotting", "first trimester bleeding",
         ],
@@ -339,7 +340,13 @@ EXTERNAL_SOURCE_CATALOG = [
         "title": "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia",
         "url": "https://www.acog.org/clinical/clinical-guidance/practice-bulletin/articles/2020/06/gestational-hypertension-and-preeclampsia",
         "source_type": "external guideline",
-        "keywords": ["gestational hypertension", "preeclampsia", "severe features", "proteinuria"],
+        "keywords": ["gestational hypertension", "preeclampsia", "severe features", "proteinuria", "hypertension in pregnancy", "antihypertensive drugs in pregnancy"],
+    },
+    {
+        "title": "First and Second Stage Labor Management | ACOG",
+        "url": "https://www.acog.org/clinical/clinical-guidance/clinical-practice-guideline/articles/2024/01/first-and-second-stage-labor-management",
+        "source_type": "external guideline",
+        "keywords": ["active labor", "active phase of labor", "cervical dilation active labor", "6 cm", "labor arrest"],
     },
     {
         "title": "ACOG: Labor Induction",
@@ -367,7 +374,7 @@ EXTERNAL_SOURCE_CATALOG = [
         "title": "ACOG: Prelabor Rupture of Membranes",
         "url": "https://www.acog.org/clinical/clinical-guidance/practice-bulletin/articles/2020/03/prelabor-rupture-of-membranes",
         "source_type": "external guideline",
-        "keywords": ["prom", "pprom", "rupture of membranes", "amniotic fluid leak"],
+        "keywords": ["prom", "pprom", "rupture of membranes", "amniotic fluid leak", "nitrazine", "positive nitrazine test", "confirm rupture of membranes"],
         "excerpt": "In PPROM before 34 weeks without infection, labor, or fetal compromise, expectant management with corticosteroids and latency antibiotics is generally recommended while monitoring for chorioamnionitis or fetal deterioration.",
     },
     {
@@ -444,6 +451,12 @@ EXTERNAL_SOURCE_CATALOG = [
         "keywords": ["pcos", "polycystic ovary syndrome", "anovulation", "irregular periods"],
     },
     {
+        "title": "Cesarean Birth | ACOG",
+        "url": "https://www.acog.org/womens-health/faqs/cesarean-birth",
+        "source_type": "external guideline",
+        "keywords": ["cesarean birth", "c-section", "cesarean delivery", "indications for c-section", "indications for cesarean"],
+    },
+    {
         "title": "CDC STI Treatment Guidelines: Vulvovaginal Candidiasis",
         "url": "https://www.cdc.gov/std/treatment-guidelines/candidiasis.htm",
         "source_type": "external guideline",
@@ -505,6 +518,12 @@ EXTERNAL_SOURCE_CATALOG = [
         "keywords": ["nipt", "cfdna", "aneuploidy screening", "genetic screening", "trisomy"],
     },
     {
+        "title": "Vaccine Safety During Pregnancy | ACOG",
+        "url": "https://www.acog.org/womens-health/faqs/vaccine-safety-during-pregnancy",
+        "source_type": "external guideline",
+        "keywords": ["vaccines in pregnancy", "vaccination during pregnancy", "recommended vaccines during pregnancy", "flu vaccine pregnancy", "tdap pregnancy"],
+    },
+    {
         "title": "ACOG: Cervical Cancer Screening",
         "url": "https://www.acog.org/womens-health/faqs/cervical-cancer-screening",
         "source_type": "external guideline",
@@ -517,14 +536,14 @@ EXTERNAL_SOURCE_CATALOG = [
         "title": "ACOG: Fetal Heart Rate Monitoring During Labor",
         "url": "https://www.acog.org/womens-health/faqs/fetal-heart-rate-monitoring-during-labor",
         "source_type": "external guideline",
-        "keywords": ["fetal heart rate", "normal fetal heart rate", "baseline fetal heart rate", "110 160", "fhr normal range"],
+        "keywords": ["fetal heart rate", "normal fetal heart rate", "baseline fetal heart rate", "110 160", "fhr normal range", "non-reassuring ctg", "nonreassuring ctg", "ctg interpretation", "abnormal fetal heart rate pattern"],
     },
     {
         "title": "ACOG: Preterm Labor and Birth",
         "url": "https://www.acog.org/womens-health/faqs/preterm-labor-and-birth",
         "source_type": "external guideline",
         "keywords": [
-            "antenatal corticosteroids", "steroids before preterm delivery", "betamethasone",
+            "antenatal corticosteroids", "antenatal steroids", "steroids before preterm delivery", "betamethasone",
             "preterm labor", "preterm birth", "when should steroids be given before preterm delivery",
         ],
     },
@@ -539,6 +558,36 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://www.acog.org/womens-health/faqs/vaginal-birth-after-cesarean-delivery",
         "source_type": "external guideline",
         "keywords": ["vbac", "tolac", "trial of labor after cesarean", "one previous c-section", "is vaginal delivery safe after one previous c-section"],
+    },
+    {
+        "title": "Cervical Cerclage | ACOG",
+        "url": "https://www.acog.org/womens-health/faqs/cervical-cerclage",
+        "source_type": "external guideline",
+        "keywords": ["cerclage", "cervical cerclage", "cervical insufficiency", "when is cerclage indicated"],
+    },
+    {
+        "title": "Assisted Vaginal Delivery | ACOG",
+        "url": "https://www.acog.org/womens-health/faqs/assisted-vaginal-delivery",
+        "source_type": "external guideline",
+        "keywords": ["vacuum delivery", "forceps", "vacuum vs forceps", "assisted vaginal delivery", "operative vaginal birth"],
+    },
+    {
+        "title": "Placenta Accreta Spectrum | ACOG",
+        "url": "https://www.acog.org/clinical/clinical-guidance/obstetric-care-consensus/articles/2018/12/placenta-accreta-spectrum",
+        "source_type": "external guideline",
+        "keywords": ["placenta accreta", "placenta increta", "placenta percreta", "placenta accreta spectrum"],
+    },
+    {
+        "title": "Metformin - MotherToBaby",
+        "url": "https://www.ncbi.nlm.nih.gov/books/NBK582828/",
+        "source_type": "drug safety reference",
+        "keywords": ["metformin pregnancy", "is metformin safe during pregnancy", "metformin safe in pregnancy", "metformin pcos pregnancy"],
+    },
+    {
+        "title": "FDA: Avoid Use of NSAIDs in Pregnancy at 20 Weeks or Later",
+        "url": "https://www.fda.gov/drugs/drug-safety-and-availability/fda-recommends-avoiding-use-nsaids-pregnancy-20-weeks-or-later-because-they-can-result-low-amniotic",
+        "source_type": "drug safety reference",
+        "keywords": ["nsaids third trimester", "can nsaids be used in the third trimester", "ibuprofen pregnancy", "nsaids in pregnancy"],
     },
     {
         "title": "ACOG: 3 Conditions to Watch for After Childbirth",
@@ -719,6 +768,7 @@ def get_forced_authoritative_source(user_message):
         "160/110",
         "ruq pain",
         "headache",
+        "proteinuria",
         "רעלת",
     ]
     postmenopausal_bleeding_terms = [
@@ -840,11 +890,19 @@ def get_forced_authoritative_source(user_message):
         "absence of periods",
     ]
     antenatal_steroid_terms = [
+        "antenatal steroids",
         "steroids before preterm delivery",
         "antenatal corticosteroids",
         "betamethasone",
         "preterm labor",
+        "at what gestational age should antenatal steroids be given",
         "when should steroids be given before preterm delivery",
+    ]
+    bhcg_ultrasound_terms = [
+        "beta-hcg",
+        "beta hcg",
+        "intrauterine pregnancy on ultrasound",
+        "discriminatory zone",
     ]
     vbac_terms = [
         "vbac",
@@ -859,21 +917,115 @@ def get_forced_authoritative_source(user_message):
         "postpartum endometritis",
         "endometritis after childbirth",
         "most common cause of postpartum fever",
+        "postpartum day 2",
+        "uterine tenderness",
+    ]
+    acute_ectopic_scenario_terms = [
+        "spotting",
+        "shoulder pain",
+        "beta-hcg",
+        "beta hcg",
+        "severe abdominal pain",
+    ]
+    active_labor_terms = [
+        "active labor",
+        "active labour",
+        "cervical dilation",
+        "6 cm",
+        "at what cervical dilation is active labor defined",
+    ]
+    methotrexate_ectopic_terms = [
+        "methotrexate for ectopic",
+        "dose of methotrexate for ectopic pregnancy",
+    ]
+    metformin_terms = [
+        "metformin safe during pregnancy",
+        "is metformin safe during pregnancy",
+        "metformin pregnancy",
+    ]
+    nsaid_terms = [
+        "nsaids third trimester",
+        "can nsaids be used in the third trimester",
+        "ibuprofen in the third trimester",
+    ]
+    csection_terms = [
+        "c-section",
+        "cesarean",
+        "caesarean",
+        "indications for c-section",
+        "indications for cesarean",
+    ]
+    vacuum_forceps_terms = [
+        "vacuum vs forceps",
+        "vacuum or forceps",
+        "assisted vaginal delivery",
+        "operative vaginal birth",
+    ]
+    ctg_terms = [
+        "non-reassuring ctg",
+        "nonreassuring ctg",
+        "non reassuring ctg",
+        "abnormal fetal heart rate pattern",
+        "ctg",
+    ]
+    nitrazine_terms = [
+        "nitrazine",
+        "positive nitrazine test",
+    ]
+    prolactin_terms = [
+        "elevated prolactin",
+        "high prolactin",
+        "hyperprolactinemia",
+        "prolactin levels",
+    ]
+    abortion_terms = [
+        "threatened abortion",
+        "inevitable abortion",
+        "threatened miscarriage",
+        "inevitable miscarriage",
+    ]
+    placenta_accreta_terms = [
+        "placenta accreta",
+        "placenta increta",
+        "placenta percreta",
+        "placenta accreta spectrum",
+    ]
+    vaccine_terms = [
+        "vaccines during pregnancy",
+        "recommended during pregnancy",
+        "vaccination during pregnancy",
+        "flu vaccine pregnancy",
+        "tdap pregnancy",
     ]
 
     forced_title = None
     if any(_contains_term(normalized, term) for term in bv_terms):
         forced_title = "CDC STI Treatment Guidelines: Bacterial Vaginosis"
+    elif any(_contains_term(normalized, term) for term in bhcg_ultrasound_terms):
+        forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
+    elif (
+        any(_contains_term(normalized, term) for term in acute_ectopic_scenario_terms)
+        and ("pregnant" in normalized or "weeks" in normalized)
+    ):
+        forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
     elif any(_contains_term(normalized, term) for term in early_pregnancy_terms):
         forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
     elif any(_contains_term(normalized, term) for term in cervical_screening_terms):
         forced_title = "ACOG: Cervical Cancer Screening"
     elif any(_contains_term(normalized, term) for term in gbs_terms):
         forced_title = "ACOG: Group B Strep and Pregnancy"
+    elif any(_contains_term(normalized, term) for term in active_labor_terms):
+        forced_title = "First and Second Stage Labor Management | ACOG"
     elif any(_contains_term(normalized, term) for term in rh_terms):
         forced_title = "ACOG: The Rh Factor: How It Can Affect Your Pregnancy"
     elif any(_contains_term(normalized, term) for term in fetal_heart_rate_terms):
         forced_title = "ACOG: Fetal Heart Rate Monitoring During Labor"
+    elif any(_contains_term(normalized, term) for term in methotrexate_ectopic_terms):
+        forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
+    elif any(_contains_term(normalized, term) for term in metformin_terms):
+        forced_title = "Metformin - MotherToBaby"
+    elif any(_contains_term(normalized, term) for term in nsaid_terms):
+        forced_title = "FDA: Avoid Use of NSAIDs in Pregnancy at 20 Weeks or Later"
     elif any(_contains_term(normalized, term) for term in antepartum_bleeding_terms):
         forced_title = "ACOG: Bleeding During Pregnancy"
     elif any(_contains_term(normalized, term) for term in postterm_terms):
@@ -884,8 +1036,26 @@ def get_forced_authoritative_source(user_message):
         forced_title = "ACOG: Preterm Labor and Birth"
     elif any(_contains_term(normalized, term) for term in vbac_terms):
         forced_title = "Vaginal Birth After Cesarean Delivery (VBAC) | ACOG"
+    elif any(_contains_term(normalized, term) for term in csection_terms):
+        forced_title = "Cesarean Birth | ACOG"
+    elif any(_contains_term(normalized, term) for term in vacuum_forceps_terms):
+        forced_title = "Assisted Vaginal Delivery | ACOG"
+    elif any(_contains_term(normalized, term) for term in ctg_terms):
+        forced_title = "ACOG: Fetal Heart Rate Monitoring During Labor"
+    elif any(_contains_term(normalized, term) for term in nitrazine_terms):
+        forced_title = "ACOG: Prelabor Rupture of Membranes"
+    elif any(_contains_term(normalized, term) for term in prolactin_terms):
+        forced_title = "Amenorrhea: Absence of Periods | ACOG"
+    elif any(_contains_term(normalized, term) for term in abortion_terms):
+        forced_title = "ACOG: Early Pregnancy Loss"
+    elif any(_contains_term(normalized, term) for term in placenta_accreta_terms):
+        forced_title = "Placenta Accreta Spectrum | ACOG"
+    elif any(_contains_term(normalized, term) for term in vaccine_terms):
+        forced_title = "Vaccine Safety During Pregnancy | ACOG"
     elif any(_contains_term(normalized, term) for term in postpartum_fever_terms):
         forced_title = "ACOG: 3 Conditions to Watch for After Childbirth"
+    elif "bp" in normalized and "proteinuria" in normalized and "weeks" in normalized:
+        forced_title = "ACOG Practice Bulletin: Gestational Hypertension and Preeclampsia"
     elif any(_contains_term(normalized, term) for term in postmenopausal_bleeding_terms):
         forced_title = "ACOG: Perimenopausal Bleeding and Bleeding After Menopause"
     elif any(_contains_term(normalized, term) for term in adnexal_mass_terms):
