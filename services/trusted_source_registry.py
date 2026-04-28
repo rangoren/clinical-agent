@@ -413,6 +413,8 @@ SPECIALTY_KEYWORDS = {
         "sti",
         "pid",
         "bv",
+        "bacterial vaginosis",
+        "vaginosis",
         "trich",
         "candida",
         "infection",

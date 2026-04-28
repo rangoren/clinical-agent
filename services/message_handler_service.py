@@ -314,6 +314,18 @@ def _maybe_override_targeted_display_source(user_message, sources):
     return forced_sources + filtered_sources
 
 
+def _ensure_authoritative_display_source(user_message, sources):
+    normalized_sources = list(sources or [])
+    if any(_is_authoritative_source(source) for source in normalized_sources):
+        return normalized_sources
+
+    forced_sources = get_forced_authoritative_source(user_message)
+    if forced_sources:
+        return forced_sources
+
+    return normalized_sources
+
+
 def _looks_like_basic_clinical_question(user_message):
     cleaned = user_message.strip().lower()
     acute_markers = (
@@ -1080,6 +1092,7 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
     if intent == "clinical_consult" and not textbook_request:
         display_sources = _maybe_override_fertility_display_source(user_message, display_sources)
         display_sources = _maybe_override_targeted_display_source(user_message, display_sources)
+        display_sources = _ensure_authoritative_display_source(user_message, display_sources)
 
     reply = raw_reply
     if intent == "clinical_consult":
