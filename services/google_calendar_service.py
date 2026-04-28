@@ -34,6 +34,10 @@ GOOGLE_HISTORY_CACHE_TTL_SECONDS = 300
 _google_history_cache = {}
 
 
+class GoogleCalendarReconnectRequiredError(Exception):
+    pass
+
+
 def _utcnow():
     return datetime.utcnow()
 
@@ -122,17 +126,31 @@ def _refresh_google_access_token(session_id, connection):
     if not refresh_token:
         return None
 
-    response = requests.post(
-        GOOGLE_TOKEN_URL,
-        data={
-            "client_id": GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-        },
-        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            GOOGLE_TOKEN_URL,
+            data={
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+            timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if status_code in {400, 401}:
+            log_event(
+                "google_calendar_refresh_requires_reconnect",
+                session_id=session_id,
+                payload={"status_code": status_code},
+                level="warning",
+            )
+            raise GoogleCalendarReconnectRequiredError(
+                "Reconnect Google Calendar to keep using calendar insights."
+            ) from exc
+        raise
     token_payload = response.json()
     new_access_token = token_payload.get("access_token")
     if not new_access_token:
