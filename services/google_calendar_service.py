@@ -34,6 +34,10 @@ GOOGLE_HISTORY_CACHE_TTL_SECONDS = 300
 _google_history_cache = {}
 
 
+class GoogleCalendarReconnectRequiredError(Exception):
+    pass
+
+
 def _utcnow():
     return datetime.utcnow()
 
@@ -122,17 +126,35 @@ def _refresh_google_access_token(session_id, connection):
     if not refresh_token:
         return None
 
-    response = requests.post(
-        GOOGLE_TOKEN_URL,
-        data={
-            "client_id": GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-        },
-        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            GOOGLE_TOKEN_URL,
+            data={
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+            timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if status_code in {400, 401}:
+            calendar_connections_collection.update_one(
+                {"session_id": session_id, "provider": "google"},
+                {"$set": {"requires_reconnect": True, "updated_at": _utcnow()}},
+            )
+            log_event(
+                "google_calendar_refresh_requires_reconnect",
+                session_id=session_id,
+                payload={"status_code": status_code},
+                level="warning",
+            )
+            raise GoogleCalendarReconnectRequiredError(
+                "Reconnect Google Calendar to keep using calendar insights."
+            ) from exc
+        raise
     token_payload = response.json()
     new_access_token = token_payload.get("access_token")
     if not new_access_token:
@@ -144,6 +166,7 @@ def _refresh_google_access_token(session_id, connection):
         {
             "$set": {
                 "access_token": new_access_token,
+                "requires_reconnect": False,
                 "scope": token_payload.get("scope") or connection.get("scope"),
                 "expires_at": expires_at,
                 "updated_at": _utcnow(),
@@ -174,6 +197,7 @@ def _upsert_connection(session_id, token_payload, calendars):
         "provider": "google",
         "access_token": token_payload.get("access_token"),
         "refresh_token": token_payload.get("refresh_token"),
+        "requires_reconnect": False,
         "scope": token_payload.get("scope"),
         "token_type": token_payload.get("token_type", "Bearer"),
         "expires_at": expiry,
@@ -245,15 +269,18 @@ def get_google_calendar_status(session_id):
     connection = calendar_connections_collection.find_one(
         {"session_id": session_id, "provider": "google", "is_active": True}
     )
+    requires_reconnect = bool((connection or {}).get("requires_reconnect"))
     selected = list(
         user_calendars_collection.find(
             {"session_id": session_id, "provider": "google", "is_selected": True}
         ).sort("is_primary", -1)
     )
     return {
-        "connected": bool(connection),
+        "connected": bool(connection) and not requires_reconnect,
         "available": True,
         "provider": "google",
+        "requires_reconnect": requires_reconnect,
+        "status": "google_reconnect_required" if requires_reconnect else "connected",
         "calendar_count": len(selected),
         "calendars": [
             {

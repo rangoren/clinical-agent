@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from settings import APP_BASE_URL
 from services.google_calendar_service import (
+    GoogleCalendarReconnectRequiredError,
     begin_google_calendar_connect,
     complete_google_calendar_connect,
     disconnect_google_calendar,
@@ -45,6 +46,13 @@ async def handle_calendar_quick_card_run(request: Request):
                 intent_type=data.get("intent_type"),
                 quick_key=data.get("quick_key"),
             )
+        )
+    except GoogleCalendarReconnectRequiredError:
+        return JSONResponse(
+            {
+                "status": "google_reconnect_required",
+                "reply": "Reconnect Google Calendar to keep using calendar cards.",
+            }
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/quick-card/run", "error": str(exc)}, level="error")

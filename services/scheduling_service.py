@@ -2848,28 +2848,101 @@ def _format_quick_card_date(duty_date):
     return duty_date.strftime("%a %d %b")
 
 
-def _quick_result_html(title, subline, main_lines, basis, sections=None, breakdown_rows=None):
+def _format_quick_card_row_date(duty_date):
+    return duty_date.strftime("%a · %b %d")
+
+
+def _format_quick_date_range(start_date, end_date):
+    if not start_date or not end_date:
+        return None
+    if start_date.year == end_date.year and start_date.month == end_date.month:
+        return f"{start_date.strftime('%b')} {start_date.day} – {end_date.day}, {end_date.year}"
+    if start_date.year == end_date.year:
+        return f"{start_date.strftime('%b')} {start_date.day} – {end_date.strftime('%b')} {end_date.day}, {end_date.year}"
+    return f"{start_date.strftime('%b')} {start_date.day}, {start_date.year} – {end_date.strftime('%b')} {end_date.day}, {end_date.year}"
+
+
+def _quick_row(label, value):
+    return {"label": label, "value": value}
+
+
+def _quick_duty_rows(records, limit=5):
+    rows = []
+    for item in records[:limit]:
+        category = _classify_duty_event_title(item.get("title"))
+        value = {
+            "regular": "Duty",
+            "half": "Half Duty",
+            "department": "Department Duty",
+        }.get(category) or "Duty"
+        rows.append(_quick_row(_format_quick_card_row_date(item["date"]), value))
+    return rows
+
+
+def _quick_breakdown_rows(rows, limit=3):
+    normalized = list(rows or [])
+    return normalized[:limit], max(0, len(normalized) - limit)
+
+
+def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_secondary=None, support_line=None, sections=None, breakdown_rows=None, progress=None):
     parts = [
-        f'<p><strong>{html_escape(title)}</strong></p>',
-        f'<p>{html_escape(subline)}</p>',
+        '<div class="quick-result-card">',
+        '<div class="quick-result-header">',
+        f'<p class="quick-result-title">{html_escape(title)}</p>',
+        f'<p class="quick-result-subline">{html_escape(subline)}</p>',
+        '</div>',
+        '<div class="quick-result-main">',
+        f'<p class="quick-result-primary">{html_escape(main_primary or "")}</p>',
     ]
-    for line in main_lines or []:
-        parts.append(f'<p><strong>{html_escape(line)}</strong></p>')
-    if basis:
-        parts.append(f'<p>Basis: {html_escape(basis)}</p>')
+    if progress is not None:
+        progress_width = max(0, min(100, int(round(float(progress) * 100))))
+        parts.append(
+            '<div class="quick-result-progress" aria-hidden="true">'
+            f'<span class="quick-result-progress-fill" style="width: {progress_width}%"></span>'
+            '</div>'
+        )
+    if main_secondary:
+        parts.append(f'<p class="quick-result-secondary">{html_escape(main_secondary)}</p>')
+    if support_line:
+        parts.append(f'<p class="quick-result-support">{html_escape(support_line)}</p>')
+    parts.append('</div>')
+    metadata_lines = [line for line in (metadata_lines or []) if line]
+    if metadata_lines:
+        parts.append('<div class="quick-result-meta">')
+        for line in metadata_lines:
+            parts.append(f'<p class="quick-result-meta-line">{html_escape(line)}</p>')
+        parts.append('</div>')
     for section in sections or []:
-        items = section.get("items") or []
-        if not items:
+        rows = section.get("rows") or []
+        if not rows:
             continue
-        parts.append(f'<p><strong>{html_escape(section.get("label") or "")}</strong></p>')
-        for item in items:
-            parts.append(f'<div>- {html_escape(item)}</div>')
+        parts.append('<div class="quick-result-section">')
+        parts.append(f'<p class="quick-result-section-title">{html_escape(section.get("label") or "")}</p>')
+        for row in rows:
+            parts.append(
+                '<div class="quick-result-row">'
+                f'<span class="quick-result-row-label">{html_escape(str(row.get("label") or ""))}</span>'
+                f'<span class="quick-result-row-value">{html_escape(str(row.get("value") or ""))}</span>'
+                '</div>'
+            )
         if section.get("more_count"):
-            parts.append(f'<div>+{int(section["more_count"])} more</div>')
+            parts.append(f'<div class="quick-result-more">+{int(section["more_count"])} more</div>')
+        parts.append('</div>')
     if breakdown_rows:
-        parts.append("<p><strong>Breakdown</strong></p>")
-        for label, value in breakdown_rows[:6]:
-            parts.append(f'<div>{html_escape(str(label))}: {html_escape(str(value))}</div>')
+        visible_rows, more_count = _quick_breakdown_rows(breakdown_rows, limit=3)
+        if visible_rows:
+            parts.append('<div class="quick-result-section">')
+            for label, value in visible_rows:
+                parts.append(
+                    '<div class="quick-result-row">'
+                    f'<span class="quick-result-row-label">{html_escape(str(label))}</span>'
+                    f'<span class="quick-result-row-value">{html_escape(str(value))}</span>'
+                    '</div>'
+                )
+            if more_count:
+                parts.append(f'<div class="quick-result-more">+{int(more_count)} more</div>')
+            parts.append('</div>')
+    parts.append('</div>')
     return "".join(parts)
 
 
@@ -2882,9 +2955,9 @@ def _render_month_overview_quick_result(session_id):
         return {
             "reply": _quick_result_html(
                 "This Month",
-                "Completed vs upcoming duties",
-                ["I couldn’t find any duties for this period."],
-                f"Based on {start_date.strftime('%b')} {start_date.day} to {end_date.strftime('%b')} {end_date.day}, {end_date.year}.",
+                "Completed vs upcoming",
+                "No duties found",
+                metadata_lines=[_format_quick_date_range(start_date, end_date), "Deduplicated by start date"],
             ),
             "scheduling_draft": None,
         }
@@ -2894,22 +2967,25 @@ def _render_month_overview_quick_result(session_id):
     if completed:
         sections.append({
             "label": "Completed",
-            "items": [f"{_format_quick_card_date(item['date'])} · {item.get('title') or 'תורנות'}" for item in completed[:5]],
+            "rows": _quick_duty_rows(completed, limit=5),
             "more_count": max(0, len(completed) - 5),
         })
     if upcoming:
         sections.append({
             "label": "Upcoming",
-            "items": [f"{_format_quick_card_date(item['date'])} · {item.get('title') or 'תורנות'}" for item in upcoming[:5]],
+            "rows": _quick_duty_rows(upcoming, limit=5),
             "more_count": max(0, len(upcoming) - 5),
         })
+    total = len(records)
     return {
         "reply": _quick_result_html(
             "This Month",
-            "Completed vs upcoming duties",
-            [f"{len(completed)} completed", f"{len(upcoming)} upcoming"],
-            f"Based on {start_date.strftime('%b')} {start_date.day} to {end_date.strftime('%b')} {end_date.day}, {end_date.year}.",
+            "Completed vs upcoming",
+            f"{len(completed)} of {total} completed",
+            metadata_lines=[_format_quick_date_range(start_date, end_date), "Deduplicated by start date"],
+            main_secondary=f"{len(upcoming)} upcoming",
             sections=sections,
+            progress=(len(completed) / total) if total else 0,
         ),
         "scheduling_draft": None,
     }
@@ -2926,9 +3002,9 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
         return {
             "reply": _quick_result_html(
                 f"Sundays in {today.year}",
-                "Regular duties on Sundays",
-                [f"You had {count} Sunday duties in {today.year}."],
-                f"Based on Jan 1 to {today.strftime('%b')} {today.day}, {today.year}.",
+                f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
+                f"{count} Sunday duties",
+                metadata_lines=["Deduplicated by start date"],
                 breakdown_rows=[("Sunday", count)],
             ),
             "scheduling_draft": None,
@@ -2943,9 +3019,9 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
         return {
             "reply": _quick_result_html(
                 "Monthly Average",
-                "Regular duties this year",
-                [f"Your average was {average:.1f} duties per month."],
-                f"Based on Jan 1 to {today.strftime('%b')} {today.day}, {today.year}, averaged across {months_with_data} month{'s' if months_with_data != 1 else ''} with data.",
+                f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
+                f"{average:.1f} duties/month",
+                metadata_lines=[f"{months_with_data} month{'s' if months_with_data != 1 else ''} with data", "Deduplicated by start date"],
                 breakdown_rows=[(datetime.strptime(month_key, "%Y-%m").strftime("%B"), count) for month_key, count in sorted(month_counts.items())[-6:]],
             ),
             "scheduling_draft": None,
@@ -2960,9 +3036,10 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
         return {
             "reply": _quick_result_html(
                 "Busiest Weekday",
-                "Regular duties this year",
-                [f"{busiest_name} has been your busiest weekday.", f"{weekday_counts.get(busiest, 0)} duties"],
-                f"Based on Jan 1 to {today.strftime('%b')} {today.day}, {today.year}.",
+                f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
+                f"Busiest weekday: {busiest_name}",
+                metadata_lines=["Deduplicated by start date"],
+                main_secondary=f"{weekday_counts.get(busiest, 0)} duties",
                 breakdown_rows=[(datetime(2026, 4, 20 + idx).strftime("%A"), count) for idx, count in sorted_rows[:6]],
             ),
             "scheduling_draft": None,
@@ -2976,9 +3053,9 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
             return {
                 "reply": _quick_result_html(
                     "Peak Month",
-                    "Regular duties this year",
-                    ["I couldn’t find any duties for this period."],
-                    f"Based on Jan 1 to {today.strftime('%b')} {today.day}, {today.year}.",
+                    f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
+                    "No duties found",
+                    metadata_lines=["Deduplicated by start date"],
                 ),
                 "scheduling_draft": None,
             }
@@ -2987,9 +3064,10 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
         return {
             "reply": _quick_result_html(
                 "Peak Month",
-                "Regular duties this year",
-                [f"{month_label} was your busiest month.", f"{month_counts[busiest_month]} duties"],
-                f"Based on Jan 1 to {today.strftime('%b')} {today.day}, {today.year}.",
+                f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
+                f"Busiest month: {month_label}",
+                metadata_lines=["Deduplicated by start date"],
+                main_secondary=f"{month_counts[busiest_month]} duties",
                 breakdown_rows=[(datetime.strptime(month_key, "%Y-%m").strftime("%B"), count) for month_key, count in sorted(month_counts.items(), key=lambda item: item[1], reverse=True)[:6]],
             ),
             "scheduling_draft": None,
@@ -3007,8 +3085,8 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
             "reply": _quick_result_html(
                 "Last 3 Months",
                 "Average regular duties",
-                [f"Your average was {average:.1f} duties per month."],
-                f"Based on {start_date.strftime('%b')} {start_date.day} to {end_date.strftime('%b')} {end_date.day}, {end_date.year}, averaged across {months_with_data} month{'s' if months_with_data != 1 else ''} with data.",
+                f"{average:.1f} duties/month",
+                metadata_lines=[_format_quick_date_range(start_date, end_date), f"{months_with_data} month{'s' if months_with_data != 1 else ''} with data"],
                 breakdown_rows=[(datetime.strptime(month_key, "%Y-%m").strftime("%B"), count) for month_key, count in sorted(month_counts.items())],
             ),
             "scheduling_draft": None,
@@ -3018,9 +3096,9 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
         return {
             "reply": _quick_result_html(
                 "Weekend Duties",
-                "Regular duties this year",
-                [f"You had {count} weekend duties."],
-                f"Based on Jan 1 to {today.strftime('%b')} {today.day}, {today.year}.",
+                f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
+                f"{count} weekend duties",
+                metadata_lines=["Deduplicated by start date"],
             ),
             "scheduling_draft": None,
         }
@@ -3035,8 +3113,10 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
         "reply": _quick_result_html(
             "Year Comparison",
             "Regular duties year over year",
-            [f"You are {direction} by {abs(delta)} duties.", f"{this_year_count} this year vs {last_year_count} last year"],
-            f"Based on Jan 1 to {today.strftime('%b')} {today.day} for each year.",
+            "Flat year over year" if direction == "flat" else f"{abs(delta)} duties {direction}",
+            metadata_lines=[f"Jan 1 – {today.strftime('%b')} {today.day} each year", "Deduplicated by start date"],
+            main_secondary=f"{this_year_count} this year · {last_year_count} last year",
+            breakdown_rows=[("This year", this_year_count), ("Last year", last_year_count)],
         ),
         "scheduling_draft": None,
     }
@@ -3051,9 +3131,9 @@ def _render_planning_quick_result(session_id, quick_key):
         return {
             "reply": _quick_result_html(
                 "Planning Insight",
-                "Upcoming regular duties",
-                ["I couldn’t find any duties for this period."],
-                "Based on upcoming duties.",
+                "Looking ahead",
+                "No duties found",
+                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
             ),
             "scheduling_draft": None,
         }
@@ -3063,10 +3143,11 @@ def _render_planning_quick_result(session_id, quick_key):
         return {
             "reply": _quick_result_html(
                 "Next Week",
-                "Check your load",
-                [f"You have {len(next_week_dates)} duties next week."],
-                "Based on upcoming duties.",
-                breakdown_rows=[(_format_quick_card_date(duty_date), "Duty") for duty_date in next_week_dates[:6]],
+                "Looking ahead",
+                f"{len(next_week_dates)} duties next week",
+                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                support_line=", ".join(duty_date.strftime("%b %d") for duty_date in next_week_dates[:3]) if next_week_dates else None,
+                breakdown_rows=[(_format_quick_card_row_date(duty_date), "Duty") for duty_date in next_week_dates[:6]],
             ),
             "scheduling_draft": None,
         }
@@ -3076,28 +3157,34 @@ def _render_planning_quick_result(session_id, quick_key):
             gap_days = (right - left).days
             if gap_days > 7 and (largest_gap is None or gap_days > largest_gap[0]):
                 largest_gap = (gap_days, left, right)
-        main_lines = [f"You have a {largest_gap[0]}-day gap between duties.", f"From {largest_gap[1].strftime('%A')} to {largest_gap[2].strftime('%A')}."] if largest_gap else ["No gap longer than 7 days shows up ahead."]
+        if largest_gap:
+            main_primary = f"{largest_gap[0]}-day gap ahead"
+            support_line = f"{largest_gap[1].strftime('%b %d')} to {largest_gap[2].strftime('%b %d')}"
+        else:
+            main_primary = "No long gaps ahead"
+            support_line = None
         return {
             "reply": _quick_result_html(
                 "Schedule Gaps",
-                "Plan ahead",
-                main_lines,
-                "Based on upcoming duties.",
+                "Looking ahead",
+                main_primary,
+                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                support_line=support_line,
             ),
             "scheduling_draft": None,
         }
     if quick_key == "busy_stretch":
         pair_count = sum(1 for left, right in zip(dates, dates[1:]) if (right - left).days == 1)
         next_pair = next(((left, right) for left, right in zip(dates, dates[1:]) if (right - left).days == 1), None)
-        main_lines = [f"You have {pair_count} back-to-back duty pair{'s' if pair_count != 1 else ''} ahead."]
-        if next_pair:
-            main_lines.append(f"Starting {next_pair[0].strftime('%A')}.")
+        main_primary = f"{pair_count} back-to-back pair{'s' if pair_count != 1 else ''} ahead"
+        support_line = f"Starting {next_pair[0].strftime('%A')}" if next_pair else None
         return {
             "reply": _quick_result_html(
                 "Busy Stretch",
-                "Stay on top",
-                main_lines,
-                "Based on upcoming duties.",
+                "Looking ahead",
+                main_primary,
+                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                support_line=support_line,
             ),
             "scheduling_draft": None,
         }
@@ -3106,9 +3193,9 @@ def _render_planning_quick_result(session_id, quick_key):
         return {
             "reply": _quick_result_html(
                 "Weekend Load",
-                "Future weekend duties",
-                [f"You have {weekend_count} weekend duties coming up."],
-                "Based on upcoming duties.",
+                "Looking ahead",
+                f"{weekend_count} weekend duties ahead",
+                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
             ),
             "scheduling_draft": None,
         }
@@ -3121,9 +3208,10 @@ def _render_planning_quick_result(session_id, quick_key):
     return {
         "reply": _quick_result_html(
             "Forward Pattern",
-            "Look ahead by month",
-            [f"{month_label} looks like your busiest upcoming month.", f"{month_counts[busiest_month]} duties planned"],
-            "Based on upcoming duties.",
+            "Looking ahead",
+            f"Busiest ahead: {month_label}",
+            metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+            main_secondary=f"{month_counts[busiest_month]} duties",
             breakdown_rows=[(datetime.strptime(month_key, "%Y-%m").strftime("%B"), count) for month_key, count in sorted(month_counts.items())[:6]],
         ),
         "scheduling_draft": None,
