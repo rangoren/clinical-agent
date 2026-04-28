@@ -377,6 +377,15 @@ EXTERNAL_SOURCE_CATALOG = [
         "keywords": ["gbs", "group b strep", "group b streptococcus", "intrapartum antibiotics"],
     },
     {
+        "title": "ACOG: Group B Strep and Pregnancy",
+        "url": "https://www.acog.org/womens-health/faqs/group-b-strep-and-pregnancy",
+        "source_type": "external guideline",
+        "keywords": [
+            "group b strep", "gbs", "gbs prophylaxis", "group b strep prophylaxis",
+            "intrapartum prophylaxis", "antibiotics during labor", "when should group b strep prophylaxis be given during labor",
+        ],
+    },
+    {
         "title": "ACOG: Postpartum Hemorrhage",
         "url": "https://www.acog.org/clinical/clinical-guidance/practice-bulletin/articles/2017/10/postpartum-hemorrhage",
         "source_type": "external guideline",
@@ -405,6 +414,12 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://www.acog.org/womens-health/faqs/abnormal-uterine-bleeding",
         "source_type": "external guideline",
         "keywords": ["abnormal uterine bleeding", "aub", "heavy periods", "menorrhagia", "intermenstrual bleeding"],
+    },
+    {
+        "title": "Amenorrhea: Absence of Periods | ACOG",
+        "url": "https://www.acog.org/womens-health/faqs/amenorrhea-absence-of-periods",
+        "source_type": "external guideline",
+        "keywords": ["secondary amenorrhea", "amenorrhea", "absence of periods", "causes of secondary amenorrhea"],
     },
     {
         "title": "ACOG: Endometriosis",
@@ -490,10 +505,46 @@ EXTERNAL_SOURCE_CATALOG = [
         "keywords": ["nipt", "cfdna", "aneuploidy screening", "genetic screening", "trisomy"],
     },
     {
+        "title": "ACOG: Cervical Cancer Screening",
+        "url": "https://www.acog.org/womens-health/faqs/cervical-cancer-screening",
+        "source_type": "external guideline",
+        "keywords": [
+            "cervical cancer screening", "pap smear schedule", "pap test schedule",
+            "hpv screening schedule", "recommended screening schedule for cervical cancer",
+        ],
+    },
+    {
         "title": "ACOG: Fetal Heart Rate Monitoring During Labor",
         "url": "https://www.acog.org/womens-health/faqs/fetal-heart-rate-monitoring-during-labor",
         "source_type": "external guideline",
         "keywords": ["fetal heart rate", "normal fetal heart rate", "baseline fetal heart rate", "110 160", "fhr normal range"],
+    },
+    {
+        "title": "ACOG: Preterm Labor and Birth",
+        "url": "https://www.acog.org/womens-health/faqs/preterm-labor-and-birth",
+        "source_type": "external guideline",
+        "keywords": [
+            "antenatal corticosteroids", "steroids before preterm delivery", "betamethasone",
+            "preterm labor", "preterm birth", "when should steroids be given before preterm delivery",
+        ],
+    },
+    {
+        "title": "When Pregnancy Goes Past Your Due Date | ACOG",
+        "url": "https://www.acog.org/womens-health/faqs/when-pregnancy-goes-past-your-due-date",
+        "source_type": "external guideline",
+        "keywords": ["post-term pregnancy", "postterm pregnancy", "late term pregnancy", "42 weeks", "when is a pregnancy considered post-term"],
+    },
+    {
+        "title": "Vaginal Birth After Cesarean Delivery (VBAC) | ACOG",
+        "url": "https://www.acog.org/womens-health/faqs/vaginal-birth-after-cesarean-delivery",
+        "source_type": "external guideline",
+        "keywords": ["vbac", "tolac", "trial of labor after cesarean", "one previous c-section", "is vaginal delivery safe after one previous c-section"],
+    },
+    {
+        "title": "ACOG: 3 Conditions to Watch for After Childbirth",
+        "url": "https://www.acog.org/womens-health/experts-and-stories/the-latest/3-conditions-to-watch-for-after-childbirth",
+        "source_type": "expert review",
+        "keywords": ["postpartum fever", "postpartum endometritis", "most common cause of postpartum fever", "endometritis after childbirth"],
     },
     {
         "title": "ACOG: Carrier Screening",
@@ -762,18 +813,79 @@ def get_forced_authoritative_source(user_message):
         "when should i induce",
         "when should labor be induced",
     ]
+    cervical_screening_terms = [
+        "cervical cancer screening",
+        "pap smear schedule",
+        "pap test schedule",
+        "hpv screening schedule",
+        "recommended screening schedule for cervical cancer",
+    ]
+    gbs_terms = [
+        "group b strep",
+        "gbs",
+        "gbs prophylaxis",
+        "group b strep prophylaxis",
+        "antibiotics during labor",
+    ]
+    postterm_terms = [
+        "post-term",
+        "postterm",
+        "late term",
+        "42 weeks",
+        "when is a pregnancy considered post-term",
+    ]
+    amenorrhea_terms = [
+        "secondary amenorrhea",
+        "amenorrhea",
+        "absence of periods",
+    ]
+    antenatal_steroid_terms = [
+        "steroids before preterm delivery",
+        "antenatal corticosteroids",
+        "betamethasone",
+        "preterm labor",
+        "when should steroids be given before preterm delivery",
+    ]
+    vbac_terms = [
+        "vbac",
+        "tolac",
+        "trial of labor after cesarean",
+        "one previous c-section",
+        "one previous c section",
+        "previous cesarean",
+    ]
+    postpartum_fever_terms = [
+        "postpartum fever",
+        "postpartum endometritis",
+        "endometritis after childbirth",
+        "most common cause of postpartum fever",
+    ]
 
     forced_title = None
     if any(_contains_term(normalized, term) for term in bv_terms):
         forced_title = "CDC STI Treatment Guidelines: Bacterial Vaginosis"
     elif any(_contains_term(normalized, term) for term in early_pregnancy_terms):
         forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
+    elif any(_contains_term(normalized, term) for term in cervical_screening_terms):
+        forced_title = "ACOG: Cervical Cancer Screening"
+    elif any(_contains_term(normalized, term) for term in gbs_terms):
+        forced_title = "ACOG: Group B Strep and Pregnancy"
     elif any(_contains_term(normalized, term) for term in rh_terms):
         forced_title = "ACOG: The Rh Factor: How It Can Affect Your Pregnancy"
     elif any(_contains_term(normalized, term) for term in fetal_heart_rate_terms):
         forced_title = "ACOG: Fetal Heart Rate Monitoring During Labor"
     elif any(_contains_term(normalized, term) for term in antepartum_bleeding_terms):
         forced_title = "ACOG: Bleeding During Pregnancy"
+    elif any(_contains_term(normalized, term) for term in postterm_terms):
+        forced_title = "When Pregnancy Goes Past Your Due Date | ACOG"
+    elif any(_contains_term(normalized, term) for term in amenorrhea_terms):
+        forced_title = "Amenorrhea: Absence of Periods | ACOG"
+    elif any(_contains_term(normalized, term) for term in antenatal_steroid_terms):
+        forced_title = "ACOG: Preterm Labor and Birth"
+    elif any(_contains_term(normalized, term) for term in vbac_terms):
+        forced_title = "Vaginal Birth After Cesarean Delivery (VBAC) | ACOG"
+    elif any(_contains_term(normalized, term) for term in postpartum_fever_terms):
+        forced_title = "ACOG: 3 Conditions to Watch for After Childbirth"
     elif any(_contains_term(normalized, term) for term in postmenopausal_bleeding_terms):
         forced_title = "ACOG: Perimenopausal Bleeding and Bleeding After Menopause"
     elif any(_contains_term(normalized, term) for term in adnexal_mass_terms):
