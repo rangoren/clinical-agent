@@ -345,7 +345,23 @@ EXTERNAL_SOURCE_CATALOG = [
         "title": "ACOG: Labor Induction",
         "url": "https://www.acog.org/womens-health/faqs/labor-induction",
         "source_type": "external guideline",
-        "keywords": ["induction", "labor induction", "labour induction", "bishop score", "ripening"],
+        "keywords": ["induction", "labor induction", "labour induction", "bishop score", "ripening", "indicated", "when to induce labor", "when is induction indicated"],
+    },
+    {
+        "title": "ACOG: The Rh Factor: How It Can Affect Your Pregnancy",
+        "url": "https://www.acog.org/womens-health/faqs/the-rh-factor-how-it-can-affect-your-pregnancy",
+        "source_type": "external guideline",
+        "keywords": ["rh immunoglobulin", "rhig", "rho gam", "rh negative", "rh incompatibility", "anti-d", "when should i give rh immunoglobulin"],
+    },
+    {
+        "title": "ACOG: Bleeding During Pregnancy",
+        "url": "https://www.acog.org/womens-health/faqs/bleeding-during-pregnancy",
+        "source_type": "external guideline",
+        "keywords": [
+            "first-trimester bleeding", "first trimester bleeding", "bleeding during pregnancy",
+            "placenta previa", "placental abruption", "abruption", "ectopic pregnancy",
+            "common causes of first-trimester bleeding", "difference between placenta previa and placental abruption",
+        ],
     },
     {
         "title": "ACOG: Prelabor Rupture of Membranes",
@@ -422,7 +438,7 @@ EXTERNAL_SOURCE_CATALOG = [
         "title": "CDC STI Treatment Guidelines: Bacterial Vaginosis",
         "url": "https://www.cdc.gov/std/treatment-guidelines/bv.htm",
         "source_type": "external guideline",
-        "keywords": ["bacterial vaginosis", "bv", "fishy discharge", "clue cells"],
+        "keywords": ["bacterial vaginosis", "bv", "fishy discharge", "clue cells", "metronidazole", "first-line treatment"],
     },
     {
         "title": "CDC STI Treatment Guidelines: Trichomoniasis",
@@ -472,6 +488,12 @@ EXTERNAL_SOURCE_CATALOG = [
         "url": "https://www.acog.org/womens-health/faqs/prenatal-genetic-screening-tests",
         "source_type": "external guideline",
         "keywords": ["nipt", "cfdna", "aneuploidy screening", "genetic screening", "trisomy"],
+    },
+    {
+        "title": "ACOG: Fetal Heart Rate Monitoring During Labor",
+        "url": "https://www.acog.org/womens-health/faqs/fetal-heart-rate-monitoring-during-labor",
+        "source_type": "external guideline",
+        "keywords": ["fetal heart rate", "normal fetal heart rate", "baseline fetal heart rate", "110 160", "fhr normal range"],
     },
     {
         "title": "ACOG: Carrier Screening",
@@ -701,10 +723,57 @@ def get_forced_authoritative_source(user_message):
         "neuraxial",
         "epidural",
     ]
+    bv_terms = [
+        "bacterial vaginosis",
+        "bv",
+        "fishy discharge",
+        "clue cells",
+        "metronidazole",
+    ]
+    rh_terms = [
+        "rh immunoglobulin",
+        "rhig",
+        "rho gam",
+        "anti-d",
+        "rh negative",
+        "rh incompatibility",
+    ]
+    fetal_heart_rate_terms = [
+        "fetal heart rate",
+        "fhr",
+        "normal range for fetal heart rate",
+        "normal fetal heart rate",
+        "baseline fetal heart rate",
+    ]
+    antepartum_bleeding_terms = [
+        "placenta previa",
+        "placental abruption",
+        "abruption",
+        "bleeding during pregnancy",
+        "first-trimester bleeding",
+        "first trimester bleeding",
+    ]
+    induction_terms = [
+        "induction of labor",
+        "induction of labour",
+        "labor induction",
+        "labour induction",
+        "when is induction indicated",
+        "when should i induce",
+        "when should labor be induced",
+    ]
 
     forced_title = None
-    if any(_contains_term(normalized, term) for term in early_pregnancy_terms):
+    if any(_contains_term(normalized, term) for term in bv_terms):
+        forced_title = "CDC STI Treatment Guidelines: Bacterial Vaginosis"
+    elif any(_contains_term(normalized, term) for term in early_pregnancy_terms):
         forced_title = "NICE Guideline: Ectopic Pregnancy and Miscarriage"
+    elif any(_contains_term(normalized, term) for term in rh_terms):
+        forced_title = "ACOG: The Rh Factor: How It Can Affect Your Pregnancy"
+    elif any(_contains_term(normalized, term) for term in fetal_heart_rate_terms):
+        forced_title = "ACOG: Fetal Heart Rate Monitoring During Labor"
+    elif any(_contains_term(normalized, term) for term in antepartum_bleeding_terms):
+        forced_title = "ACOG: Bleeding During Pregnancy"
     elif any(_contains_term(normalized, term) for term in postmenopausal_bleeding_terms):
         forced_title = "ACOG: Perimenopausal Bleeding and Bleeding After Menopause"
     elif any(_contains_term(normalized, term) for term in adnexal_mass_terms):
@@ -721,6 +790,8 @@ def get_forced_authoritative_source(user_message):
         _contains_term(normalized, term) for term in ["pregnancy uti", "pregnant", "pyelonephritis in pregnancy"]
     ):
         forced_title = "NICE Guideline: Lower UTI (Women)"
+    elif any(_contains_term(normalized, term) for term in induction_terms):
+        forced_title = "ACOG: Labor Induction"
     elif any(_contains_term(normalized, term) for term in fertility_terms):
         if any(
             _contains_term(normalized, term)
