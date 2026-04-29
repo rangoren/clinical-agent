@@ -2283,7 +2283,7 @@
 
         function attemptInitialComposerFocus() {
             const input = document.getElementById("input");
-            if (!input || appMode !== "clinical" || studyCardsDismissed) {
+            if (!input || appMode !== "clinical" || studyCardsDismissed || composerModeStripOpen) {
                 updateComposerState();
                 return;
             }
