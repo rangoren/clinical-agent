@@ -6,8 +6,10 @@ from zoneinfo import ZoneInfo
 from uuid import uuid4
 
 from bson import ObjectId
+import requests
 
 from db import (
+    duty_sync_connections_collection,
     duty_sync_snapshots_collection,
     scheduled_events_collection,
     scheduling_drafts_collection,
@@ -18,11 +20,30 @@ from services.intent_service import classify_message_intent
 from services.scheduling_extraction_service import extract_scheduling_intent
 from services.logging_service import log_event
 from services.textbook_runtime_service import detect_textbook_request
+from services.duty_sync_parsing import (
+    RELEVANT_ROLE_HEADERS,
+    RELEVANT_TAB_TOKEN,
+    ROLE_TITLE_MAP,
+    build_duty_datetimes,
+    detect_header_row,
+    has_readable_date_ahead,
+    is_friday_morning_section_marker,
+    normalize_sheet_id,
+    normalize_text,
+    parse_sheet_date,
+)
 from services.google_calendar_service import (
+    GOOGLE_HTTP_TIMEOUT_SECONDS,
+    GOOGLE_SHEETS_READONLY_SCOPE,
+    GoogleCalendarReconnectRequiredError,
+    _auth_headers,
+    _refresh_google_access_token,
+    get_google_connection,
     get_google_calendar_name,
     get_google_calendars,
     has_google_calendar_connection,
     list_google_calendar_events_across_calendars,
+    google_connection_has_scopes,
     sync_google_create_event,
     sync_google_delete_event,
     sync_google_update_event,
@@ -42,6 +63,10 @@ HALF_SHIFT_DURATION_MINUTES = 8 * 60
 SCHEDULING_CONTEXT_TTL_MINUTES = 10
 APP_TIMEZONE = ZoneInfo("Asia/Jerusalem")
 SCHEDULING_QUICK_CARD_CACHE = {}
+SCHEDULING_DUTY_TEAM_CACHE = {}
+SCHEDULING_DUTY_TEAM_CACHE_TTL_SECONDS = 300
+GOOGLE_SHEETS_METADATA_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
+GOOGLE_SHEETS_VALUES_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{sheet_range}"
 KNOWN_LOCATIONS = {
     "שיבא": ("shiba", "sheba", "tel hashomer", "תל השומר", "שיבא"),
 }
@@ -125,6 +150,43 @@ HISTORICAL_DUTY_TERMS = (
     "תורנויות",
     "כוננות",
 )
+ON_DUTY_LOOKUP_PATTERNS = (
+    "who is on duty",
+    "who's on duty",
+    "who is on call",
+    "who's on call",
+    "can you tell me who is on duty",
+    "can you tell me who's on duty",
+    "can you tell me who is on call",
+    "can you tell me who's on call",
+    "tell me who is on duty",
+    "tell me who's on duty",
+    "on duty now",
+    "on duty tonight",
+    "on duty tonigh",
+    "on duty today",
+    "מי בתורנות",
+    "מי תורן",
+    "מי בכוננות",
+)
+DUTY_TEAM_TIME_KEYWORDS = (
+    "now",
+    "today",
+    "tonight",
+    "tonigh",
+    "הלילה",
+    "היום",
+    "עכשיו",
+)
+DUTY_ROLE_ENGLISH_MAP = {
+    "חדר לידה": "Labor ward duty",
+    "קבלה": "Admissions duty",
+    "מיון": "ER duty",
+    "ב": "B duty",
+    "תורן חצי": "Half duty",
+    "תורן ד": "D duty",
+    "מחלקות": "Department duty",
+}
 WEEKEND_MARKERS = ("weekend", "weekends", "סופש", "סוף שבוע", "סופי שבוע")
 DELETE_KEYWORDS = (
     "delete",
@@ -267,6 +329,37 @@ SCHEDULING_ALIAS_SEEDS = (
 
 def _utcnow():
     return datetime.utcnow()
+
+
+def _local_now():
+    return datetime.now(APP_TIMEZONE)
+
+
+def _duty_team_cache_key(session_id):
+    return f"{session_id}:duty_team"
+
+
+def _get_cached_duty_team_payload(session_id, sheet_id, tab_name):
+    cached = SCHEDULING_DUTY_TEAM_CACHE.get(_duty_team_cache_key(session_id))
+    if not cached:
+        return None
+    if cached.get("sheet_id") != sheet_id or cached.get("tab_name") != tab_name:
+        return None
+    cached_at = cached.get("cached_at")
+    if not isinstance(cached_at, datetime):
+        return None
+    if (_utcnow() - cached_at).total_seconds() > SCHEDULING_DUTY_TEAM_CACHE_TTL_SECONDS:
+        return None
+    return cached.get("payload")
+
+
+def _store_cached_duty_team_payload(session_id, sheet_id, tab_name, payload):
+    SCHEDULING_DUTY_TEAM_CACHE[_duty_team_cache_key(session_id)] = {
+        "sheet_id": sheet_id,
+        "tab_name": tab_name,
+        "cached_at": _utcnow(),
+        "payload": payload,
+    }
 
 
 def _get_scheduling_preferences(session_id):
@@ -2278,6 +2371,266 @@ def _format_shift_summary_line_from_duty(duty):
     return f"- {date_label} · {title}"
 
 
+def _sheet_auth_headers(session_id):
+    connection = get_google_connection(session_id)
+    if not connection:
+        return None
+    return connection, _auth_headers(connection["access_token"])
+
+
+def _sheet_get_json(session_id, url, params=None):
+    connection_and_headers = _sheet_auth_headers(session_id)
+    if not connection_and_headers:
+        return None
+    connection, headers = connection_and_headers
+    response = requests.get(
+        url,
+        headers=headers,
+        params=params or {},
+        timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+    )
+    if response.status_code == 401:
+        refreshed_access_token = _refresh_google_access_token(session_id, connection)
+        if refreshed_access_token:
+            response = requests.get(
+                url,
+                headers=_auth_headers(refreshed_access_token),
+                params=params or {},
+                timeout=GOOGLE_HTTP_TIMEOUT_SECONDS,
+            )
+    response.raise_for_status()
+    return response.json()
+
+
+def _fetch_duty_sheet_values(session_id, sheet_id, tab_name):
+    from urllib.parse import quote
+
+    encoded_range = quote(f"'{tab_name}'", safe="")
+    url = GOOGLE_SHEETS_VALUES_URL.format(sheet_id=sheet_id, sheet_range=encoded_range)
+    data = _sheet_get_json(session_id, url)
+    return (data or {}).get("values") or []
+
+
+def _fetch_duty_sheet_metadata(session_id, sheet_id):
+    url = GOOGLE_SHEETS_METADATA_URL.format(sheet_id=sheet_id)
+    return _sheet_get_json(
+        session_id,
+        url,
+        params={"fields": "sheets.properties(title,sheetId)"},
+    )
+
+
+def _extract_roster_assignments(tab_name, values):
+    header_info = detect_header_row(values)
+    columns = header_info["columns"]
+    assignments = []
+    latest_date = None
+
+    for row_index in range(header_info["row_index"] + 1, len(values)):
+        row = values[row_index]
+        date_cell = row[columns["תאריך"]] if columns["תאריך"] < len(row) else ""
+        duty_date = parse_sheet_date(date_cell)
+
+        relevant_values = {}
+        for role in RELEVANT_ROLE_HEADERS:
+            column_index = columns[role]
+            relevant_values[role] = normalize_text(row[column_index] if column_index < len(row) else "")
+
+        row_has_content = any(relevant_values.values()) or normalize_text(date_cell)
+        if not row_has_content:
+            continue
+
+        if duty_date is None:
+            if is_friday_morning_section_marker(row) or (
+                latest_date is not None and not has_readable_date_ahead(values, row_index, columns["תאריך"])
+            ):
+                break
+            continue
+
+        latest_date = max(latest_date, duty_date) if latest_date else duty_date
+
+        for role, cell_value in relevant_values.items():
+            if not cell_value:
+                continue
+            start_dt, end_dt = build_duty_datetimes(duty_date, role)
+            assignments.append(
+                {
+                    "date": duty_date,
+                    "role": role,
+                    "title": ROLE_TITLE_MAP.get(role) or role,
+                    "role_label": DUTY_ROLE_ENGLISH_MAP.get(role) or "Duty",
+                    "person_name": cell_value,
+                    "start_at": start_dt,
+                    "end_at": end_dt,
+                    "source_tab_name": tab_name,
+                    "source_row_index": row_index + 1,
+                }
+            )
+
+    return {"tab_name": tab_name, "latest_date": latest_date, "assignments": assignments}
+
+
+def _load_latest_duty_team_roster(session_id):
+    connection_doc = duty_sync_connections_collection.find_one({"session_id": session_id, "is_connected": True}) or {}
+    raw_sheet_reference = connection_doc.get("sheet_id") or connection_doc.get("sheet_url") or ""
+    if not normalize_text(raw_sheet_reference):
+        return None
+    sheet_id = normalize_sheet_id(raw_sheet_reference)
+    if not sheet_id:
+        return None
+
+    tab_name = normalize_text(connection_doc.get("source_tab_name") or "")
+    if tab_name:
+        cached = _get_cached_duty_team_payload(session_id, sheet_id, tab_name)
+        if cached:
+            return cached
+        values = _fetch_duty_sheet_values(session_id, sheet_id, tab_name)
+        parsed = _extract_roster_assignments(tab_name, values)
+        payload = {
+            "sheet_id": sheet_id,
+            "tab_name": tab_name,
+            "latest_date": parsed.get("latest_date"),
+            "assignments": parsed.get("assignments") or [],
+        }
+        _store_cached_duty_team_payload(session_id, sheet_id, tab_name, payload)
+        return payload
+
+    metadata = _fetch_duty_sheet_metadata(session_id, sheet_id) or {}
+    candidate_tabs = [
+        normalize_text((sheet.get("properties") or {}).get("title"))
+        for sheet in metadata.get("sheets") or []
+        if RELEVANT_TAB_TOKEN in normalize_text((sheet.get("properties") or {}).get("title"))
+    ]
+    best_payload = None
+    for candidate_tab in candidate_tabs:
+        cached = _get_cached_duty_team_payload(session_id, sheet_id, candidate_tab)
+        if cached:
+            payload = cached
+        else:
+            values = _fetch_duty_sheet_values(session_id, sheet_id, candidate_tab)
+            parsed = _extract_roster_assignments(candidate_tab, values)
+            payload = {
+                "sheet_id": sheet_id,
+                "tab_name": candidate_tab,
+                "latest_date": parsed.get("latest_date"),
+                "assignments": parsed.get("assignments") or [],
+            }
+            _store_cached_duty_team_payload(session_id, sheet_id, candidate_tab, payload)
+        if not best_payload or (
+            payload.get("latest_date") and payload.get("latest_date") > (best_payload.get("latest_date") or payload.get("latest_date"))
+        ):
+            best_payload = payload
+    return best_payload
+
+
+def _is_on_duty_lookup_request(user_message):
+    lowered = (user_message or "").strip().lower()
+    if not lowered:
+        return False
+    if any(pattern in lowered for pattern in ON_DUTY_LOOKUP_PATTERNS):
+        return True
+    if ("on duty" in lowered or "on call" in lowered) and any(token in lowered for token in DUTY_TEAM_TIME_KEYWORDS):
+        return True
+    if re.search(r"\bwho\b.*\bon\b.*\b(now|today|tonight|tonigh|tomorrow)\b", lowered):
+        return True
+    if re.search(r"\b(can you tell me|tell me|check)\b.*\b(on duty|on call)\b", lowered):
+        return True
+    if ("תורן" in lowered or "תורנות" in lowered) and any(token in lowered for token in DUTY_TEAM_TIME_KEYWORDS):
+        return True
+    return False
+
+
+def _resolve_on_duty_lookup_window(user_message):
+    lowered = (user_message or "").strip().lower()
+    now = _local_now()
+    if "tomorrow" in lowered or "מחר" in lowered:
+        target_date = (now + timedelta(days=1)).date()
+        return "tomorrow", target_date
+    if "tonight" in lowered or "tonigh" in lowered or "הלילה" in lowered:
+        return "tonight", now.date()
+    if "now" in lowered or "עכשיו" in lowered:
+        return "now", now.date()
+    return "today", now.date()
+
+
+def _format_on_duty_header(window_key, target_date):
+    if window_key == "now":
+        return f"On duty now · {target_date.strftime('%A, %d.%m')}"
+    if window_key == "tonight":
+        return f"Tonight · {target_date.strftime('%A, %d.%m')} duty team"
+    if window_key == "tomorrow":
+        return f"Tomorrow · {target_date.strftime('%A, %d.%m')} duty team"
+    return f"Today · {target_date.strftime('%A, %d.%m')} duty team"
+
+
+def _build_on_duty_reply(session_id, user_message):
+    if not has_google_calendar_connection(session_id):
+        return {
+            "reply": "Connect Google in Settings first, then I can check the duty sheet for you.",
+            "scheduling_draft": None,
+        }
+    if not google_connection_has_scopes(session_id, [GOOGLE_SHEETS_READONLY_SCOPE]):
+        return {
+            "reply": "Reconnect Google in Settings so I can read the duty sheet for you.",
+            "scheduling_draft": None,
+        }
+    connection_doc = duty_sync_connections_collection.find_one({"session_id": session_id, "is_connected": True}) or {}
+    if not connection_doc:
+        return {
+            "reply": "Connect your duty sheet in Settings first, then I can check who is on duty.",
+            "scheduling_draft": None,
+        }
+
+    try:
+        roster_payload = _load_latest_duty_team_roster(session_id)
+    except GoogleCalendarReconnectRequiredError:
+        return {
+            "reply": "Reconnect Google Calendar in Settings, then I can check who is on duty.",
+            "scheduling_draft": None,
+        }
+    except Exception:
+        return {
+            "reply": "I couldn’t read the duty sheet right now.",
+            "scheduling_draft": None,
+        }
+
+    assignments = (roster_payload or {}).get("assignments") or []
+    if not assignments:
+        return {
+            "reply": "I couldn’t find duty team data in the current duty sheet.",
+            "scheduling_draft": None,
+        }
+
+    window_key, target_date = _resolve_on_duty_lookup_window(user_message)
+    local_now = _local_now()
+    if window_key == "now":
+        matched = [
+            item for item in assignments
+            if item.get("start_at") and item.get("end_at")
+            and item["start_at"] <= local_now < item["end_at"]
+        ]
+    else:
+        matched = [item for item in assignments if item.get("date") == target_date]
+
+    matched.sort(key=lambda item: (RELEVANT_ROLE_HEADERS.index(item["role"]) if item.get("role") in RELEVANT_ROLE_HEADERS else 999, item.get("person_name") or ""))
+    if not matched:
+        timeframe = "right now" if window_key == "now" else ("tonight" if window_key == "tonight" else ("tomorrow" if window_key == "tomorrow" else "today"))
+        return {
+            "reply": (
+                f"I couldn’t find anyone on duty {timeframe}.\n\n"
+                f"Based on {normalize_text((roster_payload or {}).get('tab_name') or 'the latest duty sheet')}."
+            ),
+            "scheduling_draft": None,
+        }
+
+    lines = [_format_on_duty_header(window_key, target_date)]
+    for item in matched:
+        lines.append(f"- {item.get('role_label') or 'Duty'} · {item.get('person_name') or 'Unknown'}")
+    lines.append("")
+    lines.append(f"Based on {normalize_text((roster_payload or {}).get('tab_name') or 'the latest duty sheet')}.")
+    return {"reply": "\n".join(lines), "scheduling_draft": None}
+
+
 def _build_shift_summary_for_date(session_id, target_date):
     duties = _load_saved_shift_duties_for_date(session_id, target_date)
     date_label = target_date.strftime("%A %d %b %Y")
@@ -3234,21 +3587,10 @@ def get_scheduling_quick_cards(session_id):
             {"quick_key": "year_comparison", "topic": "Year comparison", "title": "See the shift"},
         ],
     )
-    planning_variant = _next_rotating_calendar_variant(
-        session_id,
-        "planning_history",
-        [
-            {"quick_key": "next_week_load", "topic": "Next week", "title": "Check your load"},
-            {"quick_key": "schedule_gaps", "topic": "Schedule gaps", "title": "Plan ahead"},
-            {"quick_key": "busy_stretch", "topic": "Busy stretch", "title": "Stay on top"},
-            {"quick_key": "weekend_load", "topic": "Weekend load", "title": "Look ahead"},
-            {"quick_key": "monthly_pattern_forward", "topic": "Next months", "title": "See your pattern"},
-        ],
-    )
     return [
         {"type": "practice", "type_label": "Scheduling", "topic": "This month", "title": "Track your duties", "subtitle": "", "cta": "Open", "intent_type": "calendar_month_overview", "quick_key": "month_overview"},
         {"type": "dynamic", "type_label": "Insight", "topic": dynamic_variant["topic"], "title": dynamic_variant["title"], "subtitle": "", "cta": "Open", "intent_type": "calendar_dynamic_stat", "quick_key": dynamic_variant["quick_key"]},
-        {"type": "pearl", "type_label": "Planning", "topic": planning_variant["topic"], "title": planning_variant["title"], "subtitle": "", "cta": "Open", "intent_type": "calendar_planning_insight", "quick_key": planning_variant["quick_key"]},
+        {"type": "pearl", "type_label": "Team", "topic": "On duty now", "title": "See tonight's team", "subtitle": "", "cta": "Open", "intent_type": "calendar_on_duty_lookup", "quick_key": "tonight_team"},
     ]
 
 
@@ -3262,6 +3604,8 @@ def run_scheduling_quick_card(session_id, intent_type, quick_key):
         return _render_month_overview_quick_result(session_id)
     if intent_type == "calendar_dynamic_stat":
         return _render_dynamic_stat_quick_result(session_id, quick_key or "sunday_count")
+    if intent_type == "calendar_on_duty_lookup":
+        return _build_on_duty_reply(session_id, "who is on duty tonight")
     if intent_type == "calendar_planning_insight":
         return _render_planning_quick_result(session_id, quick_key or "next_week_load")
     return {
@@ -3425,6 +3769,9 @@ def handle_scheduling_message(session_id, user_message):
             "reply": "Want me to check another month or a specific date?",
             "scheduling_draft": None,
         }
+    if _is_on_duty_lookup_request(normalized_user_message):
+        _clear_pending_details_context(session_id)
+        return _build_on_duty_reply(session_id, normalized_user_message)
     contextual_followup = _maybe_resolve_scheduling_context_followup(session_id, normalized_user_message)
     if contextual_followup:
         _clear_pending_details_context(session_id)
