@@ -795,7 +795,7 @@ def _extract_location(text):
         r"\b(?:at|in)\s+([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF0-9\s'\"-]{1,40})",
         r"(?:בבית חולים|במרפאה|בקליניקה|במחלקה|במשרד|בזום|בzoom)\s*([A-Za-z\u0590-\u05FF0-9\s'\"-]{1,40})",
     ]
-    stop_pattern = r"\b(?:today|tomorrow|next|בשעה|בתאריך|for|עד|to|\d{1,2}(?::\d{2})?)\b"
+    stop_pattern = r"\b(?:today|tomorrow|next|בשעה|בתאריך|for|עד|to|\d{1,2}(?::\d{2})?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|am|pm)\b"
     for pattern in generic_patterns:
         match = re.search(pattern, normalized, flags=re.IGNORECASE)
         if not match:
@@ -921,6 +921,37 @@ def _normalize_event_title(text):
     if explicit_title:
         return explicit_title
     return _clean_title(text)
+
+
+def _has_meaningful_event_title(raw_message, title):
+    cleaned_title = (title or "").strip()
+    if not cleaned_title or cleaned_title == "Untitled event":
+        return False
+
+    lowered_title = _normalize_text(cleaned_title).lower()
+    if lowered_title in {
+        "meeting",
+        "appointment",
+        "call",
+        "event",
+        "פגישה",
+        "שיחה",
+        "אירוע",
+    }:
+        return False
+    if lowered_title in TIME_WORD_HOURS:
+        return False
+    if re.fullmatch(r"\d{1,2}(?::\d{2})?", lowered_title):
+        return False
+
+    lowered_message = _normalize_text(raw_message).lower()
+    if any(keyword in lowered_message for keyword in ("meeting", "appointment", "call", "פגישה", "שיחה")):
+        semantic_title = _build_semantic_title(raw_message)
+        explicit_title = _extract_explicit_title(raw_message)
+        if not semantic_title and not explicit_title and lowered_title in {"meeting", "appointment", "call"}:
+            return False
+
+    return True
 
 
 def _infer_event_minutes(text, is_shift_template=False):
@@ -1550,7 +1581,7 @@ def _build_event_from_extraction(extraction, raw_message):
     location = extraction.get("location") or _infer_default_location(raw_message)
 
     missing = []
-    if not title or title == "Untitled event":
+    if not _has_meaningful_event_title(raw_message, title):
         missing.append("title")
     if not event_date:
         missing.append("date")
@@ -2003,7 +2034,7 @@ def _build_event_from_message(message):
     location = _infer_default_location(normalized)
 
     missing = []
-    if not title or title == "Untitled event":
+    if not _has_meaningful_event_title(normalized, title):
         missing.append("title")
     if not event_date:
         missing.append("date")
