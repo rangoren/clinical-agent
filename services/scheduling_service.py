@@ -14,6 +14,7 @@ from db import (
     scheduled_events_collection,
     scheduling_drafts_collection,
     scheduling_preferences_collection,
+    ux_unresolved_requests_collection,
 )
 from services.chat_service import load_chat
 from services.intent_service import classify_message_intent
@@ -186,6 +187,41 @@ DUTY_ROLE_ENGLISH_MAP = {
     "תורן חצי": "Half duty",
     "תורן ד": "D duty",
     "מחלקות": "Department duty",
+}
+UNRESOLVED_SCHEDULING_REPLY = "I’m not sure I understood that. Try asking it a bit more clearly."
+TIME_WORD_HOURS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "אחת": 1,
+    "אחד": 1,
+    "שתיים": 2,
+    "שתים": 2,
+    "שניים": 2,
+    "שנים": 2,
+    "שלוש": 3,
+    "ארבע": 4,
+    "חמש": 5,
+    "שש": 6,
+    "שבע": 7,
+    "שמונה": 8,
+    "תשע": 9,
+    "עשר": 10,
+    "אחת עשרה": 11,
+    "אחד עשר": 11,
+    "שתים עשרה": 12,
+    "שתים עשר": 12,
+    "שתיים עשרה": 12,
+    "שנים עשר": 12,
 }
 WEEKEND_MARKERS = ("weekend", "weekends", "סופש", "סוף שבוע", "סופי שבוע")
 DELETE_KEYWORDS = (
@@ -643,6 +679,11 @@ def _detect_action(message):
 
 def _is_daily_summary_request(message):
     lowered = _normalize_scheduling_followup_text(message)
+    if any(
+        token in lowered
+        for token in ("add ", "schedule ", "book ", "set ", "create ", "insert ", "put ", "תוסיף", "תכניס", "תקבע", "צור")
+    ):
+        return False
     if any(keyword in lowered for keyword in SUMMARY_KEYWORDS):
         return True
     summary_phrases = (
@@ -774,7 +815,7 @@ def _extract_location(text):
         r"\b(?:at|in)\s+([A-Za-z\u0590-\u05FF][A-Za-z\u0590-\u05FF0-9\s'\"-]{1,40})",
         r"(?:בבית חולים|במרפאה|בקליניקה|במחלקה|במשרד|בזום|בzoom)\s*([A-Za-z\u0590-\u05FF0-9\s'\"-]{1,40})",
     ]
-    stop_pattern = r"\b(?:today|tomorrow|next|בשעה|בתאריך|for|עד|to|\d{1,2}(?::\d{2})?)\b"
+    stop_pattern = r"\b(?:today|tomorrow|next|בשעה|בתאריך|for|עד|to|\d{1,2}(?::\d{2})?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|am|pm)\b"
     for pattern in generic_patterns:
         match = re.search(pattern, normalized, flags=re.IGNORECASE)
         if not match:
@@ -902,6 +943,37 @@ def _normalize_event_title(text):
     return _clean_title(text)
 
 
+def _has_meaningful_event_title(raw_message, title):
+    cleaned_title = (title or "").strip()
+    if not cleaned_title or cleaned_title == "Untitled event":
+        return False
+
+    lowered_title = _normalize_text(cleaned_title).lower()
+    if lowered_title in {
+        "meeting",
+        "appointment",
+        "call",
+        "event",
+        "פגישה",
+        "שיחה",
+        "אירוע",
+    }:
+        return False
+    if lowered_title in TIME_WORD_HOURS:
+        return False
+    if re.fullmatch(r"\d{1,2}(?::\d{2})?", lowered_title):
+        return False
+
+    lowered_message = _normalize_text(raw_message).lower()
+    if any(keyword in lowered_message for keyword in ("meeting", "appointment", "call", "פגישה", "שיחה")):
+        semantic_title = _build_semantic_title(raw_message)
+        explicit_title = _extract_explicit_title(raw_message)
+        if not semantic_title and not explicit_title and lowered_title in {"meeting", "appointment", "call"}:
+            return False
+
+    return True
+
+
 def _infer_event_minutes(text, is_shift_template=False):
     template = _match_scheduling_template(text)
     if template:
@@ -923,22 +995,84 @@ def _duration_label(minutes):
 
 
 def _extract_time(text):
-    if _extract_time_range(text):
-        return _extract_time_range(text)[0]
-    match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", text, flags=re.IGNORECASE)
-    if not match:
-        return None
+    details = _extract_time_details(text)
+    return details.get("time")
 
-    hour = int(match.group(1))
-    minute = int(match.group(2) or 0)
-    suffix = (match.group(3) or "").lower()
+
+def _extract_time_details(text):
+    if _extract_time_range(text):
+        return {"time": _extract_time_range(text)[0], "ambiguous": False}
+    lowered = _normalize_text(text).lower()
+    match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", text, flags=re.IGNORECASE)
+    if match:
+        hour = int(match.group(1))
+        minute = int(match.group(2) or 0)
+        suffix = (match.group(3) or "").lower()
+        if suffix == "pm" and hour < 12:
+            hour += 12
+        if suffix == "am" and hour == 12:
+            hour = 0
+        if hour > 23 or minute > 59:
+            return {"time": None, "ambiguous": False}
+        has_daytime_hint = any(token in lowered for token in ("morning", "בבוקר"))
+        has_evening_hint = any(token in lowered for token in ("tonight", "evening", "night", "afternoon", "הלילה", "בערב", "בלילה", "אחהצ", "אחר הצהריים"))
+        if not suffix and 1 <= hour <= 12:
+            if has_evening_hint and hour < 12:
+                hour += 12
+            elif not has_daytime_hint:
+                return {"time": (hour, minute), "ambiguous": True}
+        return {"time": (hour, minute), "ambiguous": False}
+
+    hebrew_time_pattern = "|".join(sorted((re.escape(word) for word in TIME_WORD_HOURS.keys() if re.search(r"[\u0590-\u05FF]", word)), key=len, reverse=True))
+    english_time_pattern = "|".join(sorted((re.escape(word) for word in TIME_WORD_HOURS.keys() if word.isascii()), key=len, reverse=True))
+    word_match = re.search(
+        rf"\b(?:at|around)\s+({english_time_pattern})(?:\s*(am|pm))?\b",
+        lowered,
+        flags=re.IGNORECASE,
+    )
+    if not word_match:
+        word_match = re.search(
+            rf"\b({english_time_pattern})\s*(am|pm)\b",
+            lowered,
+            flags=re.IGNORECASE,
+        )
+    if not word_match:
+        word_match = re.search(
+            rf"(?:בשעה|סביב השעה|בערך ב)\s*({hebrew_time_pattern})\b",
+            lowered,
+            flags=re.IGNORECASE,
+        )
+    if not word_match:
+        word_match = re.search(
+            rf"(?:\b(?:מחר|היום|הלילה|בערב|בבוקר)\s+)?ב({hebrew_time_pattern})\b",
+            lowered,
+            flags=re.IGNORECASE,
+        )
+    if not word_match:
+        word_match = re.search(
+            rf"\b(?:מחר|היום|הלילה|בערב|בבוקר)?\s*({hebrew_time_pattern})\b",
+            lowered,
+            flags=re.IGNORECASE,
+        )
+    if not word_match:
+        return {"time": None, "ambiguous": False}
+
+    hour = TIME_WORD_HOURS.get((word_match.group(1) or "").lower())
+    suffix = (word_match.group(2) or "").lower() if len(word_match.groups()) > 1 else ""
+    if hour is None:
+        return {"time": None, "ambiguous": False}
     if suffix == "pm" and hour < 12:
         hour += 12
     if suffix == "am" and hour == 12:
         hour = 0
-    if hour > 23 or minute > 59:
-        return None
-    return hour, minute
+    has_daytime_hint = any(token in lowered for token in ("morning", "בבוקר"))
+    has_evening_hint = any(token in lowered for token in ("tonight", "evening", "night", "afternoon", "הלילה", "בערב", "בלילה", "אחהצ", "אחר הצהריים"))
+    if suffix not in {"am", "pm"} and 1 <= hour <= 12:
+        if has_evening_hint and hour < 12:
+            hour += 12
+        elif not has_daytime_hint:
+            return {"time": (hour, 0), "ambiguous": True}
+    return {"time": (hour, 0), "ambiguous": False}
 
 
 def _extract_time_range(text):
@@ -1496,7 +1630,8 @@ def _build_event_from_extraction(extraction, raw_message):
     calendar_type = extraction.get("calendar_type") or _infer_calendar_type(raw_message)
     reminders = _infer_reminders(calendar_type)
     event_date = _parse_iso_date(extraction.get("date"))
-    event_time = _parse_hhmm(extraction.get("start_time"))
+    extracted_time_details = _extract_time_details(raw_message)
+    event_time = _parse_hhmm(extraction.get("start_time")) or extracted_time_details.get("time")
     end_time = _parse_hhmm(extraction.get("end_time"))
     is_shift_template = bool(extraction.get("is_shift"))
     duration_minutes = extraction.get("duration_minutes") or _infer_event_minutes(raw_message, is_shift_template=is_shift_template)
@@ -1504,12 +1639,14 @@ def _build_event_from_extraction(extraction, raw_message):
     location = extraction.get("location") or _infer_default_location(raw_message)
 
     missing = []
-    if not title or title == "Untitled event":
+    if not _has_meaningful_event_title(raw_message, title):
         missing.append("title")
     if not event_date:
         missing.append("date")
     if not event_time and not is_shift_template:
         missing.append("time")
+    if event_time and extracted_time_details.get("ambiguous") and not is_shift_template:
+        missing.append("time_of_day")
 
     if missing:
         return {
@@ -1520,6 +1657,7 @@ def _build_event_from_extraction(extraction, raw_message):
             "location": location,
             "duration_minutes": duration_minutes,
             "raw_message": raw_message,
+            "time_clarification_needed": "time_of_day" in missing,
         }
 
     start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
@@ -1557,7 +1695,8 @@ def _build_bulk_events_from_extraction(extraction, raw_message):
     calendar_type = extraction.get("calendar_type") or _infer_calendar_type(raw_message)
     reminders = _infer_reminders(calendar_type)
     is_shift_template = bool(extraction.get("is_shift"))
-    start_time = _parse_hhmm(extraction.get("start_time"))
+    extracted_time_details = _extract_time_details(raw_message)
+    start_time = _parse_hhmm(extraction.get("start_time")) or extracted_time_details.get("time")
     end_time = _parse_hhmm(extraction.get("end_time"))
     duration_minutes = extraction.get("duration_minutes") or _infer_event_minutes(raw_message, is_shift_template=is_shift_template)
     title = extraction.get("title") or _normalize_event_title(raw_message)
@@ -1570,6 +1709,15 @@ def _build_bulk_events_from_extraction(extraction, raw_message):
             "calendar_type": calendar_type,
             "title": title,
             "raw_message": raw_message,
+        }
+    if start_time and extracted_time_details.get("ambiguous") and not is_shift_template:
+        return {
+            "status": "needs_details",
+            "missing_fields": ["time_of_day"],
+            "calendar_type": calendar_type,
+            "title": title,
+            "raw_message": raw_message,
+            "time_clarification_needed": True,
         }
 
     events = []
@@ -1950,24 +2098,32 @@ def _build_event_from_message(message):
     reminders = _infer_reminders(calendar_type)
     event_date = _extract_date(normalized)
     time_range = _extract_time_range(normalized)
-    event_time = time_range[0] if time_range else _extract_time(normalized)
+    extracted_time_details = _extract_time_details(normalized)
+    event_time = time_range[0] if time_range else extracted_time_details.get("time")
     is_shift_template = _is_shift_template(normalized)
     duration_minutes = _infer_event_minutes(normalized, is_shift_template=is_shift_template)
+    title = _normalize_event_title(normalized)
+    location = _infer_default_location(normalized)
 
     missing = []
+    if not _has_meaningful_event_title(normalized, title):
+        missing.append("title")
     if not event_date:
         missing.append("date")
     if not event_time and not is_shift_template:
         missing.append("time")
+    if event_time and extracted_time_details.get("ambiguous") and not is_shift_template:
+        missing.append("time_of_day")
 
     if missing:
         return {
             "status": "needs_details",
             "missing_fields": missing,
             "calendar_type": calendar_type,
-            "title": _normalize_event_title(normalized),
-            "location": _infer_default_location(normalized),
+            "title": title,
+            "location": location,
             "duration_minutes": duration_minutes,
+            "time_clarification_needed": "time_of_day" in missing,
         }
 
     if is_shift_template and not event_time:
@@ -1987,10 +2143,10 @@ def _build_event_from_message(message):
 
     parsed_event = {
         "status": "ready",
-        "title": _normalize_event_title(normalized),
+        "title": title,
         "calendar_type": calendar_type,
         "reminders": reminders,
-        "location": _infer_default_location(normalized),
+        "location": location,
         "duration_minutes": duration_minutes,
         "start_at": start_at,
         "end_at": end_at,
@@ -2187,8 +2343,19 @@ def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflic
 
 def _format_missing_fields_reply(parsed):
     prefers_hebrew = bool(re.search(r"[\u0590-\u05FF]", (parsed.get("raw_message") or "") + " " + (parsed.get("title") or "")))
+    missing_fields = parsed.get("missing_fields") or []
+    if "time_of_day" in missing_fields or parsed.get("time_clarification_needed"):
+        return "זו שעת בוקר או ערב?" if prefers_hebrew else "Should I set that for the morning or the evening?"
+    if missing_fields == ["title", "date", "time"]:
+        return "בשמחה, חסרים לי שם האירוע, היום והשעה." if prefers_hebrew else "Sure, I still need the event name, day, and time."
+    if "title" in missing_fields and "time" in missing_fields:
+        return "בשמחה, חסרים לי גם שם האירוע וגם השעה." if prefers_hebrew else "Sure, I still need the event name and time."
+    if "title" in missing_fields and "date" in missing_fields:
+        return "בשמחה, חסרים לי גם שם האירוע וגם היום." if prefers_hebrew else "Sure, I still need the event name and day."
     if parsed["missing_fields"] == ["date", "time"]:
         return "בשמחה, חסרים לי גם יום וגם שעה." if prefers_hebrew else "Sure, I still need the day and time."
+    if "title" in missing_fields:
+        return "איך לקרוא לאירוע הזה?" if prefers_hebrew else "Sure, what should I call that event?"
     if "date" in parsed["missing_fields"]:
         return "באיזה יום לקבוע את זה?" if prefers_hebrew else "What day should I put it on?"
     return "באיזו שעה לקבוע?" if prefers_hebrew else "What time should I set it for?"
@@ -2538,6 +2705,66 @@ def _is_on_duty_lookup_request(user_message):
     if ("תורן" in lowered or "תורנות" in lowered) and any(token in lowered for token in DUTY_TEAM_TIME_KEYWORDS):
         return True
     return False
+
+
+def _classify_clinical_redirect_signal(session_id, user_message):
+    normalized = (user_message or "").strip()
+    if not normalized:
+        return {"label": None, "confidence": None, "source": None, "high_confidence": False}
+    textbook_request = detect_textbook_request(normalized)
+    if textbook_request and textbook_request.get("supported"):
+        return {
+            "label": "clinical_consult",
+            "confidence": "high",
+            "source": "textbook_request",
+            "high_confidence": True,
+        }
+    chat_history = load_chat(session_id, limit=8)
+    classifier_result = classify_message_intent(normalized, chat_history)
+    return {
+        "label": classifier_result.get("label"),
+        "confidence": classifier_result.get("confidence"),
+        "source": "intent_classifier",
+        "high_confidence": (
+            classifier_result.get("label") == "clinical_consult"
+            and classifier_result.get("confidence") == "high"
+        ),
+    }
+
+
+def _log_unresolved_scheduling_request(session_id, user_message, extraction=None, clinical_signal=None, reason="no_clear_intent"):
+    try:
+        ux_unresolved_requests_collection.insert_one(
+            {
+                "session_id": session_id,
+                "app_mode": "scheduling",
+                "user_message": str(user_message or ""),
+                "normalized_message": _normalize_scheduling_followup_text(user_message or ""),
+                "detected_route": "unknown",
+                "reason": reason,
+                "classifier_label": (clinical_signal or {}).get("label"),
+                "classifier_confidence": (clinical_signal or {}).get("confidence"),
+                "classifier_source": (clinical_signal or {}).get("source"),
+                "scheduling_extraction_action": (extraction or {}).get("action") if extraction else None,
+                "scheduling_extraction_confidence": (extraction or {}).get("confidence") if extraction else None,
+                "created_at": _utcnow(),
+                "app_version": "v0.3.326",
+            }
+        )
+    except Exception as exc:
+        log_event(
+            "unresolved_scheduling_request_log_failed",
+            session_id=session_id,
+            payload={"error": str(exc)},
+            level="warning",
+        )
+
+
+def _build_unresolved_scheduling_reply():
+    return {
+        "reply": UNRESOLVED_SCHEDULING_REPLY,
+        "scheduling_draft": None,
+    }
 
 
 def _resolve_on_duty_lookup_window(user_message):
@@ -3725,34 +3952,22 @@ def _looks_like_explicit_scheduling_request(user_message, extraction=None):
     )
     if any(marker in lowered for marker in scheduling_markers):
         return True
-    if extraction and extraction.get("action") and extraction.get("confidence") in {"high", "medium"}:
-        return True
+    if extraction and extraction.get("action"):
+        action = extraction.get("action")
+        confidence = extraction.get("confidence")
+        has_time_anchor = bool(
+            extraction.get("date")
+            or extraction.get("start_time")
+            or extraction.get("end_time")
+            or extraction.get("bulk_dates")
+            or extraction.get("source_date")
+            or extraction.get("target_date")
+        )
+        if action in {"delete", "update"} and confidence in {"high", "medium"}:
+            return True
+        if action == "create" and confidence == "high" and has_time_anchor:
+            return True
     return False
-
-
-def _looks_like_clinical_question_for_scheduling_redirect(session_id, user_message):
-    normalized = (user_message or "").strip()
-    if not normalized:
-        return False
-    textbook_request = detect_textbook_request(normalized)
-    if textbook_request and textbook_request.get("supported"):
-        return True
-    chat_history = load_chat(session_id, limit=8)
-    classifier_result = classify_message_intent(normalized, chat_history)
-    return (
-        classifier_result.get("label") == "clinical_consult"
-        and classifier_result.get("confidence") in {"high", "medium"}
-    )
-
-
-def _build_clinical_redirect_reply():
-    return (
-        "<p>That looks like a clinical question, not a scheduling one.</p>"
-        "<p>Want to switch to Clinical so I can answer it there?</p>"
-        '<div class="utility-actions" style="margin-top: 20px;">'
-        '<button class="secondary-button" data-clinical-redirect-button="true" onclick="openClinicalForRedirectedQuestion(this)">Open Clinical</button>'
-        "</div>"
-    )
 
 
 def handle_scheduling_message(session_id, user_message):
@@ -3781,22 +3996,31 @@ def handle_scheduling_message(session_id, user_message):
     pending_message = (pending_context or {}).get("raw_message")
     last_reference = _get_last_scheduling_reference(session_id)
     extraction = extract_scheduling_intent(normalized_user_message, pending_message=pending_message, last_reference=last_reference)
+    explicit_scheduling_request = _looks_like_explicit_scheduling_request(normalized_user_message, extraction)
+    clinical_signal = _classify_clinical_redirect_signal(session_id, normalized_user_message)
 
-    if (
-        not _looks_like_explicit_scheduling_request(normalized_user_message, extraction)
-        and (
-            _looks_like_clinical_question_for_scheduling_redirect(session_id, normalized_user_message)
-            or extraction is None
-            or extraction.get("confidence") == "low"
-            or not extraction.get("action")
-        )
-    ):
+    if not explicit_scheduling_request and clinical_signal.get("high_confidence"):
         _clear_pending_details_context(session_id)
         return {
-            "reply": _build_clinical_redirect_reply(),
+            "reply": "",
             "scheduling_draft": None,
-            "clinical_redirect_message": user_message,
+            "auto_route_mode": "clinical",
+            "auto_route_message": user_message,
         }
+
+    if not explicit_scheduling_request:
+        _clear_pending_details_context(session_id)
+        reason = "ambiguous_cross_mode" if clinical_signal.get("label") == "clinical_consult" else (
+            "low_confidence" if extraction and extraction.get("confidence") == "low" else "no_clear_intent"
+        )
+        _log_unresolved_scheduling_request(
+            session_id,
+            user_message,
+            extraction=extraction,
+            clinical_signal=clinical_signal,
+            reason=reason,
+        )
+        return _build_unresolved_scheduling_reply()
 
     if _is_historical_duty_stats_request(normalized_user_message):
         if not has_google_calendar_connection(session_id):

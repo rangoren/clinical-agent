@@ -29,6 +29,7 @@ push_subscriptions_collection = db["push_subscriptions"]
 study_content_collection = db["study_content"]
 study_user_state_collection = db["study_user_state"]
 textbook_cache_collection = db["textbook_cache"]
+ux_unresolved_requests_collection = db["ux_unresolved_requests"]
 
 
 def _ensure_indexes():
@@ -57,6 +58,9 @@ def _ensure_indexes():
         study_user_state_collection.create_index([("session_id", ASCENDING)], unique=True)
         interaction_logs_collection.create_index([("session_id", ASCENDING), ("event_type", ASCENDING), ("created_at", ASCENDING)])
         textbook_cache_collection.create_index([("cache_key", ASCENDING)], unique=True)
+        ux_unresolved_requests_collection.create_index([("created_at", ASCENDING)])
+        ux_unresolved_requests_collection.create_index([("app_mode", ASCENDING), ("reason", ASCENDING), ("created_at", ASCENDING)])
+        ux_unresolved_requests_collection.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
     except Exception:
         pass
 

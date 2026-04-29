@@ -40,10 +40,13 @@ from services.prompt_service import (
 )
 from services.response_service import generate_reply
 from services.scheduling_service import (
+    _looks_like_explicit_scheduling_request,
     _is_daily_summary_request,
     _is_historical_duty_stats_request,
     _is_monthly_shift_summary_request,
+    _is_on_duty_lookup_request,
 )
+from services.scheduling_extraction_service import extract_scheduling_intent
 from services.study_service import resolve_study_chat_message
 from services.text_formatting import format_basic_clinical_response, format_response
 from services.textbook_runtime_service import (
@@ -90,6 +93,8 @@ def _build_message_response(
     sources=None,
     suggested_save=None,
     scheduling_redirect_message=None,
+    auto_route_mode=None,
+    auto_route_message=None,
 ):
     normalized_reply = reply
     if not _reply_has_visible_text(normalized_reply):
@@ -108,6 +113,8 @@ def _build_message_response(
         "sources": sources or [],
         "suggested_save": suggested_save,
         "scheduling_redirect_message": scheduling_redirect_message,
+        "auto_route_mode": auto_route_mode,
+        "auto_route_message": auto_route_message,
     }
 
 
@@ -799,21 +806,57 @@ def _looks_like_scheduling_question_for_clinical_redirect(user_message):
     normalized = (user_message or "").strip()
     if not normalized:
         return False
-    return (
+    if (
         _is_historical_duty_stats_request(normalized)
         or _is_monthly_shift_summary_request(normalized)
         or _is_daily_summary_request(normalized)
+        or _is_on_duty_lookup_request(normalized)
+    ):
+        return True
+    lowered = normalized.lower()
+    scheduling_verbs = (
+        "add",
+        "schedule",
+        "book",
+        "set",
+        "create",
+        "move",
+        "reschedule",
+        "change",
+        "update",
+        "delete",
+        "remove",
+        "cancel",
+        "תוסיף",
+        "תכניס",
+        "תקבע",
+        "צור",
+        "מחק",
+        "תבטל",
+        "תעדכן",
+        "תשנה",
     )
-
-
-def _build_scheduling_redirect_reply():
-    return (
-        "<p>That looks like a scheduling question, not a clinical one.</p>"
-        "<p>Want to switch to Scheduling so I can check it there?</p>"
-        '<div class="utility-actions" style="margin-top: 20px;">'
-        '<button class="secondary-button" data-scheduling-redirect-button="true" onclick="openSchedulingForRedirectedQuestion(this)">Open Scheduling</button>'
-        "</div>"
+    scheduling_nouns = (
+        "calendar",
+        "event",
+        "events",
+        "meeting",
+        "appointment",
+        "schedule",
+        "shift",
+        "shifts",
+        "יומן",
+        "אירוע",
+        "אירועים",
+        "פגישה",
+        "פגישות",
+        "תורנות",
+        "תורנויות",
     )
+    if not (any(token in lowered for token in scheduling_verbs) and any(token in lowered for token in scheduling_nouns)):
+        return False
+    extraction = extract_scheduling_intent(normalized)
+    return _looks_like_explicit_scheduling_request(normalized, extraction)
 
 
 def _handle_regular_message(session_id, user_profile, user_message, save_user_message=True):
@@ -847,18 +890,13 @@ def _handle_regular_message(session_id, user_profile, user_message, save_user_me
         return profile_update_response
 
     if _looks_like_scheduling_question_for_clinical_redirect(user_message):
-        reply = _build_scheduling_redirect_reply()
         if save_user_message:
             save_message("user", user_message, session_id, metadata={"intent": "scheduling_redirect"})
-        assistant_message_id = save_message(
-            "assistant",
-            reply,
-            session_id,
-            metadata={"intent": "scheduling_redirect_reply"},
-        )
         return _build_message_response(
-            reply=reply,
-            assistant_message_id=assistant_message_id,
+            reply="",
+            assistant_message_id=None,
+            auto_route_mode="scheduling",
+            auto_route_message=user_message,
         )
 
     started_at = time.perf_counter()
