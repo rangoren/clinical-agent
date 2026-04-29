@@ -188,7 +188,21 @@ DUTY_ROLE_ENGLISH_MAP = {
     "תורן ד": "D duty",
     "מחלקות": "Department duty",
 }
-UNRESOLVED_SCHEDULING_REPLY = "I’m not quite sure what you want me to do there yet. Try asking it in a clearer way."
+UNRESOLVED_SCHEDULING_REPLY = "I’m not sure I understood that. Try asking it a bit more clearly."
+TIME_WORD_HOURS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+}
 WEEKEND_MARKERS = ("weekend", "weekends", "סופש", "סוף שבוע", "סופי שבוע")
 DELETE_KEYWORDS = (
     "delete",
@@ -645,6 +659,11 @@ def _detect_action(message):
 
 def _is_daily_summary_request(message):
     lowered = _normalize_scheduling_followup_text(message)
+    if any(
+        token in lowered
+        for token in ("add ", "schedule ", "book ", "set ", "create ", "insert ", "put ", "תוסיף", "תכניס", "תקבע", "צור")
+    ):
+        return False
     if any(keyword in lowered for keyword in SUMMARY_KEYWORDS):
         return True
     summary_phrases = (
@@ -928,19 +947,44 @@ def _extract_time(text):
     if _extract_time_range(text):
         return _extract_time_range(text)[0]
     match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", text, flags=re.IGNORECASE)
-    if not match:
+    if match:
+        hour = int(match.group(1))
+        minute = int(match.group(2) or 0)
+        suffix = (match.group(3) or "").lower()
+        if suffix == "pm" and hour < 12:
+            hour += 12
+        if suffix == "am" and hour == 12:
+            hour = 0
+        if hour > 23 or minute > 59:
+            return None
+        return hour, minute
+
+    lowered = _normalize_text(text).lower()
+    word_match = re.search(
+        r"\b(?:at|around|בשעה|סביב השעה)\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s*(am|pm))?\b",
+        lowered,
+        flags=re.IGNORECASE,
+    )
+    if not word_match:
+        word_match = re.search(
+            r"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(am|pm)\b",
+            lowered,
+            flags=re.IGNORECASE,
+        )
+    if not word_match:
         return None
 
-    hour = int(match.group(1))
-    minute = int(match.group(2) or 0)
-    suffix = (match.group(3) or "").lower()
+    hour = TIME_WORD_HOURS.get((word_match.group(1) or "").lower())
+    suffix = (word_match.group(2) or "").lower()
+    if hour is None:
+        return None
     if suffix == "pm" and hour < 12:
         hour += 12
     if suffix == "am" and hour == 12:
         hour = 0
-    if hour > 23 or minute > 59:
-        return None
-    return hour, minute
+    if suffix not in {"am", "pm"} and any(token in lowered for token in ("tonight", "evening", "הלילה", "בערב", "בלילה")) and hour < 12:
+        hour += 12
+    return hour, 0
 
 
 def _extract_time_range(text):
@@ -1498,7 +1542,7 @@ def _build_event_from_extraction(extraction, raw_message):
     calendar_type = extraction.get("calendar_type") or _infer_calendar_type(raw_message)
     reminders = _infer_reminders(calendar_type)
     event_date = _parse_iso_date(extraction.get("date"))
-    event_time = _parse_hhmm(extraction.get("start_time"))
+    event_time = _parse_hhmm(extraction.get("start_time")) or _extract_time(raw_message)
     end_time = _parse_hhmm(extraction.get("end_time"))
     is_shift_template = bool(extraction.get("is_shift"))
     duration_minutes = extraction.get("duration_minutes") or _infer_event_minutes(raw_message, is_shift_template=is_shift_template)
@@ -1559,7 +1603,7 @@ def _build_bulk_events_from_extraction(extraction, raw_message):
     calendar_type = extraction.get("calendar_type") or _infer_calendar_type(raw_message)
     reminders = _infer_reminders(calendar_type)
     is_shift_template = bool(extraction.get("is_shift"))
-    start_time = _parse_hhmm(extraction.get("start_time"))
+    start_time = _parse_hhmm(extraction.get("start_time")) or _extract_time(raw_message)
     end_time = _parse_hhmm(extraction.get("end_time"))
     duration_minutes = extraction.get("duration_minutes") or _infer_event_minutes(raw_message, is_shift_template=is_shift_template)
     title = extraction.get("title") or _normalize_event_title(raw_message)
@@ -1955,8 +1999,12 @@ def _build_event_from_message(message):
     event_time = time_range[0] if time_range else _extract_time(normalized)
     is_shift_template = _is_shift_template(normalized)
     duration_minutes = _infer_event_minutes(normalized, is_shift_template=is_shift_template)
+    title = _normalize_event_title(normalized)
+    location = _infer_default_location(normalized)
 
     missing = []
+    if not title or title == "Untitled event":
+        missing.append("title")
     if not event_date:
         missing.append("date")
     if not event_time and not is_shift_template:
@@ -1967,8 +2015,8 @@ def _build_event_from_message(message):
             "status": "needs_details",
             "missing_fields": missing,
             "calendar_type": calendar_type,
-            "title": _normalize_event_title(normalized),
-            "location": _infer_default_location(normalized),
+            "title": title,
+            "location": location,
             "duration_minutes": duration_minutes,
         }
 
@@ -1989,10 +2037,10 @@ def _build_event_from_message(message):
 
     parsed_event = {
         "status": "ready",
-        "title": _normalize_event_title(normalized),
+        "title": title,
         "calendar_type": calendar_type,
         "reminders": reminders,
-        "location": _infer_default_location(normalized),
+        "location": location,
         "duration_minutes": duration_minutes,
         "start_at": start_at,
         "end_at": end_at,
@@ -2189,8 +2237,17 @@ def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflic
 
 def _format_missing_fields_reply(parsed):
     prefers_hebrew = bool(re.search(r"[\u0590-\u05FF]", (parsed.get("raw_message") or "") + " " + (parsed.get("title") or "")))
+    missing_fields = parsed.get("missing_fields") or []
+    if missing_fields == ["title", "date", "time"]:
+        return "בשמחה, חסרים לי שם האירוע, היום והשעה." if prefers_hebrew else "Sure, I still need the event name, day, and time."
+    if "title" in missing_fields and "time" in missing_fields:
+        return "בשמחה, חסרים לי גם שם האירוע וגם השעה." if prefers_hebrew else "Sure, I still need the event name and time."
+    if "title" in missing_fields and "date" in missing_fields:
+        return "בשמחה, חסרים לי גם שם האירוע וגם היום." if prefers_hebrew else "Sure, I still need the event name and day."
     if parsed["missing_fields"] == ["date", "time"]:
         return "בשמחה, חסרים לי גם יום וגם שעה." if prefers_hebrew else "Sure, I still need the day and time."
+    if "title" in missing_fields:
+        return "איך לקרוא לאירוע הזה?" if prefers_hebrew else "Sure, what should I call that event?"
     if "date" in parsed["missing_fields"]:
         return "באיזה יום לקבוע את זה?" if prefers_hebrew else "What day should I put it on?"
     return "באיזו שעה לקבוע?" if prefers_hebrew else "What time should I set it for?"

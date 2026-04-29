@@ -392,9 +392,27 @@
 
         .context-label.reentry-flash {
             background: rgba(236, 245, 242, 0.98);
-            border-color: rgba(22, 101, 88, 0.2);
-            box-shadow: 0 0 0 4px rgba(22, 101, 88, 0.08);
+            border-color: rgba(22, 101, 88, 0.28);
+            box-shadow: 0 0 0 6px rgba(22, 101, 88, 0.12);
             transform: translateY(-1px);
+            animation: contextReentryPulse 1.45s ease;
+        }
+
+        @keyframes contextReentryPulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(22, 101, 88, 0.16);
+                transform: translateY(0);
+            }
+
+            30% {
+                box-shadow: 0 0 0 8px rgba(22, 101, 88, 0.12);
+                transform: translateY(-1px);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(22, 101, 88, 0);
+                transform: translateY(0);
+            }
         }
 
         .context-switcher-menu {
@@ -2113,6 +2131,7 @@
         let contextSwitcherOpen = false;
         let appWasBackgrounded = false;
         let contextReentryTimer = null;
+        let queuedContextReentryPulseTimer = null;
         let studyCardsRequested = false;
         let studyCardsDismissed = false;
         let studyCardsRequestToken = 0;
@@ -2411,7 +2430,17 @@
             contextReentryTimer = setTimeout(() => {
                 label.classList.remove("reentry-flash");
                 contextReentryTimer = null;
-            }, 1200);
+            }, 1650);
+        }
+
+        function queueContextReentryPulse() {
+            if (queuedContextReentryPulseTimer) {
+                clearTimeout(queuedContextReentryPulseTimer);
+            }
+            queuedContextReentryPulseTimer = setTimeout(() => {
+                pulseCurrentContextLabel();
+                queuedContextReentryPulseTimer = null;
+            }, 140);
         }
 
         function closeContextSwitcher() {
@@ -7257,7 +7286,7 @@
             ensureDutySyncFlowTraceId("resume", { source: "resume" }, true);
             logDutySyncRuntime("push/deep-link entry received", { source: "pageshow", href: window.location.href });
             storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
-            pulseCurrentContextLabel();
+            queueContextReentryPulse();
             restorePushContextAndResumeDutySyncReview("pageshow").catch(() => {});
         });
         document.addEventListener("visibilitychange", () => {
@@ -7272,7 +7301,7 @@
                 logDutySyncRuntime("push/deep-link entry received", { source: "visibilitychange", href: window.location.href });
                 storeDutySyncPushContextFromUrl(window.location.href, "visibilitychange_url");
                 if (appWasBackgrounded) {
-                    pulseCurrentContextLabel();
+                    queueContextReentryPulse();
                     appWasBackgrounded = false;
                 }
                 restorePushContextAndResumeDutySyncReview("visibilitychange").catch(() => {});
@@ -7284,7 +7313,7 @@
             if (document.visibilityState !== "visible") return;
             startDutySyncForegroundWatcher();
             if (appWasBackgrounded) {
-                pulseCurrentContextLabel();
+                queueContextReentryPulse();
                 appWasBackgrounded = false;
             }
             restorePushContextAndResumeDutySyncReview("focus").catch(() => {});
