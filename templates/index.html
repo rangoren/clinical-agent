@@ -369,6 +369,7 @@
             flex-direction: column;
             gap: 0;
             min-width: 0;
+            position: relative;
         }
 
         .context-label {
@@ -385,6 +386,63 @@
             font-weight: 700;
             letter-spacing: 0.04em;
             text-transform: uppercase;
+            cursor: pointer;
+            transition: transform 160ms ease, box-shadow 180ms ease, background 180ms ease, border-color 180ms ease;
+        }
+
+        .context-label.reentry-flash {
+            background: rgba(236, 245, 242, 0.98);
+            border-color: rgba(22, 101, 88, 0.2);
+            box-shadow: 0 0 0 4px rgba(22, 101, 88, 0.08);
+            transform: translateY(-1px);
+        }
+
+        .context-switcher-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            z-index: 18;
+            min-width: 146px;
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            padding: 6px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid rgba(29, 58, 52, 0.08);
+            box-shadow: 0 18px 44px rgba(20, 45, 41, 0.12);
+            backdrop-filter: blur(14px);
+        }
+
+        .context-switcher-menu.open {
+            display: flex;
+        }
+
+        .context-switcher-option {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border: none;
+            border-radius: 12px;
+            background: transparent;
+            color: var(--text);
+            padding: 10px 12px;
+            font-size: 0.84rem;
+            font-weight: 620;
+            text-align: left;
+        }
+
+        .context-switcher-option.active {
+            background: rgba(22, 101, 88, 0.1);
+            color: var(--brand-strong);
+        }
+
+        .context-switcher-check {
+            font-size: 0.76rem;
+            font-weight: 760;
+            color: var(--brand-strong);
         }
 
         .context-dot {
@@ -1971,9 +2029,18 @@
         <section class="content">
             <div class="context-strip">
                 <div class="context-copy">
-                    <div id="context-label" class="context-label">
+                    <div id="context-label" class="context-label" role="button" tabindex="0" aria-expanded="false" onclick="toggleContextSwitcher(event)">
                         <span class="context-dot" aria-hidden="true"></span>
                         <span id="context-label-text">Clinical</span>
+                    </div>
+                    <div id="context-switcher-menu" class="context-switcher-menu" role="menu" aria-label="Switch workspace">
+                        <button class="context-switcher-option active" type="button" data-mode="clinical" onclick="selectContextMode('clinical')">
+                            <span>Clinical</span>
+                            <span class="context-switcher-check">Current</span>
+                        </button>
+                        <button class="context-switcher-option" type="button" data-mode="scheduling" onclick="selectContextMode('scheduling')">
+                            <span>Scheduling</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2043,6 +2110,9 @@
         let pendingSchedulingRedirectMessage = null;
         let chatRenderContextToken = 0;
         let googleCalendarConnected = false;
+        let contextSwitcherOpen = false;
+        let appWasBackgrounded = false;
+        let contextReentryTimer = null;
         let studyCardsRequested = false;
         let studyCardsDismissed = false;
         let studyCardsRequestToken = 0;
@@ -2317,6 +2387,48 @@
             if (trigger) {
                 trigger.setAttribute("aria-expanded", composerModeStripOpen ? "true" : "false");
             }
+        }
+
+        function setContextSwitcherOpen(open) {
+            contextSwitcherOpen = !!open;
+            const trigger = document.getElementById("context-label");
+            const menu = document.getElementById("context-switcher-menu");
+            if (trigger) {
+                trigger.setAttribute("aria-expanded", contextSwitcherOpen ? "true" : "false");
+            }
+            if (menu) {
+                menu.classList.toggle("open", contextSwitcherOpen);
+            }
+        }
+
+        function pulseCurrentContextLabel() {
+            const label = document.getElementById("context-label");
+            if (!label) return;
+            label.classList.add("reentry-flash");
+            if (contextReentryTimer) {
+                clearTimeout(contextReentryTimer);
+            }
+            contextReentryTimer = setTimeout(() => {
+                label.classList.remove("reentry-flash");
+                contextReentryTimer = null;
+            }, 1200);
+        }
+
+        function closeContextSwitcher() {
+            setContextSwitcherOpen(false);
+        }
+
+        function toggleContextSwitcher(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            setContextSwitcherOpen(!contextSwitcherOpen);
+        }
+
+        function selectContextMode(nextMode) {
+            closeContextSwitcher();
+            switchAppMode(nextMode);
         }
 
         function toggleComposerModeStrip() {
@@ -2759,15 +2871,31 @@
             document.getElementById("settings-shell").classList.toggle("visible", appMode === "scheduling");
             const versionStamp = document.getElementById("version-stamp");
             const contextLabelText = document.getElementById("context-label-text");
+            const contextSwitcherOptions = document.querySelectorAll(".context-switcher-option");
             if (contextLabelText) {
                 contextLabelText.textContent = appMode === "scheduling" ? "Scheduling" : "Clinical";
             }
+            contextSwitcherOptions.forEach((option) => {
+                const isActive = option.dataset.mode === appMode;
+                option.classList.toggle("active", isActive);
+                const check = option.querySelector(".context-switcher-check");
+                if (check) {
+                    check.remove();
+                }
+                if (isActive) {
+                    const marker = document.createElement("span");
+                    marker.className = "context-switcher-check";
+                    marker.textContent = "Current";
+                    option.appendChild(marker);
+                }
+            });
             if (versionStamp) {
                 versionStamp.style.display = appMode === "clinical" ? "inline-flex" : "none";
             }
             if (appMode !== "scheduling") {
                 closeSettingsMenu();
             }
+            closeContextSwitcher();
             renderDutySyncPrimaryBanner();
             updateComposerState();
         }
@@ -5762,6 +5890,14 @@
         });
 
         document.addEventListener("click", (event) => {
+            const contextCopy = document.querySelector(".context-copy");
+            if (!contextCopy || !contextSwitcherOpen) return;
+            if (!contextCopy.contains(event.target)) {
+                closeContextSwitcher();
+            }
+        });
+
+        document.addEventListener("click", (event) => {
             const composerCard = document.querySelector(".composer-card");
             if (!composerCard || !composerModeStripOpen) return;
             if (!composerCard.contains(event.target)) {
@@ -6751,6 +6887,16 @@
                 if (appMode !== requestMode || requestToken !== chatRenderContextToken) {
                     return;
                 }
+                if (data.auto_route_mode === "scheduling" && data.auto_route_message) {
+                    pendingSchedulingRedirectMessage = data.auto_route_message;
+                    switchAppMode("scheduling");
+                    return;
+                }
+                if (data.auto_route_mode === "clinical" && data.auto_route_message) {
+                    pendingClinicalRedirectMessage = data.auto_route_message;
+                    switchAppMode("clinical");
+                    return;
+                }
                 const assistantRow = appendAssistantMessage(data.reply);
                 if (data.scheduling_redirect_message) {
                     bindSchedulingRedirectMessage(assistantRow, data.scheduling_redirect_message);
@@ -7111,16 +7257,24 @@
             ensureDutySyncFlowTraceId("resume", { source: "resume" }, true);
             logDutySyncRuntime("push/deep-link entry received", { source: "pageshow", href: window.location.href });
             storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
+            pulseCurrentContextLabel();
             restorePushContextAndResumeDutySyncReview("pageshow").catch(() => {});
         });
         document.addEventListener("visibilitychange", () => {
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
+            if (document.visibilityState === "hidden") {
+                appWasBackgrounded = true;
+            }
             if (document.visibilityState === "visible") {
                 startDutySyncForegroundWatcher();
                 persistDutySyncPushDebug("[Client] app resumed");
                 ensureDutySyncFlowTraceId("resume", { source: "resume" }, true);
                 logDutySyncRuntime("push/deep-link entry received", { source: "visibilitychange", href: window.location.href });
                 storeDutySyncPushContextFromUrl(window.location.href, "visibilitychange_url");
+                if (appWasBackgrounded) {
+                    pulseCurrentContextLabel();
+                    appWasBackgrounded = false;
+                }
                 restorePushContextAndResumeDutySyncReview("visibilitychange").catch(() => {});
                 return;
             }
@@ -7129,6 +7283,10 @@
         window.addEventListener("focus", () => {
             if (document.visibilityState !== "visible") return;
             startDutySyncForegroundWatcher();
+            if (appWasBackgrounded) {
+                pulseCurrentContextLabel();
+                appWasBackgrounded = false;
+            }
             restorePushContextAndResumeDutySyncReview("focus").catch(() => {});
         });
         if (pendingDutySyncReviewDeepLink) {

@@ -14,6 +14,7 @@ from db import (
     scheduled_events_collection,
     scheduling_drafts_collection,
     scheduling_preferences_collection,
+    ux_unresolved_requests_collection,
 )
 from services.chat_service import load_chat
 from services.intent_service import classify_message_intent
@@ -187,6 +188,7 @@ DUTY_ROLE_ENGLISH_MAP = {
     "תורן ד": "D duty",
     "מחלקות": "Department duty",
 }
+UNRESOLVED_SCHEDULING_REPLY = "I’m not quite sure what you want me to do there yet. Try asking it in a clearer way."
 WEEKEND_MARKERS = ("weekend", "weekends", "סופש", "סוף שבוע", "סופי שבוע")
 DELETE_KEYWORDS = (
     "delete",
@@ -2540,6 +2542,66 @@ def _is_on_duty_lookup_request(user_message):
     return False
 
 
+def _classify_clinical_redirect_signal(session_id, user_message):
+    normalized = (user_message or "").strip()
+    if not normalized:
+        return {"label": None, "confidence": None, "source": None, "high_confidence": False}
+    textbook_request = detect_textbook_request(normalized)
+    if textbook_request and textbook_request.get("supported"):
+        return {
+            "label": "clinical_consult",
+            "confidence": "high",
+            "source": "textbook_request",
+            "high_confidence": True,
+        }
+    chat_history = load_chat(session_id, limit=8)
+    classifier_result = classify_message_intent(normalized, chat_history)
+    return {
+        "label": classifier_result.get("label"),
+        "confidence": classifier_result.get("confidence"),
+        "source": "intent_classifier",
+        "high_confidence": (
+            classifier_result.get("label") == "clinical_consult"
+            and classifier_result.get("confidence") == "high"
+        ),
+    }
+
+
+def _log_unresolved_scheduling_request(session_id, user_message, extraction=None, clinical_signal=None, reason="no_clear_intent"):
+    try:
+        ux_unresolved_requests_collection.insert_one(
+            {
+                "session_id": session_id,
+                "app_mode": "scheduling",
+                "user_message": str(user_message or ""),
+                "normalized_message": _normalize_scheduling_followup_text(user_message or ""),
+                "detected_route": "unknown",
+                "reason": reason,
+                "classifier_label": (clinical_signal or {}).get("label"),
+                "classifier_confidence": (clinical_signal or {}).get("confidence"),
+                "classifier_source": (clinical_signal or {}).get("source"),
+                "scheduling_extraction_action": (extraction or {}).get("action") if extraction else None,
+                "scheduling_extraction_confidence": (extraction or {}).get("confidence") if extraction else None,
+                "created_at": _utcnow(),
+                "app_version": "v0.3.326",
+            }
+        )
+    except Exception as exc:
+        log_event(
+            "unresolved_scheduling_request_log_failed",
+            session_id=session_id,
+            payload={"error": str(exc)},
+            level="warning",
+        )
+
+
+def _build_unresolved_scheduling_reply():
+    return {
+        "reply": UNRESOLVED_SCHEDULING_REPLY,
+        "scheduling_draft": None,
+    }
+
+
 def _resolve_on_duty_lookup_window(user_message):
     lowered = (user_message or "").strip().lower()
     now = _local_now()
@@ -3725,34 +3787,22 @@ def _looks_like_explicit_scheduling_request(user_message, extraction=None):
     )
     if any(marker in lowered for marker in scheduling_markers):
         return True
-    if extraction and extraction.get("action") and extraction.get("confidence") in {"high", "medium"}:
-        return True
+    if extraction and extraction.get("action"):
+        action = extraction.get("action")
+        confidence = extraction.get("confidence")
+        has_time_anchor = bool(
+            extraction.get("date")
+            or extraction.get("start_time")
+            or extraction.get("end_time")
+            or extraction.get("bulk_dates")
+            or extraction.get("source_date")
+            or extraction.get("target_date")
+        )
+        if action in {"delete", "update"} and confidence in {"high", "medium"}:
+            return True
+        if action == "create" and confidence == "high" and has_time_anchor:
+            return True
     return False
-
-
-def _looks_like_clinical_question_for_scheduling_redirect(session_id, user_message):
-    normalized = (user_message or "").strip()
-    if not normalized:
-        return False
-    textbook_request = detect_textbook_request(normalized)
-    if textbook_request and textbook_request.get("supported"):
-        return True
-    chat_history = load_chat(session_id, limit=8)
-    classifier_result = classify_message_intent(normalized, chat_history)
-    return (
-        classifier_result.get("label") == "clinical_consult"
-        and classifier_result.get("confidence") in {"high", "medium"}
-    )
-
-
-def _build_clinical_redirect_reply():
-    return (
-        "<p>That looks like a clinical question, not a scheduling one.</p>"
-        "<p>Want to switch to Clinical so I can answer it there?</p>"
-        '<div class="utility-actions" style="margin-top: 20px;">'
-        '<button class="secondary-button" data-clinical-redirect-button="true" onclick="openClinicalForRedirectedQuestion(this)">Open Clinical</button>'
-        "</div>"
-    )
 
 
 def handle_scheduling_message(session_id, user_message):
@@ -3781,22 +3831,31 @@ def handle_scheduling_message(session_id, user_message):
     pending_message = (pending_context or {}).get("raw_message")
     last_reference = _get_last_scheduling_reference(session_id)
     extraction = extract_scheduling_intent(normalized_user_message, pending_message=pending_message, last_reference=last_reference)
+    explicit_scheduling_request = _looks_like_explicit_scheduling_request(normalized_user_message, extraction)
+    clinical_signal = _classify_clinical_redirect_signal(session_id, normalized_user_message)
 
-    if (
-        not _looks_like_explicit_scheduling_request(normalized_user_message, extraction)
-        and (
-            _looks_like_clinical_question_for_scheduling_redirect(session_id, normalized_user_message)
-            or extraction is None
-            or extraction.get("confidence") == "low"
-            or not extraction.get("action")
-        )
-    ):
+    if not explicit_scheduling_request and clinical_signal.get("high_confidence"):
         _clear_pending_details_context(session_id)
         return {
-            "reply": _build_clinical_redirect_reply(),
+            "reply": "",
             "scheduling_draft": None,
-            "clinical_redirect_message": user_message,
+            "auto_route_mode": "clinical",
+            "auto_route_message": user_message,
         }
+
+    if not explicit_scheduling_request:
+        _clear_pending_details_context(session_id)
+        reason = "ambiguous_cross_mode" if clinical_signal.get("label") == "clinical_consult" else (
+            "low_confidence" if extraction and extraction.get("confidence") == "low" else "no_clear_intent"
+        )
+        _log_unresolved_scheduling_request(
+            session_id,
+            user_message,
+            extraction=extraction,
+            clinical_signal=clinical_signal,
+            reason=reason,
+        )
+        return _build_unresolved_scheduling_reply()
 
     if _is_historical_duty_stats_request(normalized_user_message):
         if not has_google_calendar_connection(session_id):
