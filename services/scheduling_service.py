@@ -202,6 +202,26 @@ TIME_WORD_HOURS = {
     "ten": 10,
     "eleven": 11,
     "twelve": 12,
+    "אחת": 1,
+    "אחד": 1,
+    "שתיים": 2,
+    "שתים": 2,
+    "שניים": 2,
+    "שנים": 2,
+    "שלוש": 3,
+    "ארבע": 4,
+    "חמש": 5,
+    "שש": 6,
+    "שבע": 7,
+    "שמונה": 8,
+    "תשע": 9,
+    "עשר": 10,
+    "אחת עשרה": 11,
+    "אחד עשר": 11,
+    "שתים עשרה": 12,
+    "שתים עשר": 12,
+    "שתיים עשרה": 12,
+    "שנים עשר": 12,
 }
 WEEKEND_MARKERS = ("weekend", "weekends", "סופש", "סוף שבוע", "סופי שבוע")
 DELETE_KEYWORDS = (
@@ -975,8 +995,14 @@ def _duration_label(minutes):
 
 
 def _extract_time(text):
+    details = _extract_time_details(text)
+    return details.get("time")
+
+
+def _extract_time_details(text):
     if _extract_time_range(text):
-        return _extract_time_range(text)[0]
+        return {"time": _extract_time_range(text)[0], "ambiguous": False}
+    lowered = _normalize_text(text).lower()
     match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", text, flags=re.IGNORECASE)
     if match:
         hour = int(match.group(1))
@@ -987,35 +1013,66 @@ def _extract_time(text):
         if suffix == "am" and hour == 12:
             hour = 0
         if hour > 23 or minute > 59:
-            return None
-        return hour, minute
+            return {"time": None, "ambiguous": False}
+        has_daytime_hint = any(token in lowered for token in ("morning", "בבוקר"))
+        has_evening_hint = any(token in lowered for token in ("tonight", "evening", "night", "afternoon", "הלילה", "בערב", "בלילה", "אחהצ", "אחר הצהריים"))
+        if not suffix and 1 <= hour <= 12:
+            if has_evening_hint and hour < 12:
+                hour += 12
+            elif not has_daytime_hint:
+                return {"time": (hour, minute), "ambiguous": True}
+        return {"time": (hour, minute), "ambiguous": False}
 
-    lowered = _normalize_text(text).lower()
+    hebrew_time_pattern = "|".join(sorted((re.escape(word) for word in TIME_WORD_HOURS.keys() if re.search(r"[\u0590-\u05FF]", word)), key=len, reverse=True))
+    english_time_pattern = "|".join(sorted((re.escape(word) for word in TIME_WORD_HOURS.keys() if word.isascii()), key=len, reverse=True))
     word_match = re.search(
-        r"\b(?:at|around|בשעה|סביב השעה)\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:\s*(am|pm))?\b",
+        rf"\b(?:at|around)\s+({english_time_pattern})(?:\s*(am|pm))?\b",
         lowered,
         flags=re.IGNORECASE,
     )
     if not word_match:
         word_match = re.search(
-            r"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s*(am|pm)\b",
+            rf"\b({english_time_pattern})\s*(am|pm)\b",
             lowered,
             flags=re.IGNORECASE,
         )
     if not word_match:
-        return None
+        word_match = re.search(
+            rf"(?:בשעה|סביב השעה|בערך ב)\s*({hebrew_time_pattern})\b",
+            lowered,
+            flags=re.IGNORECASE,
+        )
+    if not word_match:
+        word_match = re.search(
+            rf"(?:\b(?:מחר|היום|הלילה|בערב|בבוקר)\s+)?ב({hebrew_time_pattern})\b",
+            lowered,
+            flags=re.IGNORECASE,
+        )
+    if not word_match:
+        word_match = re.search(
+            rf"\b(?:מחר|היום|הלילה|בערב|בבוקר)?\s*({hebrew_time_pattern})\b",
+            lowered,
+            flags=re.IGNORECASE,
+        )
+    if not word_match:
+        return {"time": None, "ambiguous": False}
 
     hour = TIME_WORD_HOURS.get((word_match.group(1) or "").lower())
-    suffix = (word_match.group(2) or "").lower()
+    suffix = (word_match.group(2) or "").lower() if len(word_match.groups()) > 1 else ""
     if hour is None:
-        return None
+        return {"time": None, "ambiguous": False}
     if suffix == "pm" and hour < 12:
         hour += 12
     if suffix == "am" and hour == 12:
         hour = 0
-    if suffix not in {"am", "pm"} and any(token in lowered for token in ("tonight", "evening", "הלילה", "בערב", "בלילה")) and hour < 12:
-        hour += 12
-    return hour, 0
+    has_daytime_hint = any(token in lowered for token in ("morning", "בבוקר"))
+    has_evening_hint = any(token in lowered for token in ("tonight", "evening", "night", "afternoon", "הלילה", "בערב", "בלילה", "אחהצ", "אחר הצהריים"))
+    if suffix not in {"am", "pm"} and 1 <= hour <= 12:
+        if has_evening_hint and hour < 12:
+            hour += 12
+        elif not has_daytime_hint:
+            return {"time": (hour, 0), "ambiguous": True}
+    return {"time": (hour, 0), "ambiguous": False}
 
 
 def _extract_time_range(text):
@@ -1573,7 +1630,8 @@ def _build_event_from_extraction(extraction, raw_message):
     calendar_type = extraction.get("calendar_type") or _infer_calendar_type(raw_message)
     reminders = _infer_reminders(calendar_type)
     event_date = _parse_iso_date(extraction.get("date"))
-    event_time = _parse_hhmm(extraction.get("start_time")) or _extract_time(raw_message)
+    extracted_time_details = _extract_time_details(raw_message)
+    event_time = _parse_hhmm(extraction.get("start_time")) or extracted_time_details.get("time")
     end_time = _parse_hhmm(extraction.get("end_time"))
     is_shift_template = bool(extraction.get("is_shift"))
     duration_minutes = extraction.get("duration_minutes") or _infer_event_minutes(raw_message, is_shift_template=is_shift_template)
@@ -1587,6 +1645,8 @@ def _build_event_from_extraction(extraction, raw_message):
         missing.append("date")
     if not event_time and not is_shift_template:
         missing.append("time")
+    if event_time and extracted_time_details.get("ambiguous") and not is_shift_template:
+        missing.append("time_of_day")
 
     if missing:
         return {
@@ -1597,6 +1657,7 @@ def _build_event_from_extraction(extraction, raw_message):
             "location": location,
             "duration_minutes": duration_minutes,
             "raw_message": raw_message,
+            "time_clarification_needed": "time_of_day" in missing,
         }
 
     start_at = datetime.combine(event_date, datetime.min.time()).replace(hour=event_time[0], minute=event_time[1])
@@ -1634,7 +1695,8 @@ def _build_bulk_events_from_extraction(extraction, raw_message):
     calendar_type = extraction.get("calendar_type") or _infer_calendar_type(raw_message)
     reminders = _infer_reminders(calendar_type)
     is_shift_template = bool(extraction.get("is_shift"))
-    start_time = _parse_hhmm(extraction.get("start_time")) or _extract_time(raw_message)
+    extracted_time_details = _extract_time_details(raw_message)
+    start_time = _parse_hhmm(extraction.get("start_time")) or extracted_time_details.get("time")
     end_time = _parse_hhmm(extraction.get("end_time"))
     duration_minutes = extraction.get("duration_minutes") or _infer_event_minutes(raw_message, is_shift_template=is_shift_template)
     title = extraction.get("title") or _normalize_event_title(raw_message)
@@ -1647,6 +1709,15 @@ def _build_bulk_events_from_extraction(extraction, raw_message):
             "calendar_type": calendar_type,
             "title": title,
             "raw_message": raw_message,
+        }
+    if start_time and extracted_time_details.get("ambiguous") and not is_shift_template:
+        return {
+            "status": "needs_details",
+            "missing_fields": ["time_of_day"],
+            "calendar_type": calendar_type,
+            "title": title,
+            "raw_message": raw_message,
+            "time_clarification_needed": True,
         }
 
     events = []
@@ -2027,7 +2098,8 @@ def _build_event_from_message(message):
     reminders = _infer_reminders(calendar_type)
     event_date = _extract_date(normalized)
     time_range = _extract_time_range(normalized)
-    event_time = time_range[0] if time_range else _extract_time(normalized)
+    extracted_time_details = _extract_time_details(normalized)
+    event_time = time_range[0] if time_range else extracted_time_details.get("time")
     is_shift_template = _is_shift_template(normalized)
     duration_minutes = _infer_event_minutes(normalized, is_shift_template=is_shift_template)
     title = _normalize_event_title(normalized)
@@ -2040,6 +2112,8 @@ def _build_event_from_message(message):
         missing.append("date")
     if not event_time and not is_shift_template:
         missing.append("time")
+    if event_time and extracted_time_details.get("ambiguous") and not is_shift_template:
+        missing.append("time_of_day")
 
     if missing:
         return {
@@ -2049,6 +2123,7 @@ def _build_event_from_message(message):
             "title": title,
             "location": location,
             "duration_minutes": duration_minutes,
+            "time_clarification_needed": "time_of_day" in missing,
         }
 
     if is_shift_template and not event_time:
@@ -2269,6 +2344,8 @@ def _save_draft(session_id, raw_message, action_type, parsed_event=None, conflic
 def _format_missing_fields_reply(parsed):
     prefers_hebrew = bool(re.search(r"[\u0590-\u05FF]", (parsed.get("raw_message") or "") + " " + (parsed.get("title") or "")))
     missing_fields = parsed.get("missing_fields") or []
+    if "time_of_day" in missing_fields or parsed.get("time_clarification_needed"):
+        return "זו שעת בוקר או ערב?" if prefers_hebrew else "Should I set that for the morning or the evening?"
     if missing_fields == ["title", "date", "time"]:
         return "בשמחה, חסרים לי שם האירוע, היום והשעה." if prefers_hebrew else "Sure, I still need the event name, day, and time."
     if "title" in missing_fields and "time" in missing_fields:

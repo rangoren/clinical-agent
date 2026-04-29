@@ -40,11 +40,13 @@ from services.prompt_service import (
 )
 from services.response_service import generate_reply
 from services.scheduling_service import (
+    _looks_like_explicit_scheduling_request,
     _is_daily_summary_request,
     _is_historical_duty_stats_request,
     _is_monthly_shift_summary_request,
     _is_on_duty_lookup_request,
 )
+from services.scheduling_extraction_service import extract_scheduling_intent
 from services.study_service import resolve_study_chat_message
 from services.text_formatting import format_basic_clinical_response, format_response
 from services.textbook_runtime_service import (
@@ -804,12 +806,57 @@ def _looks_like_scheduling_question_for_clinical_redirect(user_message):
     normalized = (user_message or "").strip()
     if not normalized:
         return False
-    return (
+    if (
         _is_historical_duty_stats_request(normalized)
         or _is_monthly_shift_summary_request(normalized)
         or _is_daily_summary_request(normalized)
         or _is_on_duty_lookup_request(normalized)
+    ):
+        return True
+    lowered = normalized.lower()
+    scheduling_verbs = (
+        "add",
+        "schedule",
+        "book",
+        "set",
+        "create",
+        "move",
+        "reschedule",
+        "change",
+        "update",
+        "delete",
+        "remove",
+        "cancel",
+        "תוסיף",
+        "תכניס",
+        "תקבע",
+        "צור",
+        "מחק",
+        "תבטל",
+        "תעדכן",
+        "תשנה",
     )
+    scheduling_nouns = (
+        "calendar",
+        "event",
+        "events",
+        "meeting",
+        "appointment",
+        "schedule",
+        "shift",
+        "shifts",
+        "יומן",
+        "אירוע",
+        "אירועים",
+        "פגישה",
+        "פגישות",
+        "תורנות",
+        "תורנויות",
+    )
+    if not (any(token in lowered for token in scheduling_verbs) and any(token in lowered for token in scheduling_nouns)):
+        return False
+    extraction = extract_scheduling_intent(normalized)
+    return _looks_like_explicit_scheduling_request(normalized, extraction)
 
 
 def _handle_regular_message(session_id, user_profile, user_message, save_user_message=True):
