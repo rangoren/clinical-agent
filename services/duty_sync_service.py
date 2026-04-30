@@ -74,10 +74,10 @@ LOCAL_APP_TIMEZONE = ZoneInfo("Asia/Jerusalem")
 ROLE_DISPLAY_LABEL_MAP = {
     "חדר לידה": "חדר לידה",
     "קבלה": "קבלה",
-    "מיון": "מיון",
-    "ב": "ב",
+    "מיון": "מיון גניקולוגי",
+    "ב": "תורנית ב׳",
     "תורן חצי": "תורן חצי",
-    "תורן ד": "תורן ד",
+    "תורן ד": "תורנית ד׳",
     "מחלקות": "מחלקות",
 }
 ROLE_CALENDAR_TITLE_MAP = {
@@ -334,7 +334,7 @@ def _reminder_taxi_status_label(reminder_kind, taxi_state):
     if state.get("taxi_reminder_enabled") is False:
         return "Taxi reminder off"
     if state.get("last_snoozed_for_date"):
-        return f"Snoozed to {state.get('last_snoozed_for_date')}"
+        return "Reminder set for tomorrow"
     return "Pending"
 
 
@@ -365,11 +365,13 @@ def _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"
         card["closing_note"] = random.choice(TOMORROW_DUTY_SIGNOFFS)
     else:
         card["meta_lines"] = ["Taxi status"]
-        card["actions"] = [
+        actions = [
             {"action": "ordered", "label": "I ordered a taxi"},
             {"action": "not_needed", "label": "No taxi needed"},
-            {"action": "snooze", "label": "Remind me tomorrow"},
         ]
+        if not taxi_state.get("last_snoozed_for_date"):
+            actions.append({"action": "snooze", "label": "Remind me tomorrow"})
+        card["actions"] = actions
     return card
 
 

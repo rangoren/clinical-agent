@@ -5804,7 +5804,7 @@
             if (state.taxi_status === "ordered") return "Ordered";
             if (state.taxi_status === "not_needed") return "Not needed";
             if (state.taxi_reminder_enabled === false) return "Off";
-            if (state.last_snoozed_for_date) return `Snoozed to ${state.last_snoozed_for_date}`;
+            if (state.last_snoozed_for_date) return "Reminder set for tomorrow";
             return "Pending";
         }
 
@@ -6057,7 +6057,6 @@
                 !reminderCard.read_only_taxi &&
                 taxiState.taxi_reminder_enabled !== false &&
                 taxiState.taxi_status === "pending" &&
-                !taxiState.last_snoozed_for_date &&
                 Array.isArray(reminderCard.actions) &&
                 reminderCard.actions.length;
             if (canShowTaxiActions) {
