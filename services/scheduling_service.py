@@ -180,13 +180,13 @@ DUTY_TEAM_TIME_KEYWORDS = (
     "עכשיו",
 )
 DUTY_ROLE_ENGLISH_MAP = {
-    "חדר לידה": "Labor ward duty",
-    "קבלה": "Admissions duty",
-    "מיון": "ER duty",
-    "ב": "B duty",
-    "תורן חצי": "Half duty",
-    "תורן ד": "D duty",
-    "מחלקות": "Department duty",
+    "חדר לידה": "חדר לידה",
+    "קבלה": "קבלה",
+    "מיון": "מיון גניקולוגי",
+    "ב": "תורנית ב׳",
+    "תורן חצי": "תורנית חצי",
+    "תורן ד": "תורנית ד׳",
+    "מחלקות": "מחלקות",
 }
 HEBREW_MONTH_NAMES = {
     1: "ינואר",
