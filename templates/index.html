@@ -1236,7 +1236,7 @@
         }
 
         .duty-reminder-subtitle.prominent {
-            color: var(--text);
+            color: var(--brand);
             font-size: 0.98rem;
             font-weight: 700;
             letter-spacing: 0;
@@ -1267,7 +1267,7 @@
         .duty-reminder-team-heading {
             margin: 0 0 2px;
             color: var(--muted);
-            font-size: 0.78rem;
+            font-size: 0.9rem;
             font-weight: 700;
             letter-spacing: 0.02em;
         }
@@ -1338,6 +1338,13 @@
             color: var(--brand-strong);
             font-size: 0.82rem;
             font-weight: 700;
+        }
+
+        .duty-reminder-closing-note {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.84rem;
+            line-height: 1.45;
         }
 
         .reminder-qa-panel {
@@ -6024,7 +6031,7 @@
                     heading.textContent = reminderCard.team_heading;
                     teamSection.appendChild(heading);
                 }
-                team.slice(0, 6).forEach((member) => {
+                team.forEach((member) => {
                     const row = document.createElement("div");
                     row.className = "duty-reminder-team-row";
                     row.innerHTML = `
@@ -6035,6 +6042,13 @@
                     teamSection.appendChild(row);
                 });
                 card.appendChild(teamSection);
+            }
+
+            if (reminderCard.closing_note) {
+                const closingNote = document.createElement("p");
+                closingNote.className = "duty-reminder-closing-note";
+                closingNote.textContent = reminderCard.closing_note;
+                card.appendChild(closingNote);
             }
 
             const canShowTaxiActions =

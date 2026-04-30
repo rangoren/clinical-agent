@@ -1,6 +1,7 @@
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from itertools import islice
+import random
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -88,6 +89,14 @@ ROLE_CALENDAR_TITLE_MAP = {
     "תורן ד": "תורנות תורן ד",
     "מחלקות": "תורנות מחלקות",
 }
+TOMORROW_DUTY_SIGNOFFS = [
+    "Good luck tomorrow. Hope it goes surprisingly smoothly.",
+    "Wishing you a calm shift and very few surprises.",
+    "Hope tomorrow flies by and everyone behaves.",
+    "Good luck tomorrow. May the duty be quiet and the coffee actually help.",
+    "Hope the shift is easy, the team is great, and the night moves fast.",
+    "Good luck tomorrow. Your husband has the kids, so that department is covered.",
+]
 
 
 def _is_debug_env():
@@ -353,6 +362,7 @@ def _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"
     if reminder_kind == "tomorrow_duty":
         card["team_heading"] = "Who's on with you"
         card["meta_lines"] = ["Tomorrow duty", "Read only"]
+        card["closing_note"] = random.choice(TOMORROW_DUTY_SIGNOFFS)
     else:
         card["meta_lines"] = ["Taxi status"]
         card["actions"] = [
