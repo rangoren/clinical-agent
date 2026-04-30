@@ -3000,7 +3000,11 @@
                 });
                 const data = await response.json();
                 setThinkingState(false);
-                appendAssistantMessage(data.reply, data.status === "error" ? "error" : "system");
+                if (data && data.duty_reminder_card) {
+                    appendDutyReminderCard(data.duty_reminder_card);
+                } else {
+                    appendAssistantMessage(data.reply, data.status === "error" ? "error" : "system");
+                }
                 if (data && data.status === "google_reconnect_required") {
                     updateCalendarUi({ available: true, connected: false, requires_reconnect: true });
                 }
@@ -6008,13 +6012,15 @@
             }
 
             const taxiState = reminderCard.taxi || {};
-            const statusRow = document.createElement("div");
-            statusRow.className = "duty-reminder-status";
-            statusRow.innerHTML = `
-                <div class="duty-reminder-status-label">Taxi status</div>
-                <div class="duty-reminder-status-value">${escapeHtml(reminderCard.taxi_status_label || formatTaxiStatusLabel(taxiState))}</div>
-            `;
-            card.appendChild(statusRow);
+            if (reminderCard.hide_taxi_status !== true) {
+                const statusRow = document.createElement("div");
+                statusRow.className = "duty-reminder-status";
+                statusRow.innerHTML = `
+                    <div class="duty-reminder-status-label">Taxi status</div>
+                    <div class="duty-reminder-status-value">${escapeHtml(reminderCard.taxi_status_label || formatTaxiStatusLabel(taxiState))}</div>
+                `;
+                card.appendChild(statusRow);
+            }
 
             if (confirmationText) {
                 const confirmation = document.createElement("div");
@@ -7589,7 +7595,12 @@
                     switchAppMode("clinical");
                     return;
                 }
-                const assistantRow = appendAssistantMessage(data.reply);
+                let assistantRow = null;
+                if (data.duty_reminder_card) {
+                    appendDutyReminderCard(data.duty_reminder_card);
+                } else {
+                    assistantRow = appendAssistantMessage(data.reply);
+                }
                 if (data.scheduling_redirect_message) {
                     bindSchedulingRedirectMessage(assistantRow, data.scheduling_redirect_message);
                 }

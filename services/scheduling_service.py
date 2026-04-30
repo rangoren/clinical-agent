@@ -188,6 +188,20 @@ DUTY_ROLE_ENGLISH_MAP = {
     "תורן ד": "D duty",
     "מחלקות": "Department duty",
 }
+HEBREW_MONTH_NAMES = {
+    1: "ינואר",
+    2: "פברואר",
+    3: "מרץ",
+    4: "אפריל",
+    5: "מאי",
+    6: "יוני",
+    7: "יולי",
+    8: "אוגוסט",
+    9: "ספטמבר",
+    10: "אוקטובר",
+    11: "נובמבר",
+    12: "דצמבר",
+}
 UNRESOLVED_SCHEDULING_REPLY = "I’m not sure I understood that. Try asking it a bit more clearly."
 TIME_WORD_HOURS = {
     "one": 1,
@@ -2690,6 +2704,47 @@ def _load_latest_duty_team_roster(session_id):
     return best_payload
 
 
+def _load_duty_team_roster_for_date(session_id, target_date):
+    connection_doc = duty_sync_connections_collection.find_one({"session_id": session_id, "is_connected": True}) or {}
+    raw_sheet_reference = connection_doc.get("sheet_id") or connection_doc.get("sheet_url") or ""
+    if not normalize_text(raw_sheet_reference):
+        return None
+    sheet_id = normalize_sheet_id(raw_sheet_reference)
+    if not sheet_id:
+        return None
+
+    metadata = _fetch_duty_sheet_metadata(session_id, sheet_id) or {}
+    month_name = HEBREW_MONTH_NAMES.get(target_date.month)
+    candidate_tabs = []
+    fallback_tabs = []
+    for sheet in metadata.get("sheets") or []:
+        tab_name = normalize_text((sheet.get("properties") or {}).get("title"))
+        if not tab_name or RELEVANT_TAB_TOKEN not in tab_name:
+            continue
+        if month_name and month_name in tab_name:
+            candidate_tabs.append(tab_name)
+        else:
+            fallback_tabs.append(tab_name)
+    ordered_tabs = candidate_tabs + [tab for tab in fallback_tabs if tab not in candidate_tabs]
+    for candidate_tab in ordered_tabs:
+        cached = _get_cached_duty_team_payload(session_id, sheet_id, candidate_tab)
+        if cached:
+            payload = cached
+        else:
+            values = _fetch_duty_sheet_values(session_id, sheet_id, candidate_tab)
+            parsed = _extract_roster_assignments(candidate_tab, values)
+            payload = {
+                "sheet_id": sheet_id,
+                "tab_name": candidate_tab,
+                "latest_date": parsed.get("latest_date"),
+                "assignments": parsed.get("assignments") or [],
+            }
+            _store_cached_duty_team_payload(session_id, sheet_id, candidate_tab, payload)
+        if any(item.get("date") == target_date for item in payload.get("assignments") or []):
+            return payload
+    return None
+
+
 def _is_on_duty_lookup_request(user_message):
     lowered = (user_message or "").strip().lower()
     if not lowered:
@@ -2774,20 +2829,54 @@ def _resolve_on_duty_lookup_window(user_message):
         target_date = (now + timedelta(days=1)).date()
         return "tomorrow", target_date
     if "tonight" in lowered or "tonigh" in lowered or "הלילה" in lowered:
-        return "tonight", now.date()
+        target_date = (now - timedelta(days=1)).date() if now.hour < 8 else now.date()
+        return "tonight", target_date
     if "now" in lowered or "עכשיו" in lowered:
-        return "now", now.date()
+        target_date = (now - timedelta(days=1)).date() if now.hour < 8 else now.date()
+        return "now", target_date
     return "today", now.date()
 
 
 def _format_on_duty_header(window_key, target_date):
     if window_key == "now":
-        return f"On duty now · {target_date.strftime('%A, %d.%m')}"
+        return "On duty now"
     if window_key == "tonight":
-        return f"Tonight · {target_date.strftime('%A, %d.%m')} duty team"
+        return "Tonight's duty team"
     if window_key == "tomorrow":
-        return f"Tomorrow · {target_date.strftime('%A, %d.%m')} duty team"
-    return f"Today · {target_date.strftime('%A, %d.%m')} duty team"
+        return "Tomorrow's duty team"
+    return "Today's duty team"
+
+
+def _format_on_duty_team_heading(window_key):
+    if window_key == "now":
+        return "Who's on right now"
+    if window_key == "tonight":
+        return "Who's on tonight"
+    if window_key == "tomorrow":
+        return "Who's on tomorrow"
+    return "Who's on today"
+
+
+def _build_on_duty_card(window_key, target_date, matched, roster_payload):
+    date_line = target_date.strftime("%A · %d %b %Y")
+    return {
+        "card_type": "duty_reminder",
+        "reminder_kind": "on_duty_lookup",
+        "title": _format_on_duty_header(window_key, target_date),
+        "subtitle": date_line,
+        "date_line": normalize_text((roster_payload or {}).get("tab_name") or ""),
+        "team_heading": _format_on_duty_team_heading(window_key),
+        "team": [
+            {
+                "role": item.get("role"),
+                "display_title": item.get("role_label") or item.get("title") or item.get("role") or "Duty",
+                "person_name": item.get("person_name") or "Unknown",
+            }
+            for item in matched
+        ],
+        "hide_taxi_status": True,
+        "read_only_taxi": True,
+    }
 
 
 def _build_on_duty_reply(session_id, user_message):
@@ -2808,8 +2897,9 @@ def _build_on_duty_reply(session_id, user_message):
             "scheduling_draft": None,
         }
 
+    window_key, target_date = _resolve_on_duty_lookup_window(user_message)
     try:
-        roster_payload = _load_latest_duty_team_roster(session_id)
+        roster_payload = _load_duty_team_roster_for_date(session_id, target_date)
     except GoogleCalendarReconnectRequiredError:
         return {
             "reply": "Reconnect Google Calendar in Settings, then I can check who is on duty.",
@@ -2824,11 +2914,10 @@ def _build_on_duty_reply(session_id, user_message):
     assignments = (roster_payload or {}).get("assignments") or []
     if not assignments:
         return {
-            "reply": "I couldn’t find duty team data in the current duty sheet.",
+            "reply": "I couldn’t find duty team data for that date in the duty sheet.",
             "scheduling_draft": None,
         }
 
-    window_key, target_date = _resolve_on_duty_lookup_window(user_message)
     local_now = _local_now()
     if window_key == "now":
         matched = [
@@ -2849,13 +2938,12 @@ def _build_on_duty_reply(session_id, user_message):
             ),
             "scheduling_draft": None,
         }
-
-    lines = [_format_on_duty_header(window_key, target_date)]
-    for item in matched:
-        lines.append(f"- {item.get('role_label') or 'Duty'} · {item.get('person_name') or 'Unknown'}")
-    lines.append("")
-    lines.append(f"Based on {normalize_text((roster_payload or {}).get('tab_name') or 'the latest duty sheet')}.")
-    return {"reply": "\n".join(lines), "scheduling_draft": None}
+    matched.sort(key=lambda item: (RELEVANT_ROLE_HEADERS.index(item["role"]) if item.get("role") in RELEVANT_ROLE_HEADERS else 999, item.get("person_name") or ""))
+    return {
+        "reply": "",
+        "scheduling_draft": None,
+        "duty_reminder_card": _build_on_duty_card(window_key, target_date, matched, roster_payload),
+    }
 
 
 def _build_shift_summary_for_date(session_id, target_date):
