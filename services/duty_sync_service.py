@@ -1472,6 +1472,46 @@ def set_duty_taxi_state_for_qa(session_id, duty_key, state):
     return {"status": "invalid", "reply": "That QA state is not supported."}
 
 
+def refresh_duty_sync_team_snapshot_for_qa(session_id):
+    sync_result = _sync_duty_sheet(session_id, is_connect=False, is_poll=False)
+    if sync_result.get("status") not in {"connected", "no_duties", "pending_review"}:
+        return sync_result
+    connection = _connection_doc(session_id) or {}
+    detected_duties = connection.get("latest_detected_duties") or []
+    now = _utcnow()
+    refreshed_count = 0
+    for duty in detected_duties:
+        duty_key = (duty or {}).get("duty_key")
+        managed_doc = _managed_event_doc(session_id, duty_key)
+        if not duty_key or not managed_doc or managed_doc.get("status") == "deleted":
+            continue
+        duty_sync_managed_events_collection.update_one(
+            {"_id": managed_doc["_id"]},
+            {
+                "$set": {
+                    "date": duty.get("date"),
+                    "role": duty.get("role"),
+                    "title": duty.get("title"),
+                    "start_datetime": duty.get("start_datetime"),
+                    "end_datetime": duty.get("end_datetime"),
+                    "team_snapshot": duty.get("team_snapshot") or [],
+                    "source_tab_name": duty.get("source_tab_name") or managed_doc.get("source_tab_name"),
+                    "updated_at": now,
+                }
+            },
+        )
+        _upsert_duty_reminder_state(session_id, duty_key, {}, duty=duty)
+        refreshed_count += 1
+    result = {
+        "status": "updated",
+        "reply": f"Refreshed {refreshed_count} duties from the latest sheet.",
+        "refreshed_count": refreshed_count,
+    }
+    if sync_result.get("pending_review"):
+        result["pending_review"] = sync_result.get("pending_review")
+    return result
+
+
 def connect_duty_sheet(session_id, sheet_url=None, full_name=None):
     return _sync_duty_sheet(session_id, sheet_url=sheet_url, full_name=full_name, is_connect=True, is_poll=False)
 

@@ -24,6 +24,7 @@ from services.duty_sync_service import (
     ignore_pending_duty_review,
     ignore_pending_duty_review_scope,
     poll_duty_sheet,
+    refresh_duty_sync_team_snapshot_for_qa,
     set_duty_taxi_state_for_qa,
     toggle_pending_review_change,
     update_duty_taxi_toggle,
@@ -358,6 +359,18 @@ async def handle_duty_sync_qa_state(request: Request):
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/qa/state", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/qa/refresh-sheet")
+async def handle_duty_sync_qa_refresh_sheet(request: Request):
+    if APP_ENV == "production":
+        return _qa_disabled_response()
+    try:
+        data = await request.json()
+        return JSONResponse(refresh_duty_sync_team_snapshot_for_qa(data.get("session_id")))
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/qa/refresh-sheet", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
 
 

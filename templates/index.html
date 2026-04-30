@@ -2291,6 +2291,7 @@
                 <option value="">Choose duty</option>
             </select>
             <div class="reminder-qa-actions">
+                <button type="button" class="secondary-button" onclick="refreshReminderQaFromSheet()">Refresh from sheet</button>
                 <button type="button" class="secondary-button" onclick="openReminderQaCard('taxi')">Open taxi card</button>
                 <button type="button" class="secondary-button" onclick="openReminderQaCard('tomorrow_duty')">Open tomorrow card</button>
                 <button type="button" class="ghost-button" onclick="setReminderQaState('pending')">Set pending</button>
@@ -5854,6 +5855,24 @@
             }
             setReminderQaStatus(reminderKind === "tomorrow_duty" ? "Opening tomorrow card..." : "Opening taxi card...");
             await openDutyReminderContextByKey(dutyKey, reminderKind, "reminder_qa");
+        }
+
+        async function refreshReminderQaFromSheet() {
+            setReminderQaStatus("Refreshing duties from sheet...");
+            try {
+                const response = await fetch("/calendar/duty-sync/qa/refresh-sheet", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+                const data = await response.json();
+                if (data.pending_review) {
+                    appendDutyReviewCard(data.pending_review, "generic_pending_review", "refreshReminderQaFromSheet");
+                }
+                await refreshReminderQaPanel(data.reply || "Duties refreshed from sheet.");
+            } catch (_error) {
+                setReminderQaStatus("Sheet refresh failed.");
+            }
         }
 
         async function setReminderQaState(nextState) {
