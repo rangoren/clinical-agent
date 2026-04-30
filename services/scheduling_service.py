@@ -2862,6 +2862,7 @@ def _build_on_duty_card(window_key, target_date, matched, roster_payload):
     return {
         "card_type": "duty_reminder",
         "reminder_kind": "on_duty_lookup",
+        "duty_key": f"on-duty-{window_key}-{target_date.isoformat()}",
         "title": _format_on_duty_header(window_key, target_date),
         "subtitle": date_line,
         "date_line": normalize_text((roster_payload or {}).get("tab_name") or ""),
