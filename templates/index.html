@@ -5802,7 +5802,7 @@
             return (select && select.value) || reminderQaSelectedDutyKey || "";
         }
 
-        async function refreshReminderQaPanel() {
+        async function refreshReminderQaPanel(statusText = null) {
             const panel = document.getElementById("reminder-qa-panel");
             const select = document.getElementById("reminder-qa-duty-select");
             if (!panel || !select || appMode !== "scheduling" || !sessionId) return;
@@ -5835,7 +5835,11 @@
                 } else {
                     reminderQaSelectedDutyKey = "";
                 }
-                setReminderQaStatus("");
+                if (statusText !== null) {
+                    setReminderQaStatus(statusText);
+                } else {
+                    setReminderQaStatus("");
+                }
             } catch (_error) {
                 setReminderQaStatus("QA duties could not be loaded right now.");
             }
@@ -5874,8 +5878,7 @@
                 if (data.reminder_card) {
                     appendDutyReminderCard(data.reminder_card, data.confirmation || "");
                 }
-                setReminderQaStatus(data.reply || "Reminder state updated.");
-                await refreshReminderQaPanel();
+                await refreshReminderQaPanel(data.reply || "Reminder state updated.");
             } catch (_error) {
                 setReminderQaStatus("Reminder QA action failed.");
             }

@@ -215,22 +215,26 @@ def _upsert_duty_reminder_state(session_id, duty_key, updates, duty=None):
     existing_state = _duty_reminder_state_doc(session_id, duty_key) or {}
     snapshot = _duty_snapshot_from_sources(duty=duty, managed_doc=managed_doc, state_doc=existing_state)
     now = _utcnow()
+    updates = dict(updates or {})
+    insert_defaults = {
+        "session_id": session_id,
+        "user_id": session_id,
+        "duty_key": duty_key,
+        "taxi_reminder_enabled": True,
+        "taxi_status": TAXI_STATUS_PENDING,
+        "created_at": now,
+    }
+    for key in updates.keys():
+        insert_defaults.pop(key, None)
     duty_reminder_states_collection.update_one(
         {"session_id": session_id, "duty_key": duty_key},
         {
             "$set": {
                 "duty_snapshot": snapshot,
-                **(updates or {}),
+                **updates,
                 "updated_at": now,
             },
-            "$setOnInsert": {
-                "session_id": session_id,
-                "user_id": session_id,
-                "duty_key": duty_key,
-                "taxi_reminder_enabled": True,
-                "taxi_status": TAXI_STATUS_PENDING,
-                "created_at": now,
-            },
+            "$setOnInsert": insert_defaults,
         },
         upsert=True,
     )
