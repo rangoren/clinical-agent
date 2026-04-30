@@ -1473,14 +1473,40 @@ def set_duty_taxi_state_for_qa(session_id, duty_key, state):
 
 
 def refresh_duty_sync_team_snapshot_for_qa(session_id):
-    sync_result = _sync_duty_sheet(session_id, is_connect=False, is_poll=False)
-    if sync_result.get("status") not in {"connected", "no_duties", "pending_review"}:
-        return sync_result
-    connection = _connection_doc(session_id) or {}
-    detected_duties = connection.get("latest_detected_duties") or []
+    access_state = _required_google_sheet_access(session_id)
+    if not access_state.get("ok"):
+        return access_state
+    normalized_sheet_url, normalized_full_name, sheet_id, existing = _resolve_duty_sync_identity(session_id)
     now = _utcnow()
+    selected_tab = _select_relevant_tab(session_id, sheet_id, normalized_full_name)
+    duties = [asdict(item) for item in selected_tab["duties"]]
+    assignments = selected_tab.get("assignments") or []
+    for duty in duties:
+        duty["team_snapshot"] = _build_team_snapshot_for_duty(duty, assignments)
+        duty["source_tab_name"] = selected_tab["tab_name"]
+    _upsert_connection_state(
+        session_id,
+        {
+            "sheet_url": normalized_sheet_url,
+            "sheet_id": sheet_id,
+            "full_name": normalized_full_name,
+            "is_connected": True,
+            "connected_at": (existing or {}).get("connected_at") or now,
+            "last_checked_at": now,
+            "last_successful_parse_at": now,
+            "current_status": "connected" if duties else "no_duties",
+            "source_tab_name": selected_tab["tab_name"],
+            "source_month": selected_tab["source_month"],
+            "duty_count": len(duties),
+            "latest_detected_duties": duties,
+            "latest_team_assignments": assignments,
+            "last_error_message": None,
+            "last_debug_reason": None,
+            "last_debug_context": None,
+        },
+    )
     refreshed_count = 0
-    for duty in detected_duties:
+    for duty in duties:
         duty_key = (duty or {}).get("duty_key")
         managed_doc = _managed_event_doc(session_id, duty_key)
         if not duty_key or not managed_doc or managed_doc.get("status") == "deleted":
@@ -1502,14 +1528,11 @@ def refresh_duty_sync_team_snapshot_for_qa(session_id):
         )
         _upsert_duty_reminder_state(session_id, duty_key, {}, duty=duty)
         refreshed_count += 1
-    result = {
+    return {
         "status": "updated",
         "reply": f"Refreshed {refreshed_count} duties from the latest sheet.",
         "refreshed_count": refreshed_count,
     }
-    if sync_result.get("pending_review"):
-        result["pending_review"] = sync_result.get("pending_review")
-    return result
 
 
 def connect_duty_sheet(session_id, sheet_url=None, full_name=None):
