@@ -354,7 +354,7 @@ def _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"
         "title": "Taxi reminder" if reminder_kind != "tomorrow_duty" else "Tomorrow's duty",
         "subtitle": role_label if reminder_kind == "tomorrow_duty" else (_calendar_duty_title(snapshot) or role_label),
         "date_line": _format_reminder_date_line(snapshot),
-        "team": team_snapshot,
+        "team": team_snapshot if reminder_kind == "tomorrow_duty" else [],
         "taxi": taxi_state,
         "taxi_status_label": _reminder_taxi_status_label(reminder_kind, taxi_state),
         "read_only_taxi": reminder_kind == "tomorrow_duty",
