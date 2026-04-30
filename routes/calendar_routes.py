@@ -10,6 +10,7 @@ from services.google_calendar_service import (
     get_google_calendar_status,
 )
 from services.duty_sync_service import (
+    apply_duty_taxi_action,
     approve_pending_duty_review,
     approve_pending_duty_review_scope,
     check_duty_sheet,
@@ -17,11 +18,13 @@ from services.duty_sync_service import (
     disconnect_duty_sheet,
     edit_pending_review_change,
     get_duty_sync_status,
+    load_duty_reminder_card,
     load_pending_duty_review,
     ignore_pending_duty_review,
     ignore_pending_duty_review_scope,
     poll_duty_sheet,
     toggle_pending_review_change,
+    update_duty_taxi_toggle,
 )
 from services.logging_service import log_event
 from services.scheduling_service import run_scheduling_quick_card
@@ -269,6 +272,56 @@ async def handle_duty_sync_review_edit_item(request: Request):
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/review/edit-item", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/review/taxi-toggle")
+async def handle_duty_sync_review_taxi_toggle(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            update_duty_taxi_toggle(
+                session_id=data.get("session_id"),
+                review_id=data.get("review_id"),
+                duty_key=data.get("duty_key"),
+                enabled=bool(data.get("enabled")),
+                duty=data.get("duty") or {},
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/review/taxi-toggle", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/reminder/load")
+async def handle_duty_sync_reminder_load(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            load_duty_reminder_card(
+                session_id=data.get("session_id"),
+                duty_key=data.get("duty_key"),
+                reminder_kind=data.get("reminder_kind"),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/reminder/load", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/reminder/action")
+async def handle_duty_sync_reminder_action(request: Request):
+    try:
+        data = await request.json()
+        return JSONResponse(
+            apply_duty_taxi_action(
+                session_id=data.get("session_id"),
+                duty_key=data.get("duty_key"),
+                action=data.get("action"),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/reminder/action", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
 
 

@@ -1,11 +1,13 @@
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 import requests
 
 from db import (
     duty_sync_connections_collection,
+    duty_reminder_states_collection,
     duty_sync_managed_events_collection,
     duty_sync_pending_reviews_collection,
     duty_sync_snapshots_collection,
@@ -63,6 +65,10 @@ DUTY_SYNC_CALENDAR_TYPE = "personal"
 DUTY_SYNC_WRITE_DISABLED_MESSAGE = "Duty Sync review is ready, but Google Calendar writes are disabled in this environment."
 DEFAULT_DUTY_SYNC_POLLING_MINUTES = 45 if APP_ENV == "production" else 1
 PUSH_OPEN_CONTEXT_FALLBACK_TTL_SECONDS = 300
+TAXI_STATUS_PENDING = "pending"
+TAXI_STATUS_ORDERED = "ordered"
+TAXI_STATUS_NOT_NEEDED = "not_needed"
+LOCAL_APP_TIMEZONE = ZoneInfo("Asia/Jerusalem")
 
 
 def _is_debug_env():
@@ -96,6 +102,10 @@ def _utcnow():
     return datetime.utcnow()
 
 
+def _local_now():
+    return datetime.now(LOCAL_APP_TIMEZONE)
+
+
 def _parse_iso_datetime(raw_value):
     if not raw_value:
         return None
@@ -116,6 +126,178 @@ def _managed_event_doc(session_id, duty_key):
     if not duty_key:
         return None
     return duty_sync_managed_events_collection.find_one({"session_id": session_id, "duty_key": duty_key})
+
+
+def _duty_reminder_state_doc(session_id, duty_key):
+    if not duty_key:
+        return None
+    return duty_reminder_states_collection.find_one({"session_id": session_id, "duty_key": duty_key})
+
+
+def _default_taxi_state_payload():
+    return {
+        "taxi_reminder_enabled": True,
+        "taxi_status": TAXI_STATUS_PENDING,
+        "last_snoozed_for_date": None,
+    }
+
+
+def _serialize_taxi_state(state_doc=None):
+    payload = _default_taxi_state_payload()
+    state_doc = state_doc or {}
+    if isinstance(state_doc.get("taxi_reminder_enabled"), bool):
+        payload["taxi_reminder_enabled"] = state_doc.get("taxi_reminder_enabled")
+    if state_doc.get("taxi_status") in {TAXI_STATUS_PENDING, TAXI_STATUS_ORDERED, TAXI_STATUS_NOT_NEEDED}:
+        payload["taxi_status"] = state_doc.get("taxi_status")
+    payload["last_snoozed_for_date"] = state_doc.get("last_snoozed_for_date")
+    return payload
+
+
+def _duty_snapshot_from_sources(duty=None, managed_doc=None, state_doc=None):
+    duty = duty or {}
+    managed_doc = managed_doc or {}
+    state_doc = state_doc or {}
+    state_snapshot = state_doc.get("duty_snapshot") or {}
+    return {
+        "duty_key": duty.get("duty_key") or managed_doc.get("duty_key") or state_doc.get("duty_key"),
+        "date": duty.get("date") or managed_doc.get("date") or state_snapshot.get("date"),
+        "role": duty.get("role") or managed_doc.get("role") or state_snapshot.get("role"),
+        "title": duty.get("title") or managed_doc.get("title") or state_snapshot.get("title"),
+        "start_datetime": duty.get("start_datetime") or managed_doc.get("start_datetime") or state_snapshot.get("start_datetime"),
+        "end_datetime": duty.get("end_datetime") or managed_doc.get("end_datetime") or state_snapshot.get("end_datetime"),
+        "team_snapshot": duty.get("team_snapshot") or managed_doc.get("team_snapshot") or state_snapshot.get("team_snapshot") or [],
+        "source_tab_name": duty.get("source_tab_name") or managed_doc.get("source_tab_name") or state_snapshot.get("source_tab_name"),
+    }
+
+
+def _ensure_duty_reminder_state(session_id, duty):
+    duty = duty or {}
+    duty_key = duty.get("duty_key")
+    if not session_id or not duty_key:
+        return None
+    now = _utcnow()
+    snapshot = {
+        "date": duty.get("date"),
+        "role": duty.get("role"),
+        "title": duty.get("title"),
+        "start_datetime": duty.get("start_datetime"),
+        "end_datetime": duty.get("end_datetime"),
+        "team_snapshot": duty.get("team_snapshot") or [],
+        "source_tab_name": duty.get("source_tab_name"),
+    }
+    duty_reminder_states_collection.update_one(
+        {"session_id": session_id, "duty_key": duty_key},
+        {
+            "$set": {
+                "duty_snapshot": snapshot,
+                "duty_deleted": False,
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "session_id": session_id,
+                "user_id": session_id,
+                "duty_key": duty_key,
+                "taxi_reminder_enabled": True,
+                "taxi_status": TAXI_STATUS_PENDING,
+                "created_at": now,
+            },
+        },
+        upsert=True,
+    )
+    return _duty_reminder_state_doc(session_id, duty_key)
+
+
+def _upsert_duty_reminder_state(session_id, duty_key, updates, duty=None):
+    if not session_id or not duty_key:
+        return None
+    managed_doc = _managed_event_doc(session_id, duty_key)
+    existing_state = _duty_reminder_state_doc(session_id, duty_key) or {}
+    snapshot = _duty_snapshot_from_sources(duty=duty, managed_doc=managed_doc, state_doc=existing_state)
+    now = _utcnow()
+    duty_reminder_states_collection.update_one(
+        {"session_id": session_id, "duty_key": duty_key},
+        {
+            "$set": {
+                "duty_snapshot": snapshot,
+                **(updates or {}),
+                "updated_at": now,
+            },
+            "$setOnInsert": {
+                "session_id": session_id,
+                "user_id": session_id,
+                "duty_key": duty_key,
+                "taxi_reminder_enabled": True,
+                "taxi_status": TAXI_STATUS_PENDING,
+                "created_at": now,
+            },
+        },
+        upsert=True,
+    )
+    return _duty_reminder_state_doc(session_id, duty_key)
+
+
+def _build_team_snapshot_for_duty(duty, assignments):
+    duty = duty or {}
+    duty_date = duty.get("date")
+    if not duty_date:
+        return []
+    matched = []
+    for item in assignments or []:
+        if item.get("date") != duty_date:
+            continue
+        matched.append(
+            {
+                "role": item.get("role"),
+                "title": item.get("title"),
+                "person_name": item.get("person_name"),
+                "start_datetime": item.get("start_datetime"),
+                "end_datetime": item.get("end_datetime"),
+            }
+        )
+    matched.sort(key=lambda item: ((RELEVANT_ROLE_HEADERS.index(item["role"]) if item.get("role") in RELEVANT_ROLE_HEADERS else 999), item.get("person_name") or ""))
+    return matched
+
+
+def _format_reminder_date_line(snapshot):
+    raw_date = str((snapshot or {}).get("date") or "")
+    if not raw_date:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(raw_date)
+        return parsed.strftime("%A · %d %b %Y")
+    except ValueError:
+        return raw_date
+
+
+def _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"):
+    managed_doc = _managed_event_doc(session_id, duty_key) or {}
+    state_doc = _duty_reminder_state_doc(session_id, duty_key) or {}
+    snapshot = _duty_snapshot_from_sources(managed_doc=managed_doc, state_doc=state_doc)
+    if not snapshot.get("duty_key") or not snapshot.get("date"):
+        return None
+    taxi_state = _serialize_taxi_state(state_doc)
+    team_snapshot = snapshot.get("team_snapshot") or []
+    card = {
+        "card_type": "duty_reminder",
+        "reminder_kind": reminder_kind,
+        "duty_key": snapshot.get("duty_key"),
+        "title": "Taxi reminder" if reminder_kind != "tomorrow_duty" else "Tomorrow's duty",
+        "subtitle": snapshot.get("title") or snapshot.get("role") or "Duty",
+        "date_line": _format_reminder_date_line(snapshot),
+        "team": team_snapshot,
+        "taxi": taxi_state,
+        "read_only_taxi": reminder_kind == "tomorrow_duty",
+    }
+    if reminder_kind == "tomorrow_duty":
+        card["meta_lines"] = ["Taxi status", "Read only"]
+    else:
+        card["meta_lines"] = ["Taxi status"]
+        card["actions"] = [
+            {"action": "ordered", "label": "I ordered a taxi"},
+            {"action": "not_needed", "label": "No taxi needed"},
+            {"action": "snooze", "label": "Remind me tomorrow"},
+        ]
+    return card
 
 
 def _duty_source_month(duty):
@@ -163,6 +345,8 @@ def _touch_managed_event_record(session_id, duty, sync_result, existing_doc=None
         "title": duty.get("title"),
         "start_datetime": duty.get("start_datetime"),
         "end_datetime": duty.get("end_datetime"),
+        "team_snapshot": duty.get("team_snapshot") or (existing_doc or {}).get("team_snapshot") or [],
+        "source_tab_name": duty.get("source_tab_name") or (existing_doc or {}).get("source_tab_name"),
         "provider": "google",
         "provider_event_id": sync_result.get("provider_event_id") or (existing_doc or {}).get("provider_event_id"),
         "provider_calendar_id": sync_result.get("provider_calendar_id") or (existing_doc or {}).get("provider_calendar_id"),
@@ -185,6 +369,10 @@ def _mark_managed_event_deleted(session_id, duty_key):
         {"session_id": session_id, "duty_key": duty_key},
         {"$set": {"status": "deleted", "deleted_at": _utcnow(), "updated_at": _utcnow()}},
     )
+    duty_reminder_states_collection.update_one(
+        {"session_id": session_id, "duty_key": duty_key},
+        {"$set": {"duty_deleted": True, "updated_at": _utcnow()}},
+    )
 
 
 def _sync_added_duty(session_id, duty, selected_calendar_id=None):
@@ -202,6 +390,7 @@ def _sync_added_duty(session_id, duty, selected_calendar_id=None):
     if sync_result.get("status") != "synced":
         return sync_result
     _touch_managed_event_record(session_id, duty, sync_result, existing_doc=managed_doc, status="active")
+    _ensure_duty_reminder_state(session_id, duty)
     return sync_result
 
 
@@ -256,12 +445,15 @@ def _sync_changed_duty(session_id, old_duty, new_duty, selected_calendar_id=None
                     "title": new_duty.get("title"),
                     "start_datetime": new_duty.get("start_datetime"),
                     "end_datetime": new_duty.get("end_datetime"),
+                    "team_snapshot": new_duty.get("team_snapshot") or (managed_doc or {}).get("team_snapshot") or [],
+                    "source_tab_name": new_duty.get("source_tab_name") or (managed_doc or {}).get("source_tab_name"),
                     "status": "active",
                     "updated_at": now,
                     "last_synced_at": now,
                 }
             },
         )
+        _ensure_duty_reminder_state(session_id, new_duty)
         return sync_result
     return _sync_added_duty(session_id, new_duty, selected_calendar_id=selected_calendar_id)
 
@@ -508,7 +700,18 @@ def _serialize_review_doc(review_doc):
         "approval_change_count": len(changes),
         "approval_change_keys": [item.get("change_key") for item in changes if item.get("change_key")],
         "approval_changes": changes,
-        "changes": changes,
+        "changes": [
+            {
+                **item,
+                "taxi_reminder": _serialize_taxi_state(
+                    _duty_reminder_state_doc(
+                        session_id,
+                        ((item.get("new_duty") or {}).get("duty_key") or (item.get("old_duty") or {}).get("duty_key")),
+                    )
+                ),
+            }
+            for item in changes
+        ],
         "available_calendars": calendar_selector.get("available_calendars") or [],
         "selected_calendar": calendar_selector.get("selected_calendar"),
     }
@@ -886,6 +1089,9 @@ def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=F
     try:
         selected_tab = _select_relevant_tab(session_id, sheet_id, normalized_full_name)
         duties = [asdict(item) for item in selected_tab["duties"]]
+        assignments = selected_tab.get("assignments") or []
+        for duty in duties:
+            duty["team_snapshot"] = _build_team_snapshot_for_duty(duty, assignments)
         current_status = "connected" if duties else "no_duties"
         connected_at = existing.get("connected_at") or now
         _upsert_connection_state(
@@ -903,6 +1109,7 @@ def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=F
                 "source_month": selected_tab["source_month"],
                 "duty_count": len(duties),
                 "latest_detected_duties": duties,
+                "latest_team_assignments": assignments,
                 "last_error_message": None,
                 "last_debug_reason": None,
                 "last_debug_context": None,
@@ -1120,6 +1327,87 @@ def load_pending_duty_review(session_id, review_id, updated_at=None):
             _render_debug_entry("review payload sent to UI", pending_payload, {"payload_kind": "full", "source": "pending_review"}),
         ],
     )
+
+
+def update_duty_taxi_toggle(session_id, review_id, duty_key, enabled, duty=None):
+    if not duty_key:
+        return {"status": "not_found", "reply": "Duty reminder could not be updated."}
+    updates = {
+        "taxi_reminder_enabled": bool(enabled),
+    }
+    if not enabled:
+        updates["last_snoozed_for_date"] = None
+    _upsert_duty_reminder_state(session_id, duty_key, updates, duty=duty)
+    pending_review = _active_pending_review(session_id)
+    payload = None
+    if pending_review and pending_review.get("review_id") == review_id:
+        payload = _serialize_review_doc(pending_review)
+    return {
+        "status": "updated",
+        "reply": "Taxi reminder updated.",
+        "pending_review": payload,
+        "taxi_reminder": _serialize_taxi_state(_duty_reminder_state_doc(session_id, duty_key)),
+    }
+
+
+def load_duty_reminder_card(session_id, duty_key, reminder_kind=None):
+    if not duty_key:
+        return {"status": "not_found", "reply": "That duty reminder could not be opened."}
+    card = _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind=reminder_kind or "taxi")
+    if not card:
+        return {"status": "not_found", "reply": "That duty reminder is no longer available."}
+    return {"status": "loaded", "reminder_card": card}
+
+
+def apply_duty_taxi_action(session_id, duty_key, action):
+    if not duty_key:
+        return {"status": "not_found", "reply": "That duty reminder could not be updated."}
+    action = str(action or "").strip().lower()
+    if action not in {"ordered", "not_needed", "snooze"}:
+        return {"status": "invalid", "reply": "That action is not available for this duty reminder."}
+    if action == "ordered":
+        state = _upsert_duty_reminder_state(
+            session_id,
+            duty_key,
+            {"taxi_status": TAXI_STATUS_ORDERED, "last_snoozed_for_date": None},
+        )
+        return {
+            "status": "updated",
+            "reply": "Taxi marked as ordered",
+            "confirmation": "Taxi marked as ordered",
+            "reminder_card": _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"),
+            "taxi_reminder": _serialize_taxi_state(state),
+        }
+    if action == "not_needed":
+        state = _upsert_duty_reminder_state(
+            session_id,
+            duty_key,
+            {"taxi_status": TAXI_STATUS_NOT_NEEDED, "last_snoozed_for_date": None},
+        )
+        return {
+            "status": "updated",
+            "reply": "Taxi reminder turned off",
+            "confirmation": "Taxi reminder turned off",
+            "reminder_card": _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"),
+            "taxi_reminder": _serialize_taxi_state(state),
+        }
+    snooze_for = (_local_now() + timedelta(days=1)).date().isoformat()
+    state = _upsert_duty_reminder_state(
+        session_id,
+        duty_key,
+        {
+            "taxi_status": TAXI_STATUS_PENDING,
+            "taxi_reminder_enabled": True,
+            "last_snoozed_for_date": snooze_for,
+        },
+    )
+    return {
+        "status": "updated",
+        "reply": "Okay — I’ll remind you again tomorrow",
+        "confirmation": "Okay — I’ll remind you again tomorrow",
+        "reminder_card": _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"),
+        "taxi_reminder": _serialize_taxi_state(state),
+    }
 
 
 def connect_duty_sheet(session_id, sheet_url=None, full_name=None):

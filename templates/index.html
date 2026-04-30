@@ -1175,6 +1175,149 @@
             flex-wrap: wrap;
         }
 
+        .duty-review-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(15, 118, 110, 0.04);
+            border: 1px solid rgba(15, 118, 110, 0.08);
+        }
+
+        .duty-review-toggle-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .duty-review-toggle-label {
+            margin: 0;
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .duty-review-toggle-note {
+            margin: 0;
+            font-size: 0.74rem;
+            line-height: 1.35;
+            color: var(--muted);
+        }
+
+        .duty-review-toggle-control {
+            width: 18px;
+            height: 18px;
+            accent-color: #0f766e;
+            flex: 0 0 auto;
+        }
+
+        .duty-reminder-card {
+            align-self: flex-start;
+            max-width: min(100%, 760px);
+            border-radius: 16px;
+            padding: 14px;
+            border: 1px solid rgba(15, 118, 110, 0.14);
+            background: rgba(248, 250, 252, 0.96);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            animation: riseIn 180ms ease-out;
+        }
+
+        .duty-reminder-subtitle {
+            margin: 0;
+            color: var(--brand-strong);
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .duty-reminder-date {
+            margin: 0;
+            color: var(--text);
+            font-size: 1rem;
+            font-weight: 720;
+        }
+
+        .duty-reminder-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .duty-reminder-team {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .duty-reminder-team-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.84);
+            border: 1px solid rgba(15, 118, 110, 0.08);
+        }
+
+        .duty-reminder-team-role,
+        .duty-reminder-team-name {
+            font-size: 0.86rem;
+            line-height: 1.35;
+        }
+
+        .duty-reminder-team-role {
+            color: var(--text);
+            font-weight: 650;
+        }
+
+        .duty-reminder-team-name {
+            color: #4f645f;
+            text-align: right;
+        }
+
+        .duty-reminder-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(15, 118, 110, 0.05);
+            border: 1px solid rgba(15, 118, 110, 0.08);
+        }
+
+        .duty-reminder-status-label,
+        .duty-reminder-status-value {
+            font-size: 0.84rem;
+        }
+
+        .duty-reminder-status-label {
+            color: var(--muted);
+            font-weight: 700;
+        }
+
+        .duty-reminder-status-value {
+            color: var(--text);
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .duty-reminder-confirmation {
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(15, 118, 110, 0.09);
+            color: var(--brand-strong);
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
         .draft-title {
             margin: 0;
             font-size: 0.98rem;
@@ -2938,6 +3081,9 @@
         let activeDutyReview = null;
         let pendingDutySyncReviewId = null;
         let pendingDutySyncReviewUpdatedAt = null;
+        let pendingDutyReminderDutyKey = null;
+        let pendingDutyReminderKind = null;
+        let dutyReminderOpenPromise = null;
         let dutySyncTraceId = null;
         let lastOpenedDutySyncReviewKey = null;
         let pendingDutySyncInlineReview = null;
@@ -4641,9 +4787,12 @@
             const params = new URLSearchParams(window.location.search);
             const requestedMode = params.get("app_mode");
             const reviewDeepLink = params.get("duty_sync_review");
+            const dutyReminderDeepLink = params.get("duty_reminder");
             const calendarStatus = params.get("calendar_status");
             pendingDutySyncReviewId = params.get("duty_sync_review_id");
             pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
+            pendingDutyReminderDutyKey = params.get("duty_key");
+            pendingDutyReminderKind = params.get("reminder_kind") || "taxi";
             dutySyncTraceId = params.get("duty_sync_trace_id");
             pendingDutySyncInlineReview = loadPendingDutySyncInlineReview();
             const swTrace = (params.get("duty_sync_trace_sw") || "").split("|").filter(Boolean);
@@ -4680,7 +4829,7 @@
             }
             const shouldOpenSchedulingOnLoad =
                 requestedMode === "scheduling" &&
-                (reviewDeepLink === "1" || !!calendarStatus);
+                (reviewDeepLink === "1" || dutyReminderDeepLink === "1" || !!calendarStatus);
             appMode = shouldOpenSchedulingOnLoad ? "scheduling" : "clinical";
             dutySyncStartupDebugLine = `[App] startup mode=${appMode} requested_mode=${requestedMode || "none"} scheduling_forced=${shouldOpenSchedulingOnLoad} clinical_default=${!shouldOpenSchedulingOnLoad}`;
             dutySyncDebug(
@@ -5519,6 +5668,206 @@
             return [weekdayText, dateText, titleText].filter(Boolean).join(" · ");
         }
 
+        function resolveDutyReviewTaxiState(change) {
+            return (change && change.taxi_reminder) || {
+                taxi_reminder_enabled: true,
+                taxi_status: "pending",
+                last_snoozed_for_date: null,
+            };
+        }
+
+        function formatTaxiStatusLabel(taxiState) {
+            const state = taxiState || {};
+            if (state.taxi_status === "ordered") return "Ordered";
+            if (state.taxi_status === "not_needed") return "Not needed";
+            if (state.taxi_reminder_enabled === false) return "Off";
+            if (state.last_snoozed_for_date) return `Snoozed to ${state.last_snoozed_for_date}`;
+            return "Pending";
+        }
+
+        function removeExistingDutyReminderCard(dutyKey) {
+            const existing = document.getElementById(`duty-reminder-${dutyKey}`);
+            if (existing) {
+                existing.remove();
+            }
+        }
+
+        async function updateDutyReviewTaxiToggle(reviewId, dutyKey, duty, enabled, card) {
+            try {
+                const response = await fetch("/calendar/duty-sync/review/taxi-toggle", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        review_id: reviewId,
+                        duty_key: dutyKey,
+                        enabled,
+                        duty: duty || {}
+                    })
+                });
+                const data = await response.json();
+                if (data.pending_review) {
+                    if (card) card.remove();
+                    appendDutyReviewCard(data.pending_review, "generic_pending_review", "updateDutyReviewTaxiToggle");
+                    await refreshDutySyncStatus();
+                    return;
+                }
+                if (data.reply) {
+                    appendAssistantMessage(data.reply, data.status === "updated" ? "system" : "error");
+                }
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        function appendDutyReminderCard(reminderCard, confirmationText = "") {
+            if (!reminderCard || !reminderCard.duty_key) return;
+            removeExistingDutyReminderCard(reminderCard.duty_key);
+            hideStudyCards();
+            refreshEntryGuidanceVisibility();
+
+            const chat = document.getElementById("chat");
+            const card = document.createElement("div");
+            card.className = "duty-reminder-card";
+            card.id = `duty-reminder-${reminderCard.duty_key}`;
+
+            const title = document.createElement("p");
+            title.className = "draft-title";
+            title.textContent = reminderCard.title || "Duty reminder";
+            card.appendChild(title);
+
+            if (reminderCard.subtitle) {
+                const subtitle = document.createElement("p");
+                subtitle.className = "duty-reminder-subtitle";
+                subtitle.textContent = reminderCard.subtitle;
+                card.appendChild(subtitle);
+            }
+
+            if (reminderCard.date_line) {
+                const dateLine = document.createElement("p");
+                dateLine.className = "duty-reminder-date";
+                dateLine.textContent = reminderCard.date_line;
+                card.appendChild(dateLine);
+            }
+
+            const taxiState = reminderCard.taxi || {};
+            const statusRow = document.createElement("div");
+            statusRow.className = "duty-reminder-status";
+            statusRow.innerHTML = `
+                <div class="duty-reminder-status-label">Taxi status</div>
+                <div class="duty-reminder-status-value">${escapeHtml(formatTaxiStatusLabel(taxiState))}</div>
+            `;
+            card.appendChild(statusRow);
+
+            if (confirmationText) {
+                const confirmation = document.createElement("div");
+                confirmation.className = "duty-reminder-confirmation";
+                confirmation.textContent = confirmationText;
+                card.appendChild(confirmation);
+            }
+
+            const team = Array.isArray(reminderCard.team) ? reminderCard.team : [];
+            if (team.length) {
+                const teamSection = document.createElement("div");
+                teamSection.className = "duty-reminder-team";
+                team.slice(0, 6).forEach((member) => {
+                    const row = document.createElement("div");
+                    row.className = "duty-reminder-team-row";
+                    row.innerHTML = `
+                        <div class="duty-reminder-team-role">${escapeHtml(member.title || member.role || "Duty")}</div>
+                        <div class="duty-reminder-team-name">${escapeHtml(member.person_name || "Unknown")}</div>
+                    `;
+                    teamSection.appendChild(row);
+                });
+                card.appendChild(teamSection);
+            }
+
+            if (!reminderCard.read_only_taxi && taxiState.taxi_status !== "ordered" && taxiState.taxi_status !== "not_needed" && Array.isArray(reminderCard.actions) && reminderCard.actions.length) {
+                const actions = document.createElement("div");
+                actions.className = "draft-actions";
+                reminderCard.actions.forEach((item) => {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = item.action === "not_needed" ? "ghost-button" : "secondary-button";
+                    button.textContent = item.label;
+                    button.addEventListener("click", async () => {
+                        button.disabled = true;
+                        try {
+                            const response = await fetch("/calendar/duty-sync/reminder/action", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    session_id: sessionId,
+                                    duty_key: reminderCard.duty_key,
+                                    action: item.action
+                                })
+                            });
+                            const data = await response.json();
+                            if (data.reminder_card) {
+                                appendDutyReminderCard(data.reminder_card, data.confirmation || "");
+                                return;
+                            }
+                            appendAssistantMessage(data.reply || "Duty reminder updated.", data.status === "updated" ? "system" : "error");
+                        } catch (error) {
+                            appendAssistantMessage("Error: " + error, "error");
+                        }
+                    });
+                    actions.appendChild(button);
+                });
+                card.appendChild(actions);
+            }
+
+            chat.appendChild(card);
+            card.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
+            scrollChatToBottom();
+        }
+
+        async function openDutyReminderContextByKey(dutyKey, reminderKind = "taxi", source = "duty_reminder") {
+            if (!dutyKey) return;
+            if (dutyReminderOpenPromise) return dutyReminderOpenPromise;
+            dutyReminderOpenPromise = (async () => {
+                const modeChanged = appMode !== "scheduling";
+                if (modeChanged) {
+                    appMode = "scheduling";
+                    renderModeState();
+                }
+                resetChatSurfaceForPushModeTransition();
+                try {
+                    const response = await fetch("/calendar/duty-sync/reminder/load", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            session_id: sessionId,
+                            duty_key: dutyKey,
+                            reminder_kind: reminderKind
+                        })
+                    });
+                    const data = await response.json();
+                    if (data && data.reminder_card) {
+                        appendDutyReminderCard(data.reminder_card);
+                    } else {
+                        appendAssistantMessage(data.reply || "That duty reminder could not be opened right now.", "error");
+                    }
+                } catch (error) {
+                    appendAssistantMessage("Error: " + error, "error");
+                }
+                pendingDutyReminderDutyKey = null;
+                pendingDutyReminderKind = null;
+                const params = new URLSearchParams(window.location.search);
+                params.delete("duty_reminder");
+                params.delete("reminder_kind");
+                params.delete("duty_key");
+                const nextQuery = params.toString();
+                const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
+                window.history.replaceState({}, document.title, nextUrl);
+            })();
+            try {
+                return await dutyReminderOpenPromise;
+            } finally {
+                dutyReminderOpenPromise = null;
+            }
+        }
+
         function removeExistingDutyReviewCard(reviewId) {
             const existing = document.getElementById(`duty-review-${reviewId}`);
             if (existing) {
@@ -5648,6 +5997,36 @@
                 }
 
                 item.appendChild(itemTitle);
+                const toggleDuty = change.new_duty || null;
+                if (toggleDuty && toggleDuty.duty_key) {
+                    const taxiState = resolveDutyReviewTaxiState(change);
+                    const toggleRow = document.createElement("label");
+                    toggleRow.className = "duty-review-toggle-row";
+                    const toggleCopy = document.createElement("div");
+                    toggleCopy.className = "duty-review-toggle-copy";
+
+                    const toggleLabel = document.createElement("p");
+                    toggleLabel.className = "duty-review-toggle-label";
+                    toggleLabel.textContent = "Taxi reminder";
+
+                    const toggleNote = document.createElement("p");
+                    toggleNote.className = "duty-review-toggle-note";
+                    toggleNote.textContent = `Status: ${formatTaxiStatusLabel(taxiState)}`;
+
+                    const toggleInput = document.createElement("input");
+                    toggleInput.type = "checkbox";
+                    toggleInput.className = "duty-review-toggle-control";
+                    toggleInput.checked = taxiState.taxi_reminder_enabled !== false;
+                    toggleInput.addEventListener("change", () => {
+                        updateDutyReviewTaxiToggle(renderReview.review_id, toggleDuty.duty_key, toggleDuty, toggleInput.checked, card);
+                    });
+
+                    toggleCopy.appendChild(toggleLabel);
+                    toggleCopy.appendChild(toggleNote);
+                    toggleRow.appendChild(toggleCopy);
+                    toggleRow.appendChild(toggleInput);
+                    item.appendChild(toggleRow);
+                }
                 if (actions.childElementCount) {
                     item.appendChild(actions);
                 }
@@ -7290,6 +7669,9 @@
             storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
             queueContextReentryPulse();
             restorePushContextAndResumeDutySyncReview("pageshow").catch(() => {});
+            if (!pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+                openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "pageshow");
+            }
         });
         document.addEventListener("visibilitychange", () => {
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
@@ -7307,6 +7689,9 @@
                     appWasBackgrounded = false;
                 }
                 restorePushContextAndResumeDutySyncReview("visibilitychange").catch(() => {});
+                if (!pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+                    openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "visibilitychange");
+                }
                 return;
             }
             stopDutySyncForegroundWatcher();
@@ -7319,6 +7704,9 @@
                 appWasBackgrounded = false;
             }
             restorePushContextAndResumeDutySyncReview("focus").catch(() => {});
+            if (!pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+                openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "focus");
+            }
         });
         if (pendingDutySyncReviewDeepLink) {
             storeDutySyncPushContextFromUrl(window.location.href, "pending_deeplink_url");
@@ -7341,6 +7729,9 @@
         {% endif %}
         handleCalendarCallbackStatus();
         bootstrapSession();
+        if (!pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+            openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "initial");
+        }
         if (document.visibilityState === "visible") {
             startDutySyncForegroundWatcher();
         }

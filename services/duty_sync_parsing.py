@@ -178,6 +178,7 @@ def analyze_candidate_tab(tab_name, values, full_name, session_id):
     header_info = detect_header_row(values)
     columns = header_info["columns"]
     duties = []
+    assignments = []
     latest_date = None
     normalized_full_name = normalize_text(full_name)
 
@@ -210,6 +211,19 @@ def analyze_candidate_tab(tab_name, values, full_name, session_id):
         for role, cell_value in relevant_values.items():
             if not cell_value:
                 continue
+            start_dt, end_dt = build_duty_datetimes(duty_date, role)
+            assignments.append(
+                {
+                    "date": duty_date.isoformat(),
+                    "role": role,
+                    "title": ROLE_TITLE_MAP[role],
+                    "person_name": cell_value,
+                    "start_datetime": as_iso(start_dt),
+                    "end_datetime": as_iso(end_dt),
+                    "source_tab_name": tab_name,
+                    "source_row_index": row_index + 1,
+                }
+            )
             if normalized_full_name in cell_value and cell_value != normalized_full_name:
                 raise DutySyncStructuralError(
                     "Found a duty cell that mentions the user name but is not an exact full-name match.",
@@ -218,7 +232,6 @@ def analyze_candidate_tab(tab_name, values, full_name, session_id):
             if cell_value != normalized_full_name:
                 continue
             matched_roles.append(role)
-            start_dt, end_dt = build_duty_datetimes(duty_date, role)
             duty_key = f"{session_id}:{duty_date.isoformat()}:{role}"
             duties.append(
                 DetectedDuty(
@@ -251,6 +264,7 @@ def analyze_candidate_tab(tab_name, values, full_name, session_id):
         "latest_date": latest_date,
         "source_month": latest_date.strftime("%Y-%m"),
         "duties": duties,
+        "assignments": assignments,
     }
 
 
