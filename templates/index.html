@@ -1235,6 +1235,14 @@
             text-transform: uppercase;
         }
 
+        .duty-reminder-subtitle.prominent {
+            color: var(--text);
+            font-size: 0.98rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+
         .duty-reminder-date {
             margin: 0;
             color: var(--text);
@@ -1256,14 +1264,28 @@
             gap: 8px;
         }
 
+        .duty-reminder-team-heading {
+            margin: 0 0 2px;
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
         .duty-reminder-team-row {
             display: flex;
-            justify-content: space-between;
-            gap: 12px;
+            align-items: center;
+            gap: 8px;
             padding: 10px 12px;
             border-radius: 12px;
             background: rgba(255, 255, 255, 0.84);
             border: 1px solid rgba(15, 118, 110, 0.08);
+        }
+
+        .duty-reminder-team-separator {
+            color: rgba(79, 100, 95, 0.55);
+            font-size: 0.8rem;
+            font-weight: 700;
         }
 
         .duty-reminder-team-role,
@@ -1279,7 +1301,7 @@
 
         .duty-reminder-team-name {
             color: #4f645f;
-            text-align: right;
+            text-align: left;
         }
 
         .duty-reminder-status {
@@ -5777,6 +5799,18 @@
             return "Pending";
         }
 
+        function formatDutyMemberRoleLabel(member) {
+            const raw = String((member && (member.display_title || member.title || member.role)) || "").trim();
+            if (!raw) return "Duty";
+            if (raw.startsWith("תורנות/")) {
+                return raw.slice("תורנות/".length).trim() || raw;
+            }
+            if (raw.startsWith("תורנות ")) {
+                return raw.slice("תורנות ".length).trim() || raw;
+            }
+            return raw;
+        }
+
         function removeExistingDutyReminderCard(dutyKey) {
             const existing = document.getElementById(`duty-reminder-${dutyKey}`);
             if (existing) {
@@ -5950,6 +5984,9 @@
             if (reminderCard.subtitle) {
                 const subtitle = document.createElement("p");
                 subtitle.className = "duty-reminder-subtitle";
+                if (reminderCard.read_only_taxi) {
+                    subtitle.classList.add("prominent");
+                }
                 subtitle.textContent = reminderCard.subtitle;
                 card.appendChild(subtitle);
             }
@@ -5966,7 +6003,7 @@
             statusRow.className = "duty-reminder-status";
             statusRow.innerHTML = `
                 <div class="duty-reminder-status-label">Taxi status</div>
-                <div class="duty-reminder-status-value">${escapeHtml(formatTaxiStatusLabel(taxiState))}</div>
+                <div class="duty-reminder-status-value">${escapeHtml(reminderCard.taxi_status_label || formatTaxiStatusLabel(taxiState))}</div>
             `;
             card.appendChild(statusRow);
 
@@ -5981,11 +6018,18 @@
             if (team.length) {
                 const teamSection = document.createElement("div");
                 teamSection.className = "duty-reminder-team";
+                if (reminderCard.team_heading) {
+                    const heading = document.createElement("p");
+                    heading.className = "duty-reminder-team-heading";
+                    heading.textContent = reminderCard.team_heading;
+                    teamSection.appendChild(heading);
+                }
                 team.slice(0, 6).forEach((member) => {
                     const row = document.createElement("div");
                     row.className = "duty-reminder-team-row";
                     row.innerHTML = `
-                        <div class="duty-reminder-team-role">${escapeHtml(member.title || member.role || "Duty")}</div>
+                        <div class="duty-reminder-team-role">${escapeHtml(formatDutyMemberRoleLabel(member))}</div>
+                        <div class="duty-reminder-team-separator" aria-hidden="true">·</div>
                         <div class="duty-reminder-team-name">${escapeHtml(member.person_name || "Unknown")}</div>
                     `;
                     teamSection.appendChild(row);

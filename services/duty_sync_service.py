@@ -70,6 +70,24 @@ TAXI_STATUS_PENDING = "pending"
 TAXI_STATUS_ORDERED = "ordered"
 TAXI_STATUS_NOT_NEEDED = "not_needed"
 LOCAL_APP_TIMEZONE = ZoneInfo("Asia/Jerusalem")
+ROLE_DISPLAY_LABEL_MAP = {
+    "חדר לידה": "חדר לידה",
+    "קבלה": "קבלה",
+    "מיון": "מיון",
+    "ב": "ב",
+    "תורן חצי": "תורן חצי",
+    "תורן ד": "תורן ד",
+    "מחלקות": "מחלקות",
+}
+ROLE_CALENDAR_TITLE_MAP = {
+    "חדר לידה": "תורנות חדר לידה",
+    "קבלה": "תורנות קבלה",
+    "מיון": "תורנות מיון",
+    "ב": "תורנות ב",
+    "תורן חצי": "תורנות תורן חצי",
+    "תורן ד": "תורנות תורן ד",
+    "מחלקות": "תורנות מחלקות",
+}
 
 
 def _is_debug_env():
@@ -274,6 +292,43 @@ def _format_reminder_date_line(snapshot):
         return raw_date
 
 
+def _display_role_label(role_or_title):
+    normalized = normalize_text(role_or_title)
+    if normalized in ROLE_DISPLAY_LABEL_MAP:
+        return ROLE_DISPLAY_LABEL_MAP[normalized]
+    if normalized.startswith("תורנות/"):
+        return normalized.split("/", 1)[1].strip() or normalized
+    if normalized.startswith("תורנות "):
+        return normalized.replace("תורנות ", "", 1).strip() or normalized
+    return normalized or "Duty"
+
+
+def _calendar_duty_title(duty):
+    duty = duty or {}
+    role = normalize_text(duty.get("role"))
+    if role in ROLE_CALENDAR_TITLE_MAP:
+        return ROLE_CALENDAR_TITLE_MAP[role]
+    title = normalize_text(duty.get("title"))
+    if title:
+        return title.replace("/", " ")
+    return normalize_text(duty.get("role")) or "Duty"
+
+
+def _reminder_taxi_status_label(reminder_kind, taxi_state):
+    state = taxi_state or {}
+    if state.get("taxi_status") == TAXI_STATUS_ORDERED:
+        return "Taxi ordered"
+    if state.get("taxi_status") == TAXI_STATUS_NOT_NEEDED:
+        return "No taxi needed"
+    if reminder_kind == "tomorrow_duty":
+        return "Taxi not ordered yet"
+    if state.get("taxi_reminder_enabled") is False:
+        return "Taxi reminder off"
+    if state.get("last_snoozed_for_date"):
+        return f"Snoozed to {state.get('last_snoozed_for_date')}"
+    return "Pending"
+
+
 def _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"):
     managed_doc = _managed_event_doc(session_id, duty_key) or {}
     state_doc = _duty_reminder_state_doc(session_id, duty_key) or {}
@@ -282,19 +337,22 @@ def _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"
         return None
     taxi_state = _serialize_taxi_state(state_doc)
     team_snapshot = snapshot.get("team_snapshot") or []
+    role_label = _display_role_label(snapshot.get("role") or snapshot.get("title"))
     card = {
         "card_type": "duty_reminder",
         "reminder_kind": reminder_kind,
         "duty_key": snapshot.get("duty_key"),
         "title": "Taxi reminder" if reminder_kind != "tomorrow_duty" else "Tomorrow's duty",
-        "subtitle": snapshot.get("title") or snapshot.get("role") or "Duty",
+        "subtitle": role_label if reminder_kind == "tomorrow_duty" else (_calendar_duty_title(snapshot) or role_label),
         "date_line": _format_reminder_date_line(snapshot),
         "team": team_snapshot,
         "taxi": taxi_state,
+        "taxi_status_label": _reminder_taxi_status_label(reminder_kind, taxi_state),
         "read_only_taxi": reminder_kind == "tomorrow_duty",
     }
     if reminder_kind == "tomorrow_duty":
-        card["meta_lines"] = ["Taxi status", "Read only"]
+        card["team_heading"] = "Who's on with you"
+        card["meta_lines"] = ["Tomorrow duty", "Read only"]
     else:
         card["meta_lines"] = ["Taxi status"]
         card["actions"] = [
@@ -330,7 +388,7 @@ def _build_managed_event_payload(session_id, duty):
         )
     return {
         "session_id": session_id,
-        "title": duty.get("title") or duty.get("role"),
+        "title": _calendar_duty_title(duty),
         "calendar_type": DUTY_SYNC_CALENDAR_TYPE,
         "start_at": start_at,
         "end_at": end_at,
@@ -1358,7 +1416,13 @@ def update_duty_taxi_toggle(session_id, review_id, duty_key, enabled, duty=None)
 def load_duty_reminder_card(session_id, duty_key, reminder_kind=None):
     if not duty_key:
         return {"status": "not_found", "reply": "That duty reminder could not be opened."}
-    card = _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind=reminder_kind or "taxi")
+    normalized_kind = reminder_kind or "taxi"
+    if normalized_kind == "tomorrow_duty":
+        try:
+            refresh_duty_team_snapshot(session_id)
+        except Exception:
+            pass
+    card = _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind=normalized_kind)
     if not card:
         return {"status": "not_found", "reply": "That duty reminder is no longer available."}
     return {"status": "loaded", "reminder_card": card}
@@ -1473,6 +1537,17 @@ def set_duty_taxi_state_for_qa(session_id, duty_key, state):
 
 
 def refresh_duty_sync_team_snapshot_for_qa(session_id):
+    refreshed = refresh_duty_team_snapshot(session_id)
+    if refreshed.get("status") != "updated":
+        return refreshed
+    return {
+        "status": "updated",
+        "reply": f"Refreshed {refreshed.get('refreshed_count', 0)} duties from the latest sheet.",
+        "refreshed_count": refreshed.get("refreshed_count", 0),
+    }
+
+
+def refresh_duty_team_snapshot(session_id):
     access_state = _required_google_sheet_access(session_id)
     if not access_state.get("ok"):
         return access_state
@@ -1528,11 +1603,7 @@ def refresh_duty_sync_team_snapshot_for_qa(session_id):
         )
         _upsert_duty_reminder_state(session_id, duty_key, {}, duty=duty)
         refreshed_count += 1
-    return {
-        "status": "updated",
-        "reply": f"Refreshed {refreshed_count} duties from the latest sheet.",
-        "refreshed_count": refreshed_count,
-    }
+    return {"status": "updated", "refreshed_count": refreshed_count}
 
 
 def connect_duty_sheet(session_id, sheet_url=None, full_name=None):
