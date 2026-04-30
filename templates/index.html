@@ -5974,7 +5974,14 @@
                 card.appendChild(teamSection);
             }
 
-            if (!reminderCard.read_only_taxi && taxiState.taxi_status !== "ordered" && taxiState.taxi_status !== "not_needed" && Array.isArray(reminderCard.actions) && reminderCard.actions.length) {
+            const canShowTaxiActions =
+                !reminderCard.read_only_taxi &&
+                taxiState.taxi_reminder_enabled !== false &&
+                taxiState.taxi_status === "pending" &&
+                !taxiState.last_snoozed_for_date &&
+                Array.isArray(reminderCard.actions) &&
+                reminderCard.actions.length;
+            if (canShowTaxiActions) {
                 const actions = document.createElement("div");
                 actions.className = "draft-actions";
                 reminderCard.actions.forEach((item) => {
