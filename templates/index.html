@@ -5815,11 +5815,22 @@
         function formatDutyMemberRoleLabel(member) {
             const raw = String((member && (member.display_title || member.title || member.role)) || "").trim();
             if (!raw) return "Duty";
+            const roleDisplayMap = {
+                "מיון": "מיון גניקולוגי",
+                "ב": "תורנית ב׳",
+                "תורן ד": "תורנית ד׳",
+                "תורן חצי": "תורנית חצי"
+            };
+            if (roleDisplayMap[raw]) {
+                return roleDisplayMap[raw];
+            }
             if (raw.startsWith("תורנות/")) {
-                return raw.slice("תורנות/".length).trim() || raw;
+                const trimmed = raw.slice("תורנות/".length).trim() || raw;
+                return roleDisplayMap[trimmed] || trimmed;
             }
             if (raw.startsWith("תורנות ")) {
-                return raw.slice("תורנות ".length).trim() || raw;
+                const trimmed = raw.slice("תורנות ".length).trim() || raw;
+                return roleDisplayMap[trimmed] || trimmed;
             }
             return raw;
         }
