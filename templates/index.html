@@ -760,6 +760,7 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
+            width: 100%;
         }
 
         .quick-result-header,
@@ -790,9 +791,9 @@
         }
 
         .quick-result-subline {
-            font-size: 0.76rem;
+            font-size: 0.96rem;
             line-height: 1.35;
-            font-weight: 620;
+            font-weight: 700;
             color: #5b706a;
         }
 
@@ -838,9 +839,10 @@
         }
 
         .quick-result-meta-line {
-            font-size: 0.72rem;
+            font-size: 0.96rem;
             line-height: 1.3;
-            color: var(--muted);
+            color: #5b706a;
+            font-weight: 700;
         }
 
         .quick-result-section {
@@ -878,6 +880,14 @@
             line-height: 1.35;
             color: #566c66;
             text-align: right;
+        }
+
+        .message-stack.quick-result-stack,
+        .message-stack.quick-result-stack .message-frame,
+        .message-stack.quick-result-stack .bubble-wrap,
+        .message-stack.quick-result-stack .bubble {
+            width: 100%;
+            max-width: none;
         }
 
         .quick-result-more {
@@ -6473,6 +6483,10 @@
 
             const stack = document.createElement("div");
             stack.className = "message-stack";
+            const isQuickResult = role === "assistant" && typeof html === "string" && html.includes("quick-result-card");
+            if (isQuickResult) {
+                stack.classList.add("quick-result-stack");
+            }
 
             const bubble = document.createElement("div");
             bubble.className = "bubble" + (variant ? ` ${variant}` : "");

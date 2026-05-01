@@ -3535,18 +3535,28 @@ def _quick_row(label, value):
     return {"label": label, "value": value}
 
 
+def _quick_duty_role_label(raw_title):
+    normalized = normalize_text(raw_title)
+    if not normalized:
+        return "תורנות"
+    if normalized.startswith("תורנות "):
+        normalized = normalized.replace("תורנות ", "", 1).strip() or normalized
+    role_display_map = {
+        "מיון": "מיון גניקולוגי",
+        "ב": "תורנית ב׳",
+        "תורן חצי": "תורנית חצי",
+        "תורן ד": "תורנית ד׳",
+    }
+    return role_display_map.get(normalized) or normalized
+
+
 def _quick_duty_rows(records, limit=None):
     rows = []
     normalized_records = list(records or [])
     if limit is not None:
         normalized_records = normalized_records[:limit]
     for item in normalized_records:
-        category = _classify_duty_event_title(item.get("title"))
-        value = {
-            "regular": "Duty",
-            "half": "Half Duty",
-            "department": "Department Duty",
-        }.get(category) or "Duty"
+        value = _quick_duty_role_label(item.get("title"))
         rows.append(_quick_row(_format_quick_card_row_date(item["date"]), value))
     return rows
 
@@ -3580,7 +3590,11 @@ def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_s
     if support_line:
         parts.append(f'<p class="quick-result-support">{html_escape(support_line)}</p>')
     parts.append('</div>')
-    metadata_lines = [line for line in (metadata_lines or []) if line]
+    metadata_lines = [
+        line
+        for line in (metadata_lines or [])
+        if line and normalize_text(line) != "Deduplicated by start date"
+    ]
     if metadata_lines:
         parts.append('<div class="quick-result-meta">')
         for line in metadata_lines:
@@ -3627,7 +3641,7 @@ def _render_month_overview_quick_result(session_id):
                 "This Month",
                 "Completed vs upcoming",
                 "No duties found",
-                metadata_lines=[_format_quick_date_range(start_date, end_date), "Deduplicated by start date"],
+                metadata_lines=[_format_quick_date_range(start_date, end_date)],
             ),
             "scheduling_draft": None,
         }
@@ -3650,7 +3664,7 @@ def _render_month_overview_quick_result(session_id):
             "This Month",
             "Completed vs upcoming",
             f"{len(completed)} of {total} completed",
-            metadata_lines=[_format_quick_date_range(start_date, end_date), "Deduplicated by start date"],
+            metadata_lines=[_format_quick_date_range(start_date, end_date)],
             main_secondary=f"{len(upcoming)} upcoming",
             sections=sections,
             progress=(len(completed) / total) if total else 0,
@@ -3672,7 +3686,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
                 f"Sundays in {today.year}",
                 f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
                 f"{count} Sunday duties",
-                metadata_lines=["Deduplicated by start date"],
+                metadata_lines=[],
                 breakdown_rows=[("Sunday", count)],
             ),
             "scheduling_draft": None,
@@ -3689,7 +3703,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
                 "Monthly Average",
                 f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
                 f"{average:.1f} duties/month",
-                metadata_lines=[f"{months_with_data} month{'s' if months_with_data != 1 else ''} with data", "Deduplicated by start date"],
+                metadata_lines=[f"{months_with_data} month{'s' if months_with_data != 1 else ''} with data"],
                 breakdown_rows=[(datetime.strptime(month_key, "%Y-%m").strftime("%B"), count) for month_key, count in sorted(month_counts.items())[-6:]],
             ),
             "scheduling_draft": None,
@@ -3706,7 +3720,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
                 "Busiest Weekday",
                 f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
                 f"Busiest weekday: {busiest_name}",
-                metadata_lines=["Deduplicated by start date"],
+                metadata_lines=[],
                 main_secondary=f"{weekday_counts.get(busiest, 0)} duties",
                 breakdown_rows=[(datetime(2026, 4, 20 + idx).strftime("%A"), count) for idx, count in sorted_rows[:6]],
             ),
@@ -3723,7 +3737,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
                     "Peak Month",
                     f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
                     "No duties found",
-                    metadata_lines=["Deduplicated by start date"],
+                    metadata_lines=[],
                 ),
                 "scheduling_draft": None,
             }
@@ -3734,7 +3748,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
                 "Peak Month",
                 f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
                 f"Busiest month: {month_label}",
-                metadata_lines=["Deduplicated by start date"],
+                metadata_lines=[],
                 main_secondary=f"{month_counts[busiest_month]} duties",
                 breakdown_rows=[(datetime.strptime(month_key, "%Y-%m").strftime("%B"), count) for month_key, count in sorted(month_counts.items(), key=lambda item: item[1], reverse=True)[:6]],
             ),
@@ -3782,7 +3796,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
             "Year Comparison",
             "Regular duties year over year",
             "Flat year over year" if direction == "flat" else f"{abs(delta)} duties {direction}",
-            metadata_lines=[f"Jan 1 – {today.strftime('%b')} {today.day} each year", "Deduplicated by start date"],
+            metadata_lines=[f"Jan 1 – {today.strftime('%b')} {today.day} each year"],
             main_secondary=f"{this_year_count} this year · {last_year_count} last year",
             breakdown_rows=[("This year", this_year_count), ("Last year", last_year_count)],
         ),
@@ -3801,7 +3815,7 @@ def _render_planning_quick_result(session_id, quick_key):
                 "Planning Insight",
                 "Looking ahead",
                 "No duties found",
-                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                metadata_lines=["Upcoming duties only"],
             ),
             "scheduling_draft": None,
         }
@@ -3813,9 +3827,9 @@ def _render_planning_quick_result(session_id, quick_key):
                 "Next Week",
                 "Looking ahead",
                 f"{len(next_week_dates)} duties next week",
-                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                metadata_lines=["Upcoming duties only"],
                 support_line=", ".join(duty_date.strftime("%b %d") for duty_date in next_week_dates[:3]) if next_week_dates else None,
-                breakdown_rows=[(_format_quick_card_row_date(duty_date), "Duty") for duty_date in next_week_dates[:6]],
+                breakdown_rows=[(_format_quick_card_row_date(duty_date), "תורנות") for duty_date in next_week_dates[:6]],
             ),
             "scheduling_draft": None,
         }
@@ -3836,7 +3850,7 @@ def _render_planning_quick_result(session_id, quick_key):
                 "Schedule Gaps",
                 "Looking ahead",
                 main_primary,
-                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                metadata_lines=["Upcoming duties only"],
                 support_line=support_line,
             ),
             "scheduling_draft": None,
@@ -3851,7 +3865,7 @@ def _render_planning_quick_result(session_id, quick_key):
                 "Busy Stretch",
                 "Looking ahead",
                 main_primary,
-                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                metadata_lines=["Upcoming duties only"],
                 support_line=support_line,
             ),
             "scheduling_draft": None,
@@ -3863,7 +3877,7 @@ def _render_planning_quick_result(session_id, quick_key):
                 "Weekend Load",
                 "Looking ahead",
                 f"{weekend_count} weekend duties ahead",
-                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                metadata_lines=["Upcoming duties only"],
             ),
             "scheduling_draft": None,
         }
@@ -3878,7 +3892,7 @@ def _render_planning_quick_result(session_id, quick_key):
             "Forward Pattern",
             "Looking ahead",
             f"Busiest ahead: {month_label}",
-            metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+            metadata_lines=["Upcoming duties only"],
             main_secondary=f"{month_counts[busiest_month]} duties",
             breakdown_rows=[(datetime.strptime(month_key, "%Y-%m").strftime("%B"), count) for month_key, count in sorted(month_counts.items())[:6]],
         ),
