@@ -3535,9 +3535,12 @@ def _quick_row(label, value):
     return {"label": label, "value": value}
 
 
-def _quick_duty_rows(records, limit=5):
+def _quick_duty_rows(records, limit=None):
     rows = []
-    for item in records[:limit]:
+    normalized_records = list(records or [])
+    if limit is not None:
+        normalized_records = normalized_records[:limit]
+    for item in normalized_records:
         category = _classify_duty_event_title(item.get("title"))
         value = {
             "regular": "Duty",
@@ -3550,6 +3553,8 @@ def _quick_duty_rows(records, limit=5):
 
 def _quick_breakdown_rows(rows, limit=3):
     normalized = list(rows or [])
+    if limit is None:
+        return normalized, 0
     return normalized[:limit], max(0, len(normalized) - limit)
 
 
@@ -3594,11 +3599,9 @@ def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_s
                 f'<span class="quick-result-row-value">{html_escape(str(row.get("value") or ""))}</span>'
                 '</div>'
             )
-        if section.get("more_count"):
-            parts.append(f'<div class="quick-result-more">+{int(section["more_count"])} more</div>')
         parts.append('</div>')
     if breakdown_rows:
-        visible_rows, more_count = _quick_breakdown_rows(breakdown_rows, limit=3)
+        visible_rows, more_count = _quick_breakdown_rows(breakdown_rows, limit=None)
         if visible_rows:
             parts.append('<div class="quick-result-section">')
             for label, value in visible_rows:
@@ -3608,8 +3611,6 @@ def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_s
                     f'<span class="quick-result-row-value">{html_escape(str(value))}</span>'
                     '</div>'
                 )
-            if more_count:
-                parts.append(f'<div class="quick-result-more">+{int(more_count)} more</div>')
             parts.append('</div>')
     parts.append('</div>')
     return "".join(parts)
@@ -3636,14 +3637,12 @@ def _render_month_overview_quick_result(session_id):
     if completed:
         sections.append({
             "label": "Completed",
-            "rows": _quick_duty_rows(completed, limit=5),
-            "more_count": max(0, len(completed) - 5),
+            "rows": _quick_duty_rows(completed),
         })
     if upcoming:
         sections.append({
             "label": "Upcoming",
-            "rows": _quick_duty_rows(upcoming, limit=5),
-            "more_count": max(0, len(upcoming) - 5),
+            "rows": _quick_duty_rows(upcoming),
         })
     total = len(records)
     return {
