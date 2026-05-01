@@ -4508,6 +4508,29 @@
             try {
                 localStorage.removeItem("duty-sync-push-context");
             } catch (_error) {
+                // Continue and try to clear the IndexedDB fallback as well.
+            }
+            try {
+                const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 2);
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
+                        db.createObjectStore(DUTY_SYNC_PUSH_STORE_NAME);
+                    }
+                };
+                request.onsuccess = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
+                        db.close();
+                        return;
+                    }
+                    const transaction = db.transaction(DUTY_SYNC_PUSH_STORE_NAME, "readwrite");
+                    const store = transaction.objectStore(DUTY_SYNC_PUSH_STORE_NAME);
+                    store.delete("latest");
+                    transaction.oncomplete = () => db.close();
+                    transaction.onerror = () => db.close();
+                };
+            } catch (_error) {
                 return;
             }
         }
