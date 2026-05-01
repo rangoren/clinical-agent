@@ -1436,10 +1436,13 @@
         }
 
         .duty-reminder-card.on-duty-lookup-card .draft-title,
-        .duty-reminder-card.on-duty-lookup-card .duty-reminder-subtitle.prominent,
-        .duty-reminder-card.on-duty-lookup-card .duty-reminder-date,
         .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-heading {
             color: #1f4f46;
+        }
+
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-subtitle.prominent,
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-date {
+            color: var(--text);
         }
 
         .duty-reminder-card.on-duty-lookup-card .duty-reminder-subtitle:not(.prominent),
@@ -1459,6 +1462,7 @@
 
         .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-role,
         .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-name {
+            flex: 1 1 0;
             font-size: 0.95rem;
             line-height: 1.45;
             color: #1f4f46;
