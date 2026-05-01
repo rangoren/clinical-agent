@@ -837,6 +837,10 @@ def _review_signature(review):
     return json.dumps(stable_review, sort_keys=True, ensure_ascii=False)
 
 
+def _suppressed_review_signature(connection_doc):
+    return str((connection_doc or {}).get("last_ignored_review_signature") or "").strip()
+
+
 def _render_debug_entry(message, review=None, extra=None):
     payload = {
         "review_id": (review or {}).get("review_id"),
@@ -1219,6 +1223,9 @@ def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=F
             selected_tab["source_month"],
             duties,
         )
+        current_review_signature = _review_signature(review_payload)
+        if review_payload and current_review_signature and current_review_signature == _suppressed_review_signature(existing):
+            review_payload = None
         if review_payload:
             duty_sync_connections_collection.update_one(
                 {"session_id": session_id},
@@ -1702,9 +1709,10 @@ def ignore_pending_duty_review(session_id, review_id):
         {"_id": review_doc["_id"]},
         {"$set": {"status": "ignored", "resolved_at": now, "updated_at": now}},
     )
+    ignored_signature = _review_signature(_serialize_review_doc(review_doc))
     duty_sync_connections_collection.update_one(
         {"session_id": session_id},
-        {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None, "last_push_open_context": None}},
+        {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None, "last_push_open_context": None, "last_ignored_review_signature": ignored_signature}},
     )
     return {"status": "ignored", "reply": "Duty review ignored for now."}
 
@@ -1732,9 +1740,10 @@ def ignore_pending_duty_review_scope(session_id, review_id, change_keys):
         {"_id": review_doc["_id"]},
         {"$set": {"status": "ignored", "resolved_at": now, "updated_at": now}},
     )
+    ignored_signature = _review_signature(_serialize_review_doc(review_doc))
     duty_sync_connections_collection.update_one(
         {"session_id": session_id},
-        {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None, "last_push_open_context": None}},
+        {"$set": {"current_status": "connected", "last_pushed_review_signature": None, "last_pushed_review_payload": None, "last_push_review_scope": None, "last_push_open_context": None, "last_ignored_review_signature": ignored_signature}},
     )
     return {"status": "ignored", "reply": "Duty review ignored for now.", "pending_review": None}
 
