@@ -10,6 +10,7 @@ import requests
 
 from db import (
     duty_sync_connections_collection,
+    duty_sync_managed_events_collection,
     duty_sync_snapshots_collection,
     scheduled_events_collection,
     scheduling_drafts_collection,
@@ -3513,6 +3514,44 @@ def _load_historical_duty_records(session_id, category, start_date, end_date):
     return sorted(matched, key=lambda item: item["date"])
 
 
+def _load_month_overview_managed_duty_records(session_id, start_date, end_date):
+    if not session_id or not start_date or not end_date:
+        return []
+    start_iso = start_date.isoformat()
+    end_iso = end_date.isoformat()
+    docs = list(
+        duty_sync_managed_events_collection.find(
+            {
+                "session_id": session_id,
+                "status": {"$ne": "deleted"},
+                "date": {"$gte": start_iso, "$lte": end_iso},
+            },
+            {
+                "date": 1,
+                "title": 1,
+                "role": 1,
+            },
+        ).sort([("date", 1), ("role", 1)])
+    )
+    records = []
+    for doc in docs:
+        raw_date = str(doc.get("date") or "").strip()
+        if not raw_date:
+            continue
+        try:
+            duty_date = datetime.fromisoformat(raw_date).date()
+        except ValueError:
+            continue
+        records.append(
+            {
+                "date": duty_date,
+                "title": doc.get("title") or doc.get("role") or "תורנות",
+                "role": doc.get("role") or "",
+            }
+        )
+    return records
+
+
 def _format_quick_card_date(duty_date):
     return duty_date.strftime("%a %d %b")
 
@@ -3564,7 +3603,7 @@ def _quick_duty_rows(records, limit=None, three_part=False):
     if limit is not None:
         normalized_records = normalized_records[:limit]
     for item in normalized_records:
-        value = _quick_duty_role_label(item.get("title"))
+        value = _quick_duty_role_label(item.get("role") or item.get("title"))
         duty_date = item["date"]
         if three_part:
             rows.append(
@@ -3663,7 +3702,7 @@ def _render_month_overview_quick_result(session_id):
     today = _utcnow().date()
     start_date = today.replace(day=1)
     end_date = today.replace(day=monthrange(today.year, today.month)[1])
-    records = _load_historical_duty_records(session_id, "regular", start_date, end_date)
+    records = _load_month_overview_managed_duty_records(session_id, start_date, end_date)
     if not records:
         return {
             "reply": _quick_result_html(
