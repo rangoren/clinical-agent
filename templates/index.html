@@ -2505,27 +2505,6 @@
             </div>
         </footer>
     </main>
-    {% if app_env != "production" %}
-    <section id="duty-sync-debug-dock" class="duty-sync-debug-dock" aria-label="Duty Sync debug console">
-        <div class="duty-sync-debug-dock-header">
-            <div class="duty-sync-debug-dock-title-row">
-                <div id="duty-sync-debug-dock-state" class="duty-sync-debug-dock-state">Hidden</div>
-            </div>
-            <div class="duty-sync-debug-dock-controls">
-                <div class="duty-sync-debug-dock-actions">
-                    <button id="duty-sync-debug-minimize" class="duty-sync-debug-dock-button" type="button" onclick="toggleDutySyncDebugDockMinimize()">Minimize</button>
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="renderDutySyncDebugConsole()">Refresh</button>
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="copyDutySyncDebugLogs()">Copy</button>
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="clearDutySyncDebugLogs()">Clear</button>
-                </div>
-                <div class="duty-sync-debug-dock-actions">
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="triggerMockTomorrowAutoPush()">Mock 20:00 tomorrow</button>
-                </div>
-            </div>
-        </div>
-        <pre id="duty-sync-debug-log" class="duty-sync-debug-dock-body">Waiting for Duty Sync debug events...</pre>
-    </section>
-    {% endif %}
     <script>
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
@@ -3913,32 +3892,6 @@
                     state.textContent = "Copy failed";
                 }
                 logDutySyncRuntime("debug console copy failed", { error: String(error) });
-            }
-            {% endif %}
-        }
-
-        async function triggerMockTomorrowAutoPush() {
-            {% if app_env != "production" %}
-            try {
-                const response = await fetch("/calendar/duty-sync/push/test-auto-tomorrow", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        session_id: sessionId
-                    })
-                });
-                const data = await response.json();
-                const state = document.getElementById("duty-sync-debug-dock-state");
-                if (state) {
-                    state.textContent = data.reply || "Queued";
-                }
-            } catch (_error) {
-                const state = document.getElementById("duty-sync-debug-dock-state");
-                if (state) {
-                    state.textContent = "Failed to queue test push";
-                }
             }
             {% endif %}
         }
@@ -8180,9 +8133,6 @@
         restoreDutySyncPushContextFromStorage().catch(() => {});
         handleInitialDutySyncDeepLink();
         loadDutySyncDebugDockPreferences();
-        dutySyncDebugDockVisible = true;
-        dutySyncDebugDockMinimized = false;
-        persistDutySyncDebugDockPreferences();
         renderDutySyncDebugDockState();
         logDutySyncRuntime("startup initialization complete", { href: window.location.href });
         renderDutySyncPushDebug();

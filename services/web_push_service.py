@@ -499,43 +499,6 @@ def schedule_test_taxi_push(session_id, reminder_variant="7d", delay_seconds=20)
     }
 
 
-def trigger_mock_tomorrow_due_push(session_id):
-    if APP_ENV == "production":
-        return {"status": "unavailable", "reply": "This QA push trigger is available in dev only."}
-    if not web_push_configured():
-        return {"status": "unavailable", "reply": "Web push is not configured in this environment."}
-    if push_subscriptions_collection.count_documents({"session_id": session_id}) <= 0:
-        return {"status": "unavailable", "reply": "Push notifications are not connected for this session."}
-    managed_doc = _find_next_future_managed_duty(session_id, now_local=_local_now())
-    if not managed_doc:
-        return {"status": "not_found", "reply": "No active future duty was found in the database."}
-    start_local = _parse_iso_datetime(managed_doc.get("start_datetime"))
-    if not start_local:
-        return {"status": "not_found", "reply": "The next duty is missing a valid start time."}
-    mock_now = datetime.combine(start_local.date() - timedelta(days=1), dt_time(hour=20, minute=0), tzinfo=APP_TIMEZONE)
-    notification_key = f"tomorrow:{managed_doc.get('duty_key')}:{start_local.date().isoformat()}"
-    duty_reminder_push_logs_collection.delete_many(
-        {
-            "session_id": session_id,
-            "notification_key": notification_key,
-        }
-    )
-    sent_count = _send_due_duty_feature_pushes(
-        session_id,
-        now_local=mock_now,
-        reminder_kind_filter=TOMORROW_REMINDER_KIND,
-        duty_key_filter=managed_doc.get("duty_key"),
-        ignore_daily_cap=True,
-    )
-    return {
-        "status": "sent" if sent_count else "not_sent",
-        "reply": "Mock 20:00 tomorrow-duty push sent." if sent_count else "No due tomorrow-duty push was sent for the mocked 20:00 check.",
-        "duty_key": managed_doc.get("duty_key"),
-        "mock_now": mock_now.isoformat(),
-        "sent_count": sent_count,
-    }
-
-
 def get_web_push_status(session_id):
     subscription_count = push_subscriptions_collection.count_documents({"session_id": session_id})
     return {
