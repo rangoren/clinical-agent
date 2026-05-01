@@ -474,24 +474,30 @@ def _poll_once():
                 current_signature = _review_signature(review)
                 if current_signature and current_signature != (connection or {}).get("last_pushed_review_signature"):
                     push_scope_review = _build_push_review_scope(review, (connection or {}).get("last_pushed_review_payload") or {})
-                    sent_count = send_duty_sync_push(session_id, push_scope_review, result.get("reply"))
-                    if sent_count:
-                        duty_sync_connections_collection.update_one(
-                            {"session_id": session_id},
-                            {
-                                "$set": {
-                                    "last_pushed_review_signature": current_signature,
-                                    "last_pushed_review_payload": review,
-                                    "last_push_review_scope": push_scope_review,
-                                    "last_push_open_context": {
-                                        "review_id": review.get("review_id"),
-                                        "updated_at": review.get("updated_at"),
-                                        "pushed_at": datetime.utcnow(),
-                                    },
-                                    "last_pushed_at": datetime.utcnow(),
-                                }
-                            },
-                        )
+                    claim_result = duty_sync_connections_collection.update_one(
+                        {
+                            "session_id": session_id,
+                            "$or": [
+                                {"last_pushed_review_signature": {"$exists": False}},
+                                {"last_pushed_review_signature": {"$ne": current_signature}},
+                            ],
+                        },
+                        {
+                            "$set": {
+                                "last_pushed_review_signature": current_signature,
+                                "last_pushed_review_payload": review,
+                                "last_push_review_scope": push_scope_review,
+                                "last_push_open_context": {
+                                    "review_id": review.get("review_id"),
+                                    "updated_at": review.get("updated_at"),
+                                    "pushed_at": datetime.utcnow(),
+                                },
+                                "last_pushed_at": datetime.utcnow(),
+                            }
+                        },
+                    )
+                    if claim_result.modified_count:
+                        send_duty_sync_push(session_id, push_scope_review, result.get("reply"))
             else:
                 duty_sync_connections_collection.update_one(
                     {"session_id": session_id},
