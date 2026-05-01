@@ -826,7 +826,6 @@ def _review_signature(review):
     if not review:
         return ""
     stable_review = {
-        "review_id": review.get("review_id"),
         "review_type": review.get("review_type"),
         "source_month": review.get("source_month"),
         "source_tab_name": review.get("source_tab_name"),
