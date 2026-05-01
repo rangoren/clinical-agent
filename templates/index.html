@@ -2390,6 +2390,7 @@
         let dutySyncForegroundWatcherTimer = null;
         let dutySyncForegroundWatcherKnownReviewKey = null;
         let lastConsumedDutySyncServerFallbackKey = null;
+        let lastNotifiedDutySyncReviewKey = null;
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
         let dutySyncDebugPanelOpen = false;
@@ -2400,6 +2401,7 @@
         const studyCardsCacheKey = "entry_study_cards_{{ app_version }}";
         const dutySyncPollingIntervalMs = "{{ app_env }}" === "production" ? 45 * 60 * 1000 : 5 * 60 * 1000;
         const dutySyncDevLogStorageKey = "duty-sync-dev-console";
+        const dutySyncLastNotifiedReviewStorageKey = "duty-sync-last-notified-review";
         const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
         const dutySyncSwBridgeMarker = "[DutySyncSWDebug] BRIDGE_OK";
         const dutySyncRenderSnapshotPrefix = "[DutySyncRenderDebugSnapshot]";
@@ -4046,6 +4048,41 @@
             }
         }
 
+        function loadLastNotifiedDutySyncReviewKey() {
+            try {
+                const raw = localStorage.getItem(dutySyncLastNotifiedReviewStorageKey);
+                return raw || null;
+            } catch (_error) {
+                return null;
+            }
+        }
+
+        function persistLastNotifiedDutySyncReviewKey(reviewKey) {
+            lastNotifiedDutySyncReviewKey = reviewKey || null;
+            try {
+                if (reviewKey) {
+                    localStorage.setItem(dutySyncLastNotifiedReviewStorageKey, reviewKey);
+                } else {
+                    localStorage.removeItem(dutySyncLastNotifiedReviewStorageKey);
+                }
+            } catch (_error) {
+                return;
+            }
+        }
+
+        function shouldHandleBackgroundDutySyncReview(review) {
+            const reviewKey = getDutySyncReviewIdentityKey(review);
+            if (!reviewKey) return true;
+            if (!lastNotifiedDutySyncReviewKey) {
+                lastNotifiedDutySyncReviewKey = loadLastNotifiedDutySyncReviewKey();
+            }
+            if (lastNotifiedDutySyncReviewKey === reviewKey) {
+                return false;
+            }
+            persistLastNotifiedDutySyncReviewKey(reviewKey);
+            return true;
+        }
+
         function loadDutySyncPushContextFromIndexedDb() {
             return new Promise((resolve) => {
                 try {
@@ -5668,14 +5705,20 @@
                         appendDutyReviewCard(data.pending_review, "generic_pending_review", "checkDutySync.interactive");
                     }
                     if (isBackground && data.has_new_pending_review) {
-                        appendDutySyncInAppNotice(data.reply || "Duty Sync found updates that need review.");
-                        appendDutyReviewCard(data.pending_review, "poll", "checkDutySync.background");
-                        maybeShowDutySyncBrowserNotification(data.pending_review, data.reply);
+                        if (shouldHandleBackgroundDutySyncReview(data.pending_review)) {
+                            appendDutySyncInAppNotice(data.reply || "Duty Sync found updates that need review.");
+                            appendDutyReviewCard(data.pending_review, "poll", "checkDutySync.background");
+                            maybeShowDutySyncBrowserNotification(data.pending_review, data.reply);
+                        }
                     }
                 } else if (!isBackground && data.reply) {
+                    persistLastNotifiedDutySyncReviewKey(null);
                     appendAssistantMessage(data.reply, data.status === "error" ? "error" : "system");
                 } else if (!isBackground && !data.reply) {
+                    persistLastNotifiedDutySyncReviewKey(null);
                     appendAssistantMessage("Duty Sync checked the latest roster.", "system");
+                } else if (!data.pending_review) {
+                    persistLastNotifiedDutySyncReviewKey(null);
                 }
                 await refreshDutySyncStatus();
             } catch (error) {
