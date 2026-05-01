@@ -2570,6 +2570,7 @@
         let dutySyncDebugPanelOpen = false;
         let dutySyncDebugDockVisible = false;
         let dutySyncDebugDockMinimized = false;
+        const dutyReminderFallbackMaxAgeMs = 120000;
         let dutySyncFlowTraceId = null;
         let dutySyncSwVersion = "unknown";
         const pullShowThreshold = 12;
@@ -4470,7 +4471,7 @@
             try {
                 localStorage.setItem("duty-sync-push-context", JSON.stringify(context || {}));
                 persistDutySyncPushDebug(
-                    `[SW/App] stored push context review_id=${(context || {}).review_id || ""} updated_at=${(context || {}).updated_at || ""} duty_key=${(context || {}).duty_key || ""} reminder_kind=${(context || {}).reminder_kind || ""}`
+                    `[SW/App] stored push context review_id=${(context || {}).review_id || ""} updated_at=${(context || {}).updated_at || ""} duty_key=${(context || {}).duty_key || ""} reminder_kind=${(context || {}).reminder_kind || ""} pending_open=${(context || {}).pending_open ? "1" : "0"}`
                 );
             } catch (_error) {
                 return;
@@ -4528,12 +4529,27 @@
                 return false;
             }
             if (context.duty_key) {
+                const deliveredAt = context.delivered_at ? new Date(context.delivered_at) : null;
+                const deliveredAtMs = deliveredAt && !Number.isNaN(deliveredAt.getTime()) ? deliveredAt.getTime() : null;
+                const withinReminderFallbackWindow =
+                    context.pending_open
+                    && deliveredAtMs
+                    && (Date.now() - deliveredAtMs) <= dutyReminderFallbackMaxAgeMs;
+                if (context.pending_open && !withinReminderFallbackWindow) {
+                    clearDutySyncPushContext();
+                    persistDutySyncPushDebug("[App] stale reminder context cleared");
+                    logDutySyncRuntime("restoreDutySyncPushContextFromStorage failure", {
+                        payload: context,
+                        reason: "stale_reminder_context",
+                    });
+                    return false;
+                }
                 pendingDutySyncReviewDeepLink = false;
                 pendingDutyReminderDutyKey = context.duty_key || pendingDutyReminderDutyKey;
                 pendingDutyReminderKind = context.reminder_kind || pendingDutyReminderKind || "taxi";
                 clearDutySyncPushContext();
                 persistDutySyncPushDebug(
-                    `[App] restored reminder context duty_key=${pendingDutyReminderDutyKey || ""} reminder_kind=${pendingDutyReminderKind || ""}`
+                    `[App] restored reminder context duty_key=${pendingDutyReminderDutyKey || ""} reminder_kind=${pendingDutyReminderKind || ""} pending_open=${context.pending_open ? "1" : "0"}`
                 );
                 logDutySyncRuntime("restoreDutySyncPushContextFromStorage success", {
                     payload: context,

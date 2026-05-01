@@ -247,6 +247,42 @@ self.addEventListener("push", (event) => {
       body: options.body,
       target_url_before_enrichment: targetUrl,
     })
+      .then(() => {
+        if (!isReminderPush) {
+          return false;
+        }
+        return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+          const hasVisibleClient = (clients || []).some((client) => client && client.visibilityState === "visible");
+          if (hasVisibleClient) {
+            return writeDutySyncSwDebug("reminder fallback context skipped", {
+              reason: "visible_client_present",
+              target_url: targetUrl,
+            });
+          }
+          const parsedUrl = new URL(targetUrl, self.location.origin);
+          const context = {
+            active: true,
+            source: "service_worker_push_received",
+            duty_key: parsedUrl.searchParams.get("duty_key") || "",
+            reminder_kind: parsedUrl.searchParams.get("reminder_kind") || "taxi",
+            delivered_at: new Date().toISOString(),
+            pending_open: true,
+          };
+          return writeDutySyncSwDebug("fallback reminder context write attempt", {
+            storage_key: "latest",
+            context,
+          }).then(() => saveDutySyncPushContext(context))
+            .then(() => writeDutySyncSwDebug("fallback reminder context write success", {
+              storage_key: "latest",
+              context,
+            }))
+            .catch((error) => writeDutySyncSwDebug("fallback reminder context write failure", {
+              storage_key: "latest",
+              context,
+              error: String(error),
+            }));
+        });
+      })
       .then(() =>
         writeDutySyncSwDebug("notification data created", {
           notification_data: options.data,
