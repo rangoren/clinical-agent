@@ -4761,7 +4761,10 @@
             if (dutyPushRegistration) {
                 return dutyPushRegistration;
             }
-            dutyPushRegistration = await navigator.serviceWorker.register("/static/sw.js");
+            dutyPushRegistration = await navigator.serviceWorker.register("/static/sw.js?v={{ app_version }}");
+            if (dutyPushRegistration && typeof dutyPushRegistration.update === "function") {
+                dutyPushRegistration.update().catch(() => {});
+            }
             return dutyPushRegistration;
         }
 
@@ -8071,6 +8074,28 @@
                         };
                         renderDutySyncPrimaryBanner();
                     }
+                    return;
+                }
+                if (data.type === "duty-sync-open-reminder") {
+                    const targetUrl = data.url || "";
+                    dutySyncDebug("service worker reminder message received", { targetUrl });
+                    try {
+                        const parsedUrl = new URL(targetUrl, window.location.origin);
+                        if (parsedUrl.origin === window.location.origin) {
+                            const dutyKey = parsedUrl.searchParams.get("duty_key") || "";
+                            const reminderKind = parsedUrl.searchParams.get("reminder_kind") || "taxi";
+                            if (dutyKey) {
+                                pendingDutySyncReviewDeepLink = false;
+                                pendingDutyReminderDutyKey = dutyKey;
+                                pendingDutyReminderKind = reminderKind;
+                                await openDutyReminderContextByKey(dutyKey, reminderKind, "service_worker_message");
+                                return;
+                            }
+                        }
+                    } catch (_error) {
+                        // Fall back to location navigation below.
+                    }
+                    window.location.href = targetUrl || "/?app_mode=scheduling";
                     return;
                 }
                 if (data.type !== "duty-sync-open-review") return;

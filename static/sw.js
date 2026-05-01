@@ -2,7 +2,7 @@ self.__dutySyncDebug = (...args) => {
   console.log("[DutySyncDebug][SW]", ...args);
 };
 
-const DUTY_SYNC_SW_VERSION = "v0.3.366";
+const DUTY_SYNC_SW_VERSION = "v0.3.378";
 const DUTY_SYNC_PUSH_DB_NAME = "duty-sync-push";
 const DUTY_SYNC_PUSH_STORE_NAME = "context";
 const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
@@ -133,6 +133,14 @@ function postDutySyncOpenReviewMessage(client, targetUrl) {
     return false;
   }
   client.postMessage({ type: "duty-sync-open-review", url: targetUrl });
+  return true;
+}
+
+function postDutySyncOpenReminderMessage(client, targetUrl) {
+  if (!client || !("postMessage" in client)) {
+    return false;
+  }
+  client.postMessage({ type: "duty-sync-open-reminder", url: targetUrl });
   return true;
 }
 
@@ -367,6 +375,31 @@ self.addEventListener("notificationclick", (event) => {
               reason: "duty_reminder_click",
               target_client_id: client && client.id ? client.id : null,
             });
+            messageSent = postDutySyncOpenReminderMessage(client, targetUrl);
+            writeDutySyncOpenFlowDebug("duty-sync-open-reminder message sent", {
+              trace_id: traceId,
+              sent: messageSent,
+              target_client_id: client && client.id ? client.id : null,
+            });
+            if (client && "focus" in client) {
+              writeDutySyncOpenFlowDebug("before focus", {
+                trace_id: traceId,
+                target_client_id: client && client.id ? client.id : null,
+              });
+              return client.focus().then((focusedClient) => {
+                writeDutySyncOpenFlowDebug("after focus", {
+                  trace_id: traceId,
+                  called: true,
+                  target_client_id: client && client.id ? client.id : null,
+                });
+                writeDutySyncOpenFlowDebug("focus called", {
+                  called: true,
+                  target_client_id: client && client.id ? client.id : null,
+                });
+                return focusedClient;
+              });
+            }
+            return client;
           }
           if ("navigate" in client) {
             self.__dutySyncDebug("navigation attempted", { via: "client.navigate", targetUrl });
