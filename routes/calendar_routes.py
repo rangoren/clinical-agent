@@ -32,6 +32,7 @@ from services.web_push_service import (
     delete_web_push_subscription,
     get_web_push_status,
     save_web_push_subscription,
+    schedule_test_taxi_push,
     schedule_test_tomorrow_duty_push,
     send_web_push_message,
 )
@@ -419,4 +420,22 @@ async def handle_duty_sync_push_test_tomorrow(request: Request):
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/push/test-tomorrow", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/push/test-taxi")
+async def handle_duty_sync_push_test_taxi(request: Request):
+    try:
+        if APP_ENV == "production":
+            return JSONResponse({"status": "unavailable", "reply": "This QA push trigger is available in dev only."})
+        data = await request.json()
+        return JSONResponse(
+            schedule_test_taxi_push(
+                session_id=data.get("session_id"),
+                reminder_variant=data.get("variant"),
+                delay_seconds=data.get("delay_seconds", 20),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/push/test-taxi", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
