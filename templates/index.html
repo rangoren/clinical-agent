@@ -4850,11 +4850,75 @@
             return dutyPushRegistration;
         }
 
+        async function forceRefreshDutyPushServiceWorker() {
+            if (!("serviceWorker" in navigator)) {
+                return null;
+            }
+            try {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const registration of registrations || []) {
+                    try {
+                        if (registration.pushManager) {
+                            const subscription = await registration.pushManager.getSubscription();
+                            if (subscription) {
+                                await subscription.unsubscribe().catch(() => {});
+                            }
+                        }
+                    } catch (_error) {
+                        // Keep going so we can still unregister stale registrations.
+                    }
+                    await registration.unregister().catch(() => {});
+                }
+            } catch (_error) {
+                // Fall through and try a clean register anyway.
+            }
+            dutyPushRegistration = null;
+            dutySyncSwVersion = "unknown";
+            const registration = await navigator.serviceWorker.register("/static/sw.js?v={{ app_version }}");
+            if (registration && typeof registration.update === "function") {
+                registration.update().catch(() => {});
+            }
+            dutyPushRegistration = registration;
+            return registration;
+        }
+
         function base64ToUint8Array(base64String) {
             const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
             const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
             const rawData = window.atob(base64);
             return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+        }
+
+        async function syncDutyPushSubscriptionToServer(options = {}) {
+            const forceRefresh = !!(options && options.forceRefresh);
+            const registration = forceRefresh
+                ? await forceRefreshDutyPushServiceWorker()
+                : await registerDutyPushServiceWorker();
+            const statusResponse = await fetch("/calendar/duty-sync/push/status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: sessionId })
+            });
+            const status = await statusResponse.json();
+            if (!status.available || !status.public_key) {
+                return { status: "unavailable", reply: "Web push is not configured in this environment." };
+            }
+            let subscription = await registration.pushManager.getSubscription();
+            if (!subscription) {
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: base64ToUint8Array(status.public_key)
+                });
+            }
+            const subscribeResponse = await fetch("/calendar/duty-sync/push/subscribe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    subscription: subscription.toJSON()
+                })
+            });
+            return await subscribeResponse.json();
         }
 
         async function enableDutySyncNotifications() {
@@ -4868,33 +4932,7 @@
                     appendAssistantMessage("Notification permission was not granted.", "error");
                     return;
                 }
-                const registration = await registerDutyPushServiceWorker();
-                const statusResponse = await fetch("/calendar/duty-sync/push/status", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ session_id: sessionId })
-                });
-                const status = await statusResponse.json();
-                if (!status.available || !status.public_key) {
-                    appendAssistantMessage("Web push is not configured in this environment.", "error");
-                    return;
-                }
-                let subscription = await registration.pushManager.getSubscription();
-                if (!subscription) {
-                    subscription = await registration.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: base64ToUint8Array(status.public_key)
-                    });
-                }
-                const subscribeResponse = await fetch("/calendar/duty-sync/push/subscribe", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        subscription: subscription.toJSON()
-                    })
-                });
-                const subscribeData = await subscribeResponse.json();
+                const subscribeData = await syncDutyPushSubscriptionToServer({ forceRefresh: true });
                 appendAssistantMessage(subscribeData.reply || "Duty Sync push alerts are enabled.", subscribeData.status === "subscribed" ? "system" : "error");
                 hideSessionBanner();
                 const pushAction = document.getElementById("duty-sync-push-action");
@@ -4920,40 +4958,23 @@
                 return false;
             }
             try {
-                const registration = await registerDutyPushServiceWorker();
-                const subscription = await registration.pushManager.getSubscription();
+                let registration = await registerDutyPushServiceWorker();
+                let subscription = await registration.pushManager.getSubscription();
                 if (!subscription) {
                     persistDutySyncPushDebug("[App] existing push subscription found=no");
-                    return false;
+                    const subscribeData = await syncDutyPushSubscriptionToServer({ forceRefresh: true });
+                    persistDutySyncPushDebug(`[App] subscribe response=${subscribeData.status === "subscribed" ? "success" : "failure"}`);
+                    return subscribeData.status === "subscribed";
                 }
                 persistDutySyncPushDebug("[App] existing push subscription found=yes");
-                const statusResponse = await fetch("/calendar/duty-sync/push/status", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ session_id: sessionId })
-                });
-                const status = await statusResponse.json();
-                if (!status.available) {
-                    persistDutySyncPushDebug("[App] subscribe request sent to server=no");
-                    persistDutySyncPushDebug("[App] subscribe response=failure");
-                    persistDutySyncPushDebug("[App] server error=Web push is not configured in this environment.");
-                    return false;
-                }
-                if (status.subscribed) {
-                    persistDutySyncPushDebug("[App] subscribe request sent to server=no");
-                    persistDutySyncPushDebug("[App] subscribe response=success (already subscribed)");
-                    return true;
-                }
                 persistDutySyncPushDebug("[App] subscribe request sent to server=yes");
-                const subscribeResponse = await fetch("/calendar/duty-sync/push/subscribe", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        subscription: subscription.toJSON()
-                    })
-                });
-                const subscribeData = await subscribeResponse.json();
+                let subscribeData = await syncDutyPushSubscriptionToServer({ forceRefresh: false });
+                if (subscribeData.status !== "subscribed") {
+                    registration = await forceRefreshDutyPushServiceWorker();
+                    subscription = registration ? await registration.pushManager.getSubscription().catch(() => null) : null;
+                    persistDutySyncPushDebug("[App] force refresh registration attempted=yes");
+                    subscribeData = await syncDutyPushSubscriptionToServer({ forceRefresh: false });
+                }
                 persistDutySyncPushDebug(`[App] subscribe response=${subscribeData.status === "subscribed" ? "success" : "failure"}`);
                 if (subscribeData.debug) {
                     persistDutySyncPushDebug(`[App] server save debug=${JSON.stringify(subscribeData.debug)}`);
