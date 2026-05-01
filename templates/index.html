@@ -2292,39 +2292,41 @@
 
         .duty-sync-debug-dock-header {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
+            flex-direction: column;
+            align-items: stretch;
             gap: 10px;
             padding: 10px 12px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             background: rgba(255, 255, 255, 0.04);
         }
 
-        .duty-sync-debug-dock-title {
-            color: #eef7f4;
-            font-size: 0.82rem;
-            font-weight: 700;
-            letter-spacing: 0.03em;
-            text-transform: uppercase;
-        }
-
         .duty-sync-debug-dock-title-row {
-            display: inline-flex;
+            display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             min-width: 0;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
         }
 
         .duty-sync-debug-dock-state {
-            color: rgba(214, 245, 235, 0.74);
-            font-size: 0.72rem;
-            font-weight: 600;
+            color: rgba(232, 248, 242, 0.92);
+            font-size: 0.74rem;
+            font-weight: 650;
             letter-spacing: 0.01em;
             text-transform: none;
         }
 
+        .duty-sync-debug-dock-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
         .duty-sync-debug-dock-actions {
-            display: inline-flex;
+            display: flex;
+            flex-wrap: wrap;
             align-items: center;
             gap: 8px;
         }
@@ -2508,12 +2510,16 @@
             <div class="duty-sync-debug-dock-title-row">
                 <div id="duty-sync-debug-dock-state" class="duty-sync-debug-dock-state">Hidden</div>
             </div>
-            <div class="duty-sync-debug-dock-actions">
-                <button id="duty-sync-debug-minimize" class="duty-sync-debug-dock-button" type="button" onclick="toggleDutySyncDebugDockMinimize()">Minimize</button>
-                <button class="duty-sync-debug-dock-button" type="button" onclick="renderDutySyncDebugConsole()">Refresh</button>
-                <button class="duty-sync-debug-dock-button" type="button" onclick="triggerTomorrowDutyTestPush()">Tomorrow +20s</button>
-                <button class="duty-sync-debug-dock-button" type="button" onclick="copyDutySyncDebugLogs()">Copy</button>
-                <button class="duty-sync-debug-dock-button" type="button" onclick="clearDutySyncDebugLogs()">Clear</button>
+            <div class="duty-sync-debug-dock-controls">
+                <div class="duty-sync-debug-dock-actions">
+                    <button id="duty-sync-debug-minimize" class="duty-sync-debug-dock-button" type="button" onclick="toggleDutySyncDebugDockMinimize()">Minimize</button>
+                    <button class="duty-sync-debug-dock-button" type="button" onclick="renderDutySyncDebugConsole()">Refresh</button>
+                    <button class="duty-sync-debug-dock-button" type="button" onclick="copyDutySyncDebugLogs()">Copy</button>
+                    <button class="duty-sync-debug-dock-button" type="button" onclick="clearDutySyncDebugLogs()">Clear</button>
+                </div>
+                <div class="duty-sync-debug-dock-actions">
+                    <button class="duty-sync-debug-dock-button" type="button" onclick="triggerTomorrowDutyTestPush()">Tomorrow +20s</button>
+                </div>
             </div>
         </div>
         <pre id="duty-sync-debug-log" class="duty-sync-debug-dock-body">Waiting for Duty Sync debug events...</pre>
@@ -3895,9 +3901,21 @@
                 .map((entry) => `${entry.ts} ${entry.message}${entry.payload ? ` ${JSON.stringify(entry.payload)}` : ""}`)
                 .join("\n");
             try {
-                await copyDutySyncText(text);
-                logDutySyncRuntime("debug console copied");
+                const copied = await copyDutySyncText(text);
+                const state = document.getElementById("duty-sync-debug-dock-state");
+                if (state) {
+                    state.textContent = copied ? "Logs copied" : "Copy failed";
+                }
+                if (copied) {
+                    logDutySyncRuntime("debug console copied");
+                } else {
+                    logDutySyncRuntime("debug console copy failed", { error: "copy returned false" });
+                }
             } catch (error) {
+                const state = document.getElementById("duty-sync-debug-dock-state");
+                if (state) {
+                    state.textContent = "Copy failed";
+                }
                 logDutySyncRuntime("debug console copy failed", { error: String(error) });
             }
             {% endif %}
@@ -4047,7 +4065,7 @@
 
         async function copyDutySyncText(text) {
             {% if app_env != "production" %}
-            if (navigator.clipboard && window.isSecureContext) {
+            if (navigator.clipboard) {
                 try {
                     await navigator.clipboard.writeText(text);
                     return true;
@@ -4057,12 +4075,12 @@
             }
             const textarea = document.createElement("textarea");
             textarea.value = text || "";
-            textarea.setAttribute("readonly", "");
             textarea.style.position = "fixed";
             textarea.style.opacity = "0";
             textarea.style.pointerEvents = "none";
             textarea.style.top = "0";
             textarea.style.left = "0";
+            textarea.style.fontSize = "16px";
             document.body.appendChild(textarea);
             textarea.focus();
             textarea.select();
@@ -4074,9 +4092,7 @@
                 }
                 return true;
             } catch (_error) {
-                textarea.remove();
-                window.prompt("Copy Duty Sync debug logs:", text || "");
-                return true;
+                return false;
             } finally {
                 if (textarea.isConnected) {
                     textarea.remove();
