@@ -2504,27 +2504,6 @@
             </div>
         </footer>
     </main>
-    {% if app_env != "production" %}
-    <section id="duty-sync-debug-dock" class="duty-sync-debug-dock" aria-label="Duty Sync debug console">
-        <div class="duty-sync-debug-dock-header">
-            <div class="duty-sync-debug-dock-title-row">
-                <div id="duty-sync-debug-dock-state" class="duty-sync-debug-dock-state">Hidden</div>
-            </div>
-            <div class="duty-sync-debug-dock-controls">
-                <div class="duty-sync-debug-dock-actions">
-                    <button id="duty-sync-debug-minimize" class="duty-sync-debug-dock-button" type="button" onclick="toggleDutySyncDebugDockMinimize()">Minimize</button>
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="renderDutySyncDebugConsole()">Refresh</button>
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="copyDutySyncDebugLogs()">Copy</button>
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="clearDutySyncDebugLogs()">Clear</button>
-                </div>
-                <div class="duty-sync-debug-dock-actions">
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="triggerTomorrowDutyTestPush()">Tomorrow +20s</button>
-                </div>
-            </div>
-        </div>
-        <pre id="duty-sync-debug-log" class="duty-sync-debug-dock-body">Waiting for Duty Sync debug events...</pre>
-    </section>
-    {% endif %}
     <script>
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
@@ -8180,9 +8159,6 @@
         restoreDutySyncPushContextFromStorage().catch(() => {});
         handleInitialDutySyncDeepLink();
         loadDutySyncDebugDockPreferences();
-        dutySyncDebugDockVisible = true;
-        dutySyncDebugDockMinimized = false;
-        persistDutySyncDebugDockPreferences();
         renderDutySyncDebugDockState();
         logDutySyncRuntime("startup initialization complete", { href: window.location.href });
         renderDutySyncPushDebug();
