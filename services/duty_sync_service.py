@@ -990,6 +990,12 @@ def _build_review_payload(session_id, source_tab_name, source_month, detected_du
             for item in detected_duties
         ]
     if not changes:
+        if (
+            pending_review
+            and pending_review.get("review_type") == "monthly_rollover"
+            and pending_review.get("source_month") == source_month
+        ):
+            return _serialize_review_doc(pending_review)
         _clear_pending_review_if_unchanged(session_id)
         return None
     review_doc = _replace_pending_review(session_id, source_tab_name, source_month, changes, review_type=review_type)
