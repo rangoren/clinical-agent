@@ -2866,7 +2866,7 @@ def _build_on_duty_card(window_key, target_date, matched, roster_payload):
         "duty_key": f"on-duty-{window_key}-{target_date.isoformat()}",
         "title": _format_on_duty_header(window_key, target_date),
         "subtitle": date_line,
-        "date_line": normalize_text((roster_payload or {}).get("tab_name") or ""),
+        "date_line": "",
         "team_heading": _format_on_duty_team_heading(window_key),
         "team": [
             {
@@ -2934,10 +2934,7 @@ def _build_on_duty_reply(session_id, user_message):
     if not matched:
         timeframe = "right now" if window_key == "now" else ("tonight" if window_key == "tonight" else ("tomorrow" if window_key == "tomorrow" else "today"))
         return {
-            "reply": (
-                f"I couldn’t find anyone on duty {timeframe}.\n\n"
-                f"Based on {normalize_text((roster_payload or {}).get('tab_name') or 'the latest duty sheet')}."
-            ),
+            "reply": f"I couldn’t find anyone on duty {timeframe}.",
             "scheduling_draft": None,
         }
     matched.sort(key=lambda item: (RELEVANT_ROLE_HEADERS.index(item["role"]) if item.get("role") in RELEVANT_ROLE_HEADERS else 999, item.get("person_name") or ""))
