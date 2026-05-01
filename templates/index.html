@@ -2284,7 +2284,10 @@
 
         .duty-sync-debug-dock.minimized {
             height: auto;
-            width: min(calc(100vw - 20px), 320px);
+            width: min(calc(100vw - 20px), 260px);
+            left: 12px;
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+            transform: none;
         }
 
         .duty-sync-debug-dock.minimized .duty-sync-debug-dock-body {
@@ -3820,12 +3823,30 @@
             return openEntries;
         }
 
+        function isRelevantDutySyncDebugEntry(entry) {
+            const message = String((entry && entry.message) || "");
+            return (
+                message.includes("push event received")
+                || message.includes("notification data created")
+                || message.includes("notificationclick")
+                || message.includes("foreground review available")
+                || message.includes("pending review")
+                || message.includes("FLOW_STATUS_REFRESH")
+                || message.includes("FLOW_REVIEW_")
+                || message.includes("review open")
+                || message.includes("ignored")
+                || message.includes("review payload sent to UI")
+                || message.includes("pending review prepared for UI/status")
+                || message.includes("client background poll saw pending review")
+            );
+        }
+
         async function renderDutySyncDebugConsole() {
             {% if app_env != "production" %}
             const node = document.getElementById("duty-sync-debug-log");
             if (!node) return;
             const entries = await getMergedDutySyncDebugEntries();
-            const recentEntries = entries.slice(-120);
+            const recentEntries = entries.filter((entry) => isRelevantDutySyncDebugEntry(entry)).slice(-80);
             const blocks = recentEntries.map((entry) =>
                 `${entry.ts || ""} ${entry.message || ""}${entry.payload && Object.keys(entry.payload).length ? ` ${JSON.stringify(entry.payload)}` : ""}`
             );
@@ -3833,7 +3854,7 @@
                 `[DutySyncVersion]`,
                 `APP_VERSION: {{ app_version }}`,
                 `SW_VERSION: ${dutySyncSwVersion || "unknown"}`,
-                `ENTRY_COUNT: ${entries.length}`,
+                `ENTRY_COUNT: ${recentEntries.length}`,
             ].join("\n");
             const body = blocks.length ? blocks.join("\n") : "Waiting for Duty Sync debug events...";
             node.textContent = `${versionBlock}\n\n${body}`;
@@ -3878,6 +3899,7 @@
             {% if app_env != "production" %}
             const mergedEntries = await getMergedDutySyncDebugEntries();
             const text = mergedEntries
+                .filter((entry) => isRelevantDutySyncDebugEntry(entry))
                 .map((entry) => `${entry.ts} ${entry.message}${entry.payload ? ` ${JSON.stringify(entry.payload)}` : ""}`)
                 .join("\n");
             try {
@@ -7964,7 +7986,8 @@
         restoreDutySyncPushContextFromStorage().catch(() => {});
         handleInitialDutySyncDeepLink();
         loadDutySyncDebugDockPreferences();
-        dutySyncDebugDockVisible = false;
+        dutySyncDebugDockVisible = true;
+        dutySyncDebugDockMinimized = true;
         persistDutySyncDebugDockPreferences();
         renderDutySyncDebugDockState();
         logDutySyncRuntime("startup initialization complete", { href: window.location.href });
