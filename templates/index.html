@@ -2559,6 +2559,7 @@
         let lastConsumedDutySyncServerFallbackKey = null;
         let lastNotifiedDutySyncReviewKey = null;
         let lastSeenDutySyncSwDebugId = null;
+        let initialAppLoadCompleted = false;
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
         let dutySyncDebugPanelOpen = false;
@@ -5361,6 +5362,7 @@
                 return;
             }
             const shouldRunForegroundRecovery =
+                initialAppLoadCompleted &&
                 (source === "pageshow" || source === "visibilitychange" || source === "focus")
                 && document.visibilityState === "visible";
             logDutySyncForegroundRecoveryDebug("pendingDutySyncForegroundRecovery set", {
@@ -7659,6 +7661,8 @@
                 appendAssistantMessage("Error: " + error, "error");
                 setComposerEnabled(true);
                 setStatus("Error");
+            } finally {
+                initialAppLoadCompleted = true;
             }
         }
 
