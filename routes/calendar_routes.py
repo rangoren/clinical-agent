@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from settings import APP_BASE_URL, APP_ENV
+from settings import APP_BASE_URL
 from services.google_calendar_service import (
     GoogleCalendarReconnectRequiredError,
     begin_google_calendar_connect,
@@ -18,14 +18,11 @@ from services.duty_sync_service import (
     disconnect_duty_sheet,
     edit_pending_review_change,
     get_duty_sync_status,
-    list_duty_reminder_qa_duties,
     load_duty_reminder_card,
     load_pending_duty_review,
     ignore_pending_duty_review,
     ignore_pending_duty_review_scope,
     poll_duty_sheet,
-    refresh_duty_sync_team_snapshot_for_qa,
-    set_duty_taxi_state_for_qa,
     toggle_pending_review_change,
     update_duty_taxi_toggle,
 )
@@ -40,10 +37,6 @@ from services.web_push_service import (
 
 
 router = APIRouter()
-
-
-def _qa_disabled_response():
-    return JSONResponse({"status": "disabled", "reply": "QA tools are available in development only."}, status_code=404)
 
 
 @router.post("/calendar/quick-card/run")
@@ -329,48 +322,6 @@ async def handle_duty_sync_reminder_action(request: Request):
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/reminder/action", "error": str(exc)}, level="error")
-        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
-
-
-@router.post("/calendar/duty-sync/qa/duties")
-async def handle_duty_sync_qa_duties(request: Request):
-    if APP_ENV == "production":
-        return _qa_disabled_response()
-    try:
-        data = await request.json()
-        return JSONResponse(list_duty_reminder_qa_duties(data.get("session_id")))
-    except Exception as exc:
-        log_event("route_error", payload={"route": "/calendar/duty-sync/qa/duties", "error": str(exc)}, level="error")
-        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
-
-
-@router.post("/calendar/duty-sync/qa/state")
-async def handle_duty_sync_qa_state(request: Request):
-    if APP_ENV == "production":
-        return _qa_disabled_response()
-    try:
-        data = await request.json()
-        return JSONResponse(
-            set_duty_taxi_state_for_qa(
-                session_id=data.get("session_id"),
-                duty_key=data.get("duty_key"),
-                state=data.get("state"),
-            )
-        )
-    except Exception as exc:
-        log_event("route_error", payload={"route": "/calendar/duty-sync/qa/state", "error": str(exc)}, level="error")
-        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
-
-
-@router.post("/calendar/duty-sync/qa/refresh-sheet")
-async def handle_duty_sync_qa_refresh_sheet(request: Request):
-    if APP_ENV == "production":
-        return _qa_disabled_response()
-    try:
-        data = await request.json()
-        return JSONResponse(refresh_duty_sync_team_snapshot_for_qa(data.get("session_id")))
-    except Exception as exc:
-        log_event("route_error", payload={"route": "/calendar/duty-sync/qa/refresh-sheet", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
 
 

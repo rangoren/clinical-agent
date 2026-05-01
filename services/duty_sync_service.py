@@ -1,6 +1,5 @@
 from dataclasses import asdict
 from datetime import datetime, timedelta
-from itertools import islice
 import random
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -1488,74 +1487,6 @@ def apply_duty_taxi_action(session_id, duty_key, action):
         "confirmation": "Okay — I’ll remind you again tomorrow",
         "reminder_card": _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"),
         "taxi_reminder": _serialize_taxi_state(state),
-    }
-
-
-def list_duty_reminder_qa_duties(session_id, limit=24):
-    if not session_id:
-        return {"status": "missing_session", "duties": []}
-    docs = list(
-        islice(
-            duty_sync_managed_events_collection.find(
-                {"session_id": session_id, "status": {"$ne": "deleted"}},
-                {"duty_key": 1, "date": 1, "title": 1, "role": 1},
-            ).sort([("date", 1), ("title", 1)]),
-            max(1, int(limit or 24)),
-        )
-    )
-    duties = []
-    for doc in docs:
-        duty_key = doc.get("duty_key")
-        if not duty_key:
-            continue
-        snapshot = {
-            "date": doc.get("date"),
-            "title": doc.get("title") or doc.get("role") or "Duty",
-        }
-        duties.append(
-            {
-                "duty_key": duty_key,
-                "label": f"{_format_reminder_date_line(snapshot)} · {snapshot['title']}",
-                "taxi": _serialize_taxi_state(_duty_reminder_state_doc(session_id, duty_key)),
-            }
-        )
-    return {"status": "ok", "duties": duties}
-
-
-def set_duty_taxi_state_for_qa(session_id, duty_key, state):
-    if not duty_key:
-        return {"status": "not_found", "reply": "No duty was selected."}
-    normalized_state = str(state or "").strip().lower()
-    if normalized_state == "pending":
-        reminder_state = _upsert_duty_reminder_state(
-            session_id,
-            duty_key,
-            {
-                "taxi_reminder_enabled": True,
-                "taxi_status": TAXI_STATUS_PENDING,
-                "last_snoozed_for_date": None,
-                "duty_deleted": False,
-            },
-        )
-        return {
-            "status": "updated",
-            "reply": "Taxi state reset to pending.",
-            "taxi_reminder": _serialize_taxi_state(reminder_state),
-            "reminder_card": _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind="taxi"),
-        }
-    if normalized_state in {"ordered", "not_needed", "snooze"}:
-        return apply_duty_taxi_action(session_id, duty_key, normalized_state)
-    return {"status": "invalid", "reply": "That QA state is not supported."}
-
-
-def refresh_duty_sync_team_snapshot_for_qa(session_id):
-    refreshed = refresh_duty_team_snapshot(session_id)
-    if refreshed.get("status") != "updated":
-        return refreshed
-    return {
-        "status": "updated",
-        "reply": f"Refreshed {refreshed.get('refreshed_count', 0)} duties from the latest sheet.",
-        "refreshed_count": refreshed.get("refreshed_count", 0),
     }
 
 
