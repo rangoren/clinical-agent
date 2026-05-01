@@ -434,6 +434,15 @@ def get_web_push_status(session_id):
     }
 
 
+def _latest_push_subscription_docs(session_id):
+    latest_docs = list(
+        push_subscriptions_collection.find({"session_id": session_id}).sort(
+            [("updated_at", -1), ("created_at", -1)]
+        ).limit(1)
+    )
+    return latest_docs
+
+
 def save_web_push_subscription(session_id, subscription):
     if not web_push_configured():
         return {"status": "unavailable", "reply": "Web push is not configured in this environment."}
@@ -458,6 +467,7 @@ def save_web_push_subscription(session_id, subscription):
         },
         upsert=True,
     )
+    push_subscriptions_collection.delete_many({"session_id": session_id, "endpoint": {"$ne": endpoint}})
     subscription_count = push_subscriptions_collection.count_documents({"session_id": session_id})
     debug_payload = {
         "session_id": session_id,
@@ -539,7 +549,7 @@ def send_web_push_message(session_id, title, body, tag="duty-sync-review", url=N
         payload["review_id"] = review.get("review_id") or ""
         payload["updated_at"] = review.get("updated_at") or ""
     sent_count = 0
-    for doc in push_subscriptions_collection.find({"session_id": session_id}):
+    for doc in _latest_push_subscription_docs(session_id):
         if _send_notification_to_subscription(doc.get("subscription") or {}, payload):
             sent_count += 1
     return sent_count
