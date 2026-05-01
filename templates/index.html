@@ -8370,19 +8370,19 @@
         registerDutyPushServiceWorker()
             .then(() => Promise.allSettled([requestDutySyncSwVersion(), requestDutySyncSwDebugBridge()]))
             .catch(() => {});
-        window.addEventListener("pageshow", () => {
+        window.addEventListener("pageshow", async () => {
             dutySyncDebug("pageshow fired", { href: window.location.href });
             persistDutySyncPushDebug("[Client] app resumed");
             ensureDutySyncFlowTraceId("resume", { source: "resume" }, true);
             logDutySyncRuntime("push/deep-link entry received", { source: "pageshow", href: window.location.href });
             storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
             queueContextReentryPulse();
-            restorePushContextAndResumeDutySyncReview("pageshow").catch(() => {});
+            await restorePushContextAndResumeDutySyncReview("pageshow").catch(() => {});
             if (initialAppLoadCompleted && !pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
                 openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "pageshow");
             }
         });
-        document.addEventListener("visibilitychange", () => {
+        document.addEventListener("visibilitychange", async () => {
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
             if (document.visibilityState === "hidden") {
                 appWasBackgrounded = true;
@@ -8397,7 +8397,7 @@
                     queueContextReentryPulse();
                     appWasBackgrounded = false;
                 }
-                restorePushContextAndResumeDutySyncReview("visibilitychange").catch(() => {});
+                await restorePushContextAndResumeDutySyncReview("visibilitychange").catch(() => {});
                 if (initialAppLoadCompleted && !pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
                     openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "visibilitychange");
                 }
@@ -8405,14 +8405,14 @@
             }
             stopDutySyncForegroundWatcher();
         });
-        window.addEventListener("focus", () => {
+        window.addEventListener("focus", async () => {
             if (document.visibilityState !== "visible") return;
             startDutySyncForegroundWatcher();
             if (appWasBackgrounded) {
                 queueContextReentryPulse();
                 appWasBackgrounded = false;
             }
-            restorePushContextAndResumeDutySyncReview("focus").catch(() => {});
+            await restorePushContextAndResumeDutySyncReview("focus").catch(() => {});
             if (initialAppLoadCompleted && !pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
                 openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "focus");
             }
