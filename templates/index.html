@@ -1403,6 +1403,16 @@
             line-height: 1.35;
         }
 
+        .duty-reminder-team-role.align-right,
+        .duty-reminder-team-name.align-right {
+            text-align: right;
+        }
+
+        .duty-reminder-team-role.align-left,
+        .duty-reminder-team-name.align-left {
+            text-align: left;
+        }
+
         .duty-reminder-team-role {
             color: var(--muted);
             font-weight: 560;
@@ -6407,12 +6417,14 @@
                     teamSection.appendChild(heading);
                 }
                 team.forEach((member) => {
+                    const roleLabel = formatDutyMemberRoleLabel(member);
+                    const memberName = member.person_name || "Unknown";
                     const row = document.createElement("div");
                     row.className = "duty-reminder-team-row";
                     row.innerHTML = `
-                        <div class="duty-reminder-team-role">${escapeHtml(formatDutyMemberRoleLabel(member))}</div>
+                        <div class="duty-reminder-team-role ${resolveReminderTextAlignment(roleLabel)}">${escapeHtml(roleLabel)}</div>
                         <div class="duty-reminder-team-separator" aria-hidden="true">·</div>
-                        <div class="duty-reminder-team-name">${escapeHtml(member.person_name || "Unknown")}</div>
+                        <div class="duty-reminder-team-name ${resolveReminderTextAlignment(memberName)}">${escapeHtml(memberName)}</div>
                     `;
                     teamSection.appendChild(row);
                 });
@@ -7719,6 +7731,12 @@
             const div = document.createElement("div");
             div.textContent = value;
             return div.innerHTML;
+        }
+
+        function resolveReminderTextAlignment(value) {
+            const text = String(value || "").trim();
+            if (!text) return "align-right";
+            return /[A-Za-z]/.test(text) ? "align-left" : "align-right";
         }
 
         function hideSessionBanner() {
