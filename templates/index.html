@@ -1257,28 +1257,63 @@
         .duty-review-toggle-copy {
             display: flex;
             flex-direction: column;
-            gap: 3px;
+            gap: 0;
         }
 
         .duty-review-toggle-label {
             margin: 0;
-            font-size: 0.84rem;
-            font-weight: 700;
+            font-size: 0.92rem;
+            font-weight: 730;
             color: var(--text);
         }
 
-        .duty-review-toggle-note {
-            margin: 0;
-            font-size: 0.74rem;
-            line-height: 1.35;
-            color: var(--muted);
+        .duty-review-toggle-control {
+            position: relative;
+            width: 48px;
+            height: 30px;
+            border-radius: 999px;
+            border: none;
+            outline: none;
+            appearance: none;
+            -webkit-appearance: none;
+            background: rgba(107, 123, 118, 0.28);
+            flex: 0 0 auto;
+            cursor: pointer;
+            transition: background 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+            box-shadow: inset 0 0 0 1px rgba(24, 38, 34, 0.08);
         }
 
-        .duty-review-toggle-control {
-            width: 18px;
-            height: 18px;
-            accent-color: #0f766e;
-            flex: 0 0 auto;
+        .duty-review-toggle-control::before {
+            content: "";
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 4px 10px rgba(24, 38, 34, 0.18);
+            transition: transform 180ms ease;
+        }
+
+        .duty-review-toggle-control:checked {
+            background: linear-gradient(135deg, #17685f 0%, #1d7d73 100%);
+            box-shadow: inset 0 0 0 1px rgba(23, 104, 95, 0.2);
+        }
+
+        .duty-review-toggle-control:checked::before {
+            transform: translateX(18px);
+        }
+
+        .duty-review-toggle-control:focus-visible {
+            box-shadow:
+                inset 0 0 0 1px rgba(23, 104, 95, 0.22),
+                0 0 0 3px rgba(23, 104, 95, 0.18);
+        }
+
+        .duty-review-toggle-control:disabled {
+            opacity: 0.6;
+            cursor: default;
         }
 
         .duty-reminder-card {
@@ -6416,20 +6451,17 @@
                     toggleLabel.className = "duty-review-toggle-label";
                     toggleLabel.textContent = "Taxi reminder";
 
-                    const toggleNote = document.createElement("p");
-                    toggleNote.className = "duty-review-toggle-note";
-                    toggleNote.textContent = `Status: ${formatTaxiStatusLabel(taxiState)}`;
-
                     const toggleInput = document.createElement("input");
                     toggleInput.type = "checkbox";
                     toggleInput.className = "duty-review-toggle-control";
                     toggleInput.checked = taxiState.taxi_reminder_enabled !== false;
+                    toggleInput.setAttribute("role", "switch");
+                    toggleInput.setAttribute("aria-label", "Taxi reminder");
                     toggleInput.addEventListener("change", () => {
                         updateDutyReviewTaxiToggle(renderReview.review_id, toggleDuty.duty_key, toggleDuty, toggleInput.checked, card);
                     });
 
                     toggleCopy.appendChild(toggleLabel);
-                    toggleCopy.appendChild(toggleNote);
                     toggleRow.appendChild(toggleCopy);
                     toggleRow.appendChild(toggleInput);
                     item.appendChild(toggleRow);
