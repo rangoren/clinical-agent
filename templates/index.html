@@ -931,14 +931,14 @@
 
         .quick-result-card.month-overview-card .quick-result-row-label,
         .quick-result-card.month-overview-card .quick-result-row-value {
-            color: #1f4f46;
+            color: #1f4f46 !important;
             font-weight: 690;
             white-space: nowrap;
         }
 
         .quick-result-card.month-overview-card .quick-result-row-middle,
         .quick-result-card.month-overview-card .quick-result-row-dot {
-            color: #6b8a82;
+            color: #6b8a82 !important;
             font-weight: 660;
             white-space: nowrap;
         }
@@ -6114,6 +6114,8 @@
 
         async function updateDutyReviewTaxiToggle(reviewId, dutyKey, duty, enabled, card) {
             try {
+                const chat = document.getElementById("chat");
+                const previousScrollTop = chat ? chat.scrollTop : null;
                 const response = await fetch("/calendar/duty-sync/review/taxi-toggle", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -6128,7 +6130,12 @@
                 const data = await response.json();
                 if (data.pending_review) {
                     if (card) card.remove();
-                    appendDutyReviewCard(data.pending_review, "generic_pending_review", "updateDutyReviewTaxiToggle");
+                    appendDutyReviewCard(
+                        data.pending_review,
+                        "generic_pending_review",
+                        "updateDutyReviewTaxiToggle",
+                        { preserveScrollPosition: true, previousScrollTop }
+                    );
                     await refreshDutySyncStatus();
                     return;
                 }
@@ -6320,7 +6327,7 @@
             }
         }
 
-        function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown") {
+        function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown", options = {}) {
             if (!review || !review.review_id) return;
             const renderReview = normalizeDutyReviewForRender(review);
             let selectedCalendarId = renderReview.selected_calendar ? renderReview.selected_calendar.provider_calendar_id : null;
@@ -6588,8 +6595,14 @@
             card.appendChild(footerActions);
 
             chat.appendChild(card);
-            card.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
-            scrollChatToBottom();
+            if (options && options.preserveScrollPosition) {
+                if (typeof options.previousScrollTop === "number") {
+                    chat.scrollTop = options.previousScrollTop;
+                }
+            } else {
+                card.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
+                scrollChatToBottom();
+            }
         }
 
         async function toggleDutyReviewItem(reviewId, changeKey, card) {

@@ -3590,6 +3590,8 @@ def _quick_duty_role_label(raw_title):
         normalized = normalized.replace("תורנות/", "", 1).strip() or normalized
     if normalized.startswith("תורנות "):
         normalized = normalized.replace("תורנות ", "", 1).strip() or normalized
+    if "/" in normalized:
+        normalized = normalized.split("/")[-1].strip() or normalized
     role_display_map = {
         "מיון": "מיון גניקולוגי",
         "ב": "תורנית ב׳",
