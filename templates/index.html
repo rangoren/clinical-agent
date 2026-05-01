@@ -1414,6 +1414,53 @@
             text-align: left;
         }
 
+        .duty-reminder-card.on-duty-lookup-card {
+            gap: 13px;
+        }
+
+        .duty-reminder-card.on-duty-lookup-card .draft-title,
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-subtitle,
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-heading,
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-closing-note {
+            font-size: 110%;
+        }
+
+        .duty-reminder-card.on-duty-lookup-card .draft-title,
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-subtitle.prominent,
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-date,
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-heading {
+            color: #1f4f46;
+        }
+
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-subtitle:not(.prominent),
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-meta,
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-closing-note {
+            color: #5b706a;
+        }
+
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-team {
+            gap: 11px;
+        }
+
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-row {
+            gap: 14px;
+            padding: 9px 12px;
+        }
+
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-role,
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-name {
+            font-size: 0.95rem;
+            line-height: 1.45;
+            color: #1f4f46;
+            font-weight: 690;
+        }
+
+        .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-separator {
+            color: #6b8a82;
+            font-size: 0.86rem;
+            font-weight: 660;
+        }
+
         .duty-reminder-status {
             display: flex;
             align-items: center;
@@ -6304,6 +6351,9 @@
             const chat = document.getElementById("chat");
             const card = document.createElement("div");
             card.className = "duty-reminder-card";
+            if (reminderCard.reminder_kind === "on_duty_lookup") {
+                card.classList.add("on-duty-lookup-card");
+            }
             card.id = `duty-reminder-${reminderCard.duty_key}`;
 
             const title = document.createElement("p");
