@@ -6083,8 +6083,9 @@
             const parsed = parseDutyDateTime(duty.start_datetime || duty.date || change.date || "");
             const weekdayText = parsed ? dutyWeekdayFormatter.format(parsed) : "";
             const dateText = formatDutyDate(duty.start_datetime || duty.date || change.date || "");
-            const titleParts = String(duty.title || duty.role || "").split("/").map((part) => part.trim()).filter(Boolean);
-            const titleText = titleParts.join(" · ");
+            const titleText = formatDutyMemberRoleLabel({
+                display_title: duty.title || duty.role || ""
+            });
             return [weekdayText, dateText, titleText].filter(Boolean).join(" · ");
         }
 
