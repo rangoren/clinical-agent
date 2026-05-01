@@ -1403,13 +1403,17 @@
             line-height: 1.35;
         }
 
-        .duty-reminder-team-role.align-right,
-        .duty-reminder-team-name.align-right {
+        .duty-reminder-team-role.rtl-text,
+        .duty-reminder-team-name.rtl-text {
+            direction: rtl;
+            unicode-bidi: plaintext;
             text-align: right;
         }
 
-        .duty-reminder-team-role.align-left,
-        .duty-reminder-team-name.align-left {
+        .duty-reminder-team-role.ltr-text,
+        .duty-reminder-team-name.ltr-text {
+            direction: ltr;
+            unicode-bidi: plaintext;
             text-align: left;
         }
 
@@ -1462,7 +1466,6 @@
 
         .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-role,
         .duty-reminder-card.on-duty-lookup-card .duty-reminder-team-name {
-            flex: 1 1 0;
             font-size: 0.95rem;
             line-height: 1.45;
             color: #1f4f46;
@@ -7739,8 +7742,8 @@
 
         function resolveReminderTextAlignment(value) {
             const text = String(value || "").trim();
-            if (!text) return "align-right";
-            return /[A-Za-z]/.test(text) ? "align-left" : "align-right";
+            if (!text) return "rtl-text";
+            return /[A-Za-z]/.test(text) ? "ltr-text" : "rtl-text";
         }
 
         function hideSessionBanner() {
