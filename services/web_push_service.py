@@ -231,6 +231,22 @@ def _build_tomorrow_candidate(managed_doc, now_local):
     }
 
 
+def _find_tomorrow_managed_duty(session_id, now_local=None):
+    current_local = now_local or _local_now()
+    target_date = current_local.date() + timedelta(days=1)
+    matched_docs = []
+    for managed_doc in duty_sync_managed_events_collection.find({"session_id": session_id, "status": "active"}):
+        start_local = _parse_iso_datetime(managed_doc.get("start_datetime"))
+        if not start_local:
+            continue
+        if start_local.date() == target_date and start_local > current_local:
+            matched_docs.append((start_local, managed_doc))
+    if not matched_docs:
+        return None
+    matched_docs.sort(key=lambda item: item[0])
+    return matched_docs[0][1]
+
+
 def _build_duty_feature_candidates(session_id, now_local):
     state_docs = {
         doc.get("duty_key"): doc
@@ -312,6 +328,52 @@ def _send_due_duty_feature_pushes(session_id):
             sent_count += 1
             day_count += 1
     return sent_count
+
+
+def schedule_test_tomorrow_duty_push(session_id, delay_seconds=20):
+    if APP_ENV == "production":
+        return {"status": "unavailable", "reply": "This QA push trigger is available in dev only."}
+    if not web_push_configured():
+        return {"status": "unavailable", "reply": "Web push is not configured in this environment."}
+    if push_subscriptions_collection.count_documents({"session_id": session_id}) <= 0:
+        return {"status": "unavailable", "reply": "Push notifications are not connected for this session."}
+    now_local = _local_now()
+    managed_doc = _find_tomorrow_managed_duty(session_id, now_local=now_local)
+    if not managed_doc:
+        return {"status": "not_found", "reply": "No active duty for tomorrow was found in the database."}
+    delay_seconds = max(1, int(delay_seconds or 20))
+    duty_key = managed_doc.get("duty_key")
+    role_text = managed_doc.get("title") or managed_doc.get("role") or "תורנות"
+    body_text = f"מחר יש לך תורנות. התפקיד: {role_text}."
+    url = _duty_open_url("tomorrow_duty", duty_key)
+
+    def _delayed_send():
+        time.sleep(delay_seconds)
+        delivered = send_web_push_message(
+            session_id=session_id,
+            title="תזכורת תורנות",
+            body=body_text,
+            tag=f"qa:tomorrow:{duty_key}:{int(time.time())}",
+            url=url,
+        )
+        log_event(
+            "duty_sync_test_tomorrow_push_dispatched",
+            session_id=session_id,
+            payload={
+                "duty_key": duty_key,
+                "delay_seconds": delay_seconds,
+                "delivered": delivered,
+            },
+        )
+
+    thread = threading.Thread(target=_delayed_send, name=f"duty-sync-test-tomorrow-{session_id}", daemon=True)
+    thread.start()
+    return {
+        "status": "scheduled",
+        "reply": f"Tomorrow duty test push will send in {delay_seconds} seconds.",
+        "duty_key": duty_key,
+        "delay_seconds": delay_seconds,
+    }
 
 
 def get_web_push_status(session_id):

@@ -2261,13 +2261,10 @@
 
         {% if app_env != "production" %}
         .duty-sync-debug-dock {
-            position: fixed;
-            left: 50%;
-            bottom: max(10px, env(safe-area-inset-bottom, 0px));
-            transform: translateX(-50%);
+            position: relative;
             width: min(calc(100vw - 20px), 980px);
-            height: min(33vh, 280px);
-            z-index: 60;
+            height: min(40vh, 320px);
+            margin: 12px auto calc(env(safe-area-inset-bottom, 0px) + 18px);
             display: flex;
             flex-direction: column;
             border-radius: 22px;
@@ -2284,10 +2281,7 @@
 
         .duty-sync-debug-dock.minimized {
             height: auto;
-            width: min(calc(100vw - 20px), 260px);
-            left: 12px;
-            bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
-            transform: none;
+            width: min(calc(100vw - 20px), 980px);
         }
 
         .duty-sync-debug-dock.minimized .duty-sync-debug-dock-body {
@@ -2359,7 +2353,7 @@
         @media (max-width: 720px) {
             .duty-sync-debug-dock {
                 width: calc(100vw - 14px);
-                height: min(38vh, 320px);
+                height: min(42vh, 340px);
                 border-radius: 18px;
             }
 
@@ -2516,6 +2510,7 @@
             <div class="duty-sync-debug-dock-actions">
                 <button id="duty-sync-debug-minimize" class="duty-sync-debug-dock-button" type="button" onclick="toggleDutySyncDebugDockMinimize()">Minimize</button>
                 <button class="duty-sync-debug-dock-button" type="button" onclick="renderDutySyncDebugConsole()">Refresh</button>
+                <button class="duty-sync-debug-dock-button" type="button" onclick="triggerTomorrowDutyTestPush()">Tomorrow +20s</button>
                 <button class="duty-sync-debug-dock-button" type="button" onclick="copyDutySyncDebugLogs()">Copy</button>
                 <button class="duty-sync-debug-dock-button" type="button" onclick="clearDutySyncDebugLogs()">Clear</button>
             </div>
@@ -3829,15 +3824,11 @@
                 message.includes("push event received")
                 || message.includes("notification data created")
                 || message.includes("notificationclick")
-                || message.includes("foreground review available")
-                || message.includes("pending review")
-                || message.includes("FLOW_STATUS_REFRESH")
-                || message.includes("FLOW_REVIEW_")
-                || message.includes("review open")
-                || message.includes("ignored")
-                || message.includes("review payload sent to UI")
-                || message.includes("pending review prepared for UI/status")
+                || message.includes("storage write")
+                || message.includes("storage write skipped")
+                || message.includes("navigation action")
                 || message.includes("client background poll saw pending review")
+                || message.includes("duty_sync_test_tomorrow_push")
             );
         }
 
@@ -3907,6 +3898,33 @@
                 logDutySyncRuntime("debug console copied");
             } catch (error) {
                 logDutySyncRuntime("debug console copy failed", { error: String(error) });
+            }
+            {% endif %}
+        }
+
+        async function triggerTomorrowDutyTestPush() {
+            {% if app_env != "production" %}
+            try {
+                const response = await fetch("/calendar/duty-sync/push/test-tomorrow", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        delay_seconds: 20
+                    })
+                });
+                const data = await response.json();
+                const state = document.getElementById("duty-sync-debug-dock-state");
+                if (state) {
+                    state.textContent = data.reply || "Queued";
+                }
+            } catch (_error) {
+                const state = document.getElementById("duty-sync-debug-dock-state");
+                if (state) {
+                    state.textContent = "Failed to queue test push";
+                }
             }
             {% endif %}
         }
@@ -7998,7 +8016,8 @@
         restoreDutySyncPushContextFromStorage().catch(() => {});
         handleInitialDutySyncDeepLink();
         loadDutySyncDebugDockPreferences();
-        dutySyncDebugDockVisible = false;
+        dutySyncDebugDockVisible = true;
+        dutySyncDebugDockMinimized = false;
         persistDutySyncDebugDockPreferences();
         renderDutySyncDebugDockState();
         logDutySyncRuntime("startup initialization complete", { href: window.location.href });

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from settings import APP_BASE_URL
+from settings import APP_BASE_URL, APP_ENV
 from services.google_calendar_service import (
     GoogleCalendarReconnectRequiredError,
     begin_google_calendar_connect,
@@ -32,6 +32,7 @@ from services.web_push_service import (
     delete_web_push_subscription,
     get_web_push_status,
     save_web_push_subscription,
+    schedule_test_tomorrow_duty_push,
     send_web_push_message,
 )
 
@@ -401,4 +402,21 @@ async def handle_duty_sync_push_test(request: Request):
         )
     except Exception as exc:
         log_event("route_error", payload={"route": "/calendar/duty-sync/push/test", "error": str(exc)}, level="error")
+        return JSONResponse({"reply": f"ERROR: {str(exc)}"})
+
+
+@router.post("/calendar/duty-sync/push/test-tomorrow")
+async def handle_duty_sync_push_test_tomorrow(request: Request):
+    try:
+        if APP_ENV == "production":
+            return JSONResponse({"status": "unavailable", "reply": "This QA push trigger is available in dev only."})
+        data = await request.json()
+        return JSONResponse(
+            schedule_test_tomorrow_duty_push(
+                session_id=data.get("session_id"),
+                delay_seconds=data.get("delay_seconds", 20),
+            )
+        )
+    except Exception as exc:
+        log_event("route_error", payload={"route": "/calendar/duty-sync/push/test-tomorrow", "error": str(exc)}, level="error")
         return JSONResponse({"reply": f"ERROR: {str(exc)}"})
