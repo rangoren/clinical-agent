@@ -8378,7 +8378,7 @@
             storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
             queueContextReentryPulse();
             restorePushContextAndResumeDutySyncReview("pageshow").catch(() => {});
-            if (!pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+            if (initialAppLoadCompleted && !pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
                 openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "pageshow");
             }
         });
@@ -8398,7 +8398,7 @@
                     appWasBackgrounded = false;
                 }
                 restorePushContextAndResumeDutySyncReview("visibilitychange").catch(() => {});
-                if (!pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+                if (initialAppLoadCompleted && !pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
                     openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "visibilitychange");
                 }
                 return;
@@ -8413,7 +8413,7 @@
                 appWasBackgrounded = false;
             }
             restorePushContextAndResumeDutySyncReview("focus").catch(() => {});
-            if (!pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+            if (initialAppLoadCompleted && !pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
                 openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "focus");
             }
         });
@@ -8437,10 +8437,11 @@
         setupPullToRefreshOption();
         {% endif %}
         handleCalendarCallbackStatus();
-        bootstrapSession();
-        if (!pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
-            openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "initial");
-        }
+        bootstrapSession().finally(() => {
+            if (!pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+                openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "initial");
+            }
+        });
         if (document.visibilityState === "visible") {
             startDutySyncForegroundWatcher();
         }
