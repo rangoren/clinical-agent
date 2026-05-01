@@ -3833,11 +3833,7 @@
                 || message.includes("notification data created")
                 || message.includes("fallback reminder context")
                 || message.includes("notificationclick")
-                || message.includes("storage write")
-                || message.includes("storage write skipped")
-                || message.includes("navigation action")
-                || message.includes("client background poll saw pending review")
-                || message.includes("duty_sync_test_tomorrow_push")
+                || message.includes("reminder load")
             );
         }
 
@@ -6454,12 +6450,18 @@
             if (!dutyKey) return;
             if (dutyReminderOpenPromise) return dutyReminderOpenPromise;
             dutyReminderOpenPromise = (async () => {
+                const startedAt = performance.now();
                 const modeChanged = appMode !== "scheduling";
                 if (modeChanged) {
                     appMode = "scheduling";
                     renderModeState();
                 }
                 resetChatSurfaceForPushModeTransition();
+                logDutySyncRuntime("reminder load start", {
+                    duty_key: dutyKey,
+                    reminder_kind: reminderKind,
+                    source,
+                });
                 try {
                     const response = await fetch("/calendar/duty-sync/reminder/load", {
                         method: "POST",
@@ -6471,12 +6473,27 @@
                         })
                     });
                     const data = await response.json();
+                    logDutySyncRuntime("reminder load complete", {
+                        duty_key: dutyKey,
+                        reminder_kind: reminderKind,
+                        source,
+                        client_total_ms: Math.round(performance.now() - startedAt),
+                        server_timing: data && data.debug_timing ? data.debug_timing : null,
+                        status: data && data.status ? data.status : "unknown",
+                    });
                     if (data && data.reminder_card) {
                         appendDutyReminderCard(data.reminder_card);
                     } else {
                         appendAssistantMessage(data.reply || "That duty reminder could not be opened right now.", "error");
                     }
                 } catch (error) {
+                    logDutySyncRuntime("reminder load failed", {
+                        duty_key: dutyKey,
+                        reminder_kind: reminderKind,
+                        source,
+                        client_total_ms: Math.round(performance.now() - startedAt),
+                        error: String(error),
+                    });
                     appendAssistantMessage("Error: " + error, "error");
                 }
                 pendingDutyReminderDutyKey = null;

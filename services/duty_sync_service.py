@@ -2,6 +2,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta
 import json
 import random
+import time
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -1458,15 +1459,41 @@ def load_duty_reminder_card(session_id, duty_key, reminder_kind=None):
     if not duty_key:
         return {"status": "not_found", "reply": "That duty reminder could not be opened."}
     normalized_kind = reminder_kind or "taxi"
+    started_at = time.perf_counter()
+    refresh_attempted = normalized_kind == "tomorrow_duty"
+    refresh_status = "skipped"
+    refresh_duration_ms = None
     if normalized_kind == "tomorrow_duty":
+        refresh_started_at = time.perf_counter()
         try:
             refresh_duty_team_snapshot(session_id)
+            refresh_status = "ok"
         except Exception:
-            pass
+            refresh_status = "error"
+        refresh_duration_ms = round((time.perf_counter() - refresh_started_at) * 1000, 1)
+    build_started_at = time.perf_counter()
     card = _build_duty_reminder_card_payload(session_id, duty_key, reminder_kind=normalized_kind)
+    build_duration_ms = round((time.perf_counter() - build_started_at) * 1000, 1)
+    total_duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+    debug_timing = None
+    if APP_ENV != "production":
+        debug_timing = {
+            "reminder_kind": normalized_kind,
+            "refresh_attempted": refresh_attempted,
+            "refresh_status": refresh_status,
+            "refresh_team_snapshot_ms": refresh_duration_ms,
+            "card_build_ms": build_duration_ms,
+            "total_ms": total_duration_ms,
+        }
     if not card:
-        return {"status": "not_found", "reply": "That duty reminder is no longer available."}
-    return {"status": "loaded", "reminder_card": card}
+        response = {"status": "not_found", "reply": "That duty reminder is no longer available."}
+        if debug_timing:
+            response["debug_timing"] = debug_timing
+        return response
+    response = {"status": "loaded", "reminder_card": card}
+    if debug_timing:
+        response["debug_timing"] = debug_timing
+    return response
 
 
 def apply_duty_taxi_action(session_id, duty_key, action):
