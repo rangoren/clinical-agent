@@ -3586,6 +3586,8 @@ def _quick_duty_role_label(raw_title):
     normalized = normalize_text(raw_title)
     if not normalized:
         return "תורנות"
+    if normalized.startswith("תורנות/"):
+        normalized = normalized.replace("תורנות/", "", 1).strip() or normalized
     if normalized.startswith("תורנות "):
         normalized = normalized.replace("תורנות ", "", 1).strip() or normalized
     role_display_map = {
