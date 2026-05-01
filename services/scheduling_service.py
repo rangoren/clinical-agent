@@ -3535,6 +3535,14 @@ def _quick_row(label, value):
     return {"label": label, "value": value}
 
 
+def _quick_three_part_row(left_label, middle_label, value):
+    return {
+        "label": left_label,
+        "middle_label": middle_label,
+        "value": value,
+    }
+
+
 def _quick_duty_role_label(raw_title):
     normalized = normalize_text(raw_title)
     if not normalized:
@@ -3550,14 +3558,24 @@ def _quick_duty_role_label(raw_title):
     return role_display_map.get(normalized) or normalized
 
 
-def _quick_duty_rows(records, limit=None):
+def _quick_duty_rows(records, limit=None, three_part=False):
     rows = []
     normalized_records = list(records or [])
     if limit is not None:
         normalized_records = normalized_records[:limit]
     for item in normalized_records:
         value = _quick_duty_role_label(item.get("title"))
-        rows.append(_quick_row(_format_quick_card_row_date(item["date"]), value))
+        duty_date = item["date"]
+        if three_part:
+            rows.append(
+                _quick_three_part_row(
+                    duty_date.strftime("%a"),
+                    duty_date.strftime("%b %d"),
+                    value,
+                )
+            )
+        else:
+            rows.append(_quick_row(_format_quick_card_row_date(duty_date), value))
     return rows
 
 
@@ -3568,9 +3586,9 @@ def _quick_breakdown_rows(rows, limit=3):
     return normalized[:limit], max(0, len(normalized) - limit)
 
 
-def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_secondary=None, support_line=None, sections=None, breakdown_rows=None, progress=None):
+def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_secondary=None, support_line=None, sections=None, breakdown_rows=None, progress=None, card_class=None):
     parts = [
-        '<div class="quick-result-card">',
+        f'<div class="quick-result-card{f" {html_escape(card_class)}" if card_class else ""}">',
         '<div class="quick-result-header">',
         f'<p class="quick-result-title">{html_escape(title)}</p>',
         f'<p class="quick-result-subline">{html_escape(subline)}</p>',
@@ -3607,12 +3625,23 @@ def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_s
         parts.append('<div class="quick-result-section">')
         parts.append(f'<p class="quick-result-section-title">{html_escape(section.get("label") or "")}</p>')
         for row in rows:
-            parts.append(
-                '<div class="quick-result-row">'
-                f'<span class="quick-result-row-label">{html_escape(str(row.get("label") or ""))}</span>'
-                f'<span class="quick-result-row-value">{html_escape(str(row.get("value") or ""))}</span>'
-                '</div>'
-            )
+            if row.get("middle_label"):
+                parts.append(
+                    '<div class="quick-result-row">'
+                    f'<span class="quick-result-row-label">{html_escape(str(row.get("label") or ""))}</span>'
+                    '<span class="quick-result-row-dot" aria-hidden="true">&middot;</span>'
+                    f'<span class="quick-result-row-middle">{html_escape(str(row.get("middle_label") or ""))}</span>'
+                    '<span class="quick-result-row-dot" aria-hidden="true">&middot;</span>'
+                    f'<span class="quick-result-row-value">{html_escape(str(row.get("value") or ""))}</span>'
+                    '</div>'
+                )
+            else:
+                parts.append(
+                    '<div class="quick-result-row">'
+                    f'<span class="quick-result-row-label">{html_escape(str(row.get("label") or ""))}</span>'
+                    f'<span class="quick-result-row-value">{html_escape(str(row.get("value") or ""))}</span>'
+                    '</div>'
+                )
         parts.append('</div>')
     if breakdown_rows:
         visible_rows, more_count = _quick_breakdown_rows(breakdown_rows, limit=None)
@@ -3651,12 +3680,12 @@ def _render_month_overview_quick_result(session_id):
     if completed:
         sections.append({
             "label": "Completed",
-            "rows": _quick_duty_rows(completed),
+            "rows": _quick_duty_rows(completed, three_part=True),
         })
     if upcoming:
         sections.append({
             "label": "Upcoming",
-            "rows": _quick_duty_rows(upcoming),
+            "rows": _quick_duty_rows(upcoming, three_part=True),
         })
     total = len(records)
     return {
@@ -3668,6 +3697,7 @@ def _render_month_overview_quick_result(session_id):
             main_secondary=f"{len(upcoming)} upcoming",
             sections=sections,
             progress=(len(completed) / total) if total else 0,
+            card_class="month-overview-card",
         ),
         "scheduling_draft": None,
     }
