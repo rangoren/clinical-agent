@@ -3895,11 +3895,8 @@
 
         async function copyDutySyncDebugLogs() {
             {% if app_env != "production" %}
-            const mergedEntries = await getMergedDutySyncDebugEntries();
-            const text = mergedEntries
-                .filter((entry) => isRelevantDutySyncDebugEntry(entry))
-                .map((entry) => `${entry.ts} ${entry.message}${entry.payload ? ` ${JSON.stringify(entry.payload)}` : ""}`)
-                .join("\n");
+            const logNode = document.getElementById("duty-sync-debug-log");
+            const text = logNode ? String(logNode.textContent || "").trim() : "";
             try {
                 const copied = await copyDutySyncText(text);
                 const state = document.getElementById("duty-sync-debug-dock-state");
