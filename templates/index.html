@@ -2391,6 +2391,7 @@
         let dutySyncForegroundWatcherKnownReviewKey = null;
         let lastConsumedDutySyncServerFallbackKey = null;
         let lastNotifiedDutySyncReviewKey = null;
+        let lastSeenDutySyncSwDebugId = null;
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
         let dutySyncDebugPanelOpen = false;
@@ -4083,6 +4084,13 @@
             return true;
         }
 
+        function appendDutySyncDebugMessage(message, payload = null) {
+            {% if app_env != "production" %}
+            const details = payload ? ` ${JSON.stringify(payload)}` : "";
+            appendAssistantMessage(`[Duty Sync debug] ${message}${details}`, "system");
+            {% endif %}
+        }
+
         function loadDutySyncPushContextFromIndexedDb() {
             return new Promise((resolve) => {
                 try {
@@ -5705,7 +5713,13 @@
                         appendDutyReviewCard(data.pending_review, "generic_pending_review", "checkDutySync.interactive");
                     }
                     if (isBackground && data.has_new_pending_review) {
-                        if (shouldHandleBackgroundDutySyncReview(data.pending_review)) {
+                        const shouldNotify = shouldHandleBackgroundDutySyncReview(data.pending_review);
+                        appendDutySyncDebugMessage("client background poll saw pending review", {
+                            review_id: data.pending_review.review_id || null,
+                            updated_at: data.pending_review.updated_at || null,
+                            should_notify: shouldNotify,
+                        });
+                        if (shouldNotify) {
                             appendDutySyncInAppNotice(data.reply || "Duty Sync found updates that need review.");
                             appendDutyReviewCard(data.pending_review, "poll", "checkDutySync.background");
                             maybeShowDutySyncBrowserNotification(data.pending_review, data.reply);
@@ -7705,10 +7719,32 @@
                         dutySyncSwVersion = data.sw_version;
                     }
                     persistDutySyncSwDebugEntries(data.entries || []);
+                    {% if app_env != "production" %}
+                    const swEntries = Array.isArray(data.entries) ? data.entries : [];
+                    const newSwEntries = lastSeenDutySyncSwDebugId
+                        ? swEntries.filter((entry) => entry && entry.id && entry.id > lastSeenDutySyncSwDebugId)
+                        : swEntries.slice(-2);
+                    if (swEntries.length) {
+                        lastSeenDutySyncSwDebugId = swEntries[swEntries.length - 1].id || lastSeenDutySyncSwDebugId;
+                    }
+                    newSwEntries.forEach((entry) => {
+                        const message = String((entry && entry.message) || "");
+                        if (message.includes("push event received")) {
+                            appendDutySyncDebugMessage("service worker push received", entry.payload || {});
+                        }
+                        if (message.includes("notification data created")) {
+                            appendDutySyncDebugMessage("service worker notification shown", entry.payload || {});
+                        }
+                    });
+                    {% endif %}
                     renderDutySyncDebugConsole();
                     return;
                 }
                 if (data.type === "duty-sync-foreground-review-available") {
+                    appendDutySyncDebugMessage("service worker foreground review available", {
+                        review_id: data.review_id || null,
+                        updated_at: data.updated_at || null,
+                    });
                     if (document.visibilityState === "visible" && document.hasFocus()) {
                         pendingDutySyncForegroundPrompt = {
                             review_id: data.review_id || null,
