@@ -1159,6 +1159,7 @@ def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=F
     )
     now = _utcnow()
     previous_pending_payload = _serialize_review_doc(_active_pending_review(session_id))
+    previous_pending_signature = _review_signature(previous_pending_payload)
 
     try:
         selected_tab = _select_relevant_tab(session_id, sheet_id, normalized_full_name)
@@ -1229,7 +1230,8 @@ def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=F
             "pending_review": review_payload,
         }
         if is_poll:
-            has_new_pending = bool(review_payload) and review_payload != previous_pending_payload
+            current_pending_signature = _review_signature(review_payload)
+            has_new_pending = bool(review_payload) and current_pending_signature != previous_pending_signature
             result["polling_minutes"] = DEFAULT_DUTY_SYNC_POLLING_MINUTES
             result["has_new_pending_review"] = has_new_pending
             result["deep_link_path"] = "/?app_mode=scheduling&duty_sync_review=1"
