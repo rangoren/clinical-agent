@@ -34,6 +34,7 @@ from services.google_calendar_service import (
     GOOGLE_SHEETS_READONLY_SCOPE,
     _refresh_google_access_token,
     _auth_headers,
+    _google_event_is_gone,
     begin_google_calendar_connect,
     get_google_connection,
     google_calendar_enabled,
@@ -455,14 +456,27 @@ def _sync_added_duty(session_id, duty, selected_calendar_id=None):
     managed_doc = _managed_event_doc(session_id, duty.get("duty_key"))
     event_payload = _build_managed_event_payload(session_id, duty)
     if managed_doc and managed_doc.get("status") == "active" and managed_doc.get("provider_event_id"):
-        sync_result = sync_google_update_event(
-            session_id,
-            managed_doc.get("provider_event_id"),
-            event_payload,
-            preferred_calendar_id=managed_doc.get("provider_calendar_id") or selected_calendar_id,
-        )
+        provider_calendar_id = managed_doc.get("provider_calendar_id")
+        provider_event_id = managed_doc.get("provider_event_id")
+        if provider_calendar_id and _google_event_is_gone(session_id, provider_calendar_id, provider_event_id):
+            sync_result = sync_google_create_event(
+                session_id,
+                event_payload,
+                preferred_calendar_id=selected_calendar_id or provider_calendar_id,
+            )
+        else:
+            sync_result = sync_google_update_event(
+                session_id,
+                provider_event_id,
+                event_payload,
+                preferred_calendar_id=provider_calendar_id or selected_calendar_id,
+            )
     else:
-        sync_result = sync_google_create_event(session_id, event_payload, preferred_calendar_id=selected_calendar_id)
+        sync_result = sync_google_create_event(
+            session_id,
+            event_payload,
+            preferred_calendar_id=selected_calendar_id or (managed_doc or {}).get("provider_calendar_id"),
+        )
     if sync_result.get("status") != "synced":
         return sync_result
     _touch_managed_event_record(session_id, duty, sync_result, existing_doc=managed_doc, status="active")
@@ -952,7 +966,71 @@ def _clear_pending_review_if_unchanged(session_id):
     return True
 
 
-def _build_review_payload(session_id, source_tab_name, source_month, detected_duties):
+def _managed_duty_needs_calendar_restore(session_id, duty_key):
+    if not session_id or not duty_key:
+        return False
+    managed_doc = _managed_event_doc(session_id, duty_key) or {}
+    if not managed_doc:
+        return True
+    if managed_doc.get("status") != "active":
+        return True
+    provider_event_id = managed_doc.get("provider_event_id")
+    provider_calendar_id = managed_doc.get("provider_calendar_id")
+    if not provider_event_id or not provider_calendar_id:
+        return True
+    try:
+        return _google_event_is_gone(session_id, provider_calendar_id, provider_event_id)
+    except Exception as exc:
+        log_event(
+            "duty_sync_calendar_restore_check_failed",
+            session_id=session_id,
+            payload={
+                "duty_key": duty_key,
+                "provider_calendar_id": provider_calendar_id,
+                "provider_event_id": provider_event_id,
+                "error": str(exc),
+            },
+            level="warning",
+        )
+    return False
+
+
+def _build_calendar_restore_changes(session_id, approved_duties, detected_duties, existing_changes):
+    if not approved_duties or not detected_duties:
+        return []
+    detected_by_key = duty_map_by_key(detected_duties)
+    covered_keys = set()
+    for change in existing_changes or []:
+        old_key = ((change or {}).get("old_duty") or {}).get("duty_key")
+        new_key = ((change or {}).get("new_duty") or {}).get("duty_key")
+        if old_key:
+            covered_keys.add(old_key)
+        if new_key:
+            covered_keys.add(new_key)
+
+    restore_changes = []
+    for approved_duty in approved_duties:
+        duty_key = (approved_duty or {}).get("duty_key")
+        if not duty_key or duty_key in covered_keys:
+            continue
+        detected_match = detected_by_key.get(duty_key)
+        if not detected_match:
+            continue
+        if not _managed_duty_needs_calendar_restore(session_id, duty_key):
+            continue
+        restore_changes.append(
+            {
+                "change_type": "added",
+                "change_key": f"restore:{duty_key}",
+                "date": detected_match.get("date"),
+                "included": True,
+                "new_duty": detected_match,
+            }
+        )
+    return restore_changes
+
+
+def _build_review_payload(session_id, source_tab_name, source_month, detected_duties, allow_calendar_restore=False):
     snapshot = _latest_approved_snapshot(session_id)
     pending_review = _active_pending_review(session_id)
     approved_duties = [
@@ -993,6 +1071,10 @@ def _build_review_payload(session_id, source_tab_name, source_month, detected_du
             }
             for item in detected_duties
         ]
+    if allow_calendar_restore and changes and review_type == "incremental":
+        changes = changes + _build_calendar_restore_changes(session_id, approved_duties, detected_duties, changes)
+    elif allow_calendar_restore and review_type == "incremental":
+        changes = _build_calendar_restore_changes(session_id, approved_duties, detected_duties, changes)
     if not changes:
         if (
             pending_review
@@ -1222,6 +1304,7 @@ def _sync_duty_sheet(session_id, sheet_url=None, full_name=None, *, is_connect=F
             selected_tab["tab_name"],
             selected_tab["source_month"],
             duties,
+            allow_calendar_restore=not is_poll,
         )
         current_review_signature = _review_signature(review_payload)
         if review_payload and current_review_signature and current_review_signature == _suppressed_review_signature(existing):
