@@ -7,6 +7,8 @@ from datetime import date, datetime, time as dt_time, timedelta
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
+from pymongo.errors import DuplicateKeyError
+
 from db import (
     duty_reminder_push_logs_collection,
     duty_reminder_states_collection,
@@ -126,6 +128,39 @@ def _record_feature_push_log(session_id, duty_key, notification_key, reminder_ki
             "$setOnInsert": {"created_at": now},
         },
         upsert=True,
+    )
+
+
+def _claim_feature_push_log(session_id, duty_key, notification_key, reminder_kind, title, body, scheduled_for_local):
+    now = _utcnow()
+    try:
+        duty_reminder_push_logs_collection.insert_one(
+            {
+                "session_id": session_id,
+                "duty_key": duty_key,
+                "notification_key": notification_key,
+                "reminder_kind": reminder_kind,
+                "title": title,
+                "body": body,
+                "local_day": scheduled_for_local.date().isoformat(),
+                "scheduled_for_local": scheduled_for_local.isoformat(),
+                "delivery_state": "claimed",
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        return True
+    except DuplicateKeyError:
+        return False
+
+
+def _release_feature_push_claim(session_id, notification_key):
+    duty_reminder_push_logs_collection.delete_one(
+        {
+            "session_id": session_id,
+            "notification_key": notification_key,
+            "delivery_state": "claimed",
+        }
     )
 
 
@@ -308,6 +343,17 @@ def _send_due_duty_feature_pushes(session_id):
         relevant_check = candidate.get("relevant")
         if callable(relevant_check) and not relevant_check(now_local):
             continue
+        claimed = _claim_feature_push_log(
+            session_id=session_id,
+            duty_key=candidate.get("duty_key"),
+            notification_key=notification_key,
+            reminder_kind=candidate.get("reminder_kind"),
+            title=candidate.get("title"),
+            body=candidate.get("body"),
+            scheduled_for_local=candidate.get("send_at_local") or now_local,
+        )
+        if not claimed:
+            continue
         delivered = send_web_push_message(
             session_id=session_id,
             title=candidate.get("title"),
@@ -327,6 +373,8 @@ def _send_due_duty_feature_pushes(session_id):
             )
             sent_count += 1
             day_count += 1
+        else:
+            _release_feature_push_claim(session_id, notification_key)
     return sent_count
 
 
