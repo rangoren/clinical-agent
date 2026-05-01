@@ -2240,6 +2240,19 @@
             backdrop-filter: blur(16px);
         }
 
+        .duty-sync-debug-dock.hidden {
+            display: none;
+        }
+
+        .duty-sync-debug-dock.minimized {
+            height: auto;
+            width: min(calc(100vw - 20px), 320px);
+        }
+
+        .duty-sync-debug-dock.minimized .duty-sync-debug-dock-body {
+            display: none;
+        }
+
         .duty-sync-debug-dock-header {
             display: flex;
             align-items: center;
@@ -2256,6 +2269,21 @@
             font-weight: 700;
             letter-spacing: 0.03em;
             text-transform: uppercase;
+        }
+
+        .duty-sync-debug-dock-title-row {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .duty-sync-debug-dock-state {
+            color: rgba(214, 245, 235, 0.74);
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            text-transform: none;
         }
 
         .duty-sync-debug-dock-actions {
@@ -2440,8 +2468,12 @@
     {% if app_env != "production" %}
     <section id="duty-sync-debug-dock" class="duty-sync-debug-dock" aria-label="Duty Sync debug console">
         <div class="duty-sync-debug-dock-header">
-            <div class="duty-sync-debug-dock-title">Duty Sync Debug</div>
+            <div class="duty-sync-debug-dock-title-row">
+                <div class="duty-sync-debug-dock-title">Duty Sync Debug</div>
+                <div id="duty-sync-debug-dock-state" class="duty-sync-debug-dock-state">Hidden</div>
+            </div>
             <div class="duty-sync-debug-dock-actions">
+                <button id="duty-sync-debug-minimize" class="duty-sync-debug-dock-button" type="button" onclick="toggleDutySyncDebugDockMinimize()">Minimize</button>
                 <button class="duty-sync-debug-dock-button" type="button" onclick="renderDutySyncDebugConsole()">Refresh</button>
                 <button class="duty-sync-debug-dock-button" type="button" onclick="copyDutySyncDebugLogs()">Copy</button>
                 <button class="duty-sync-debug-dock-button" type="button" onclick="clearDutySyncDebugLogs()">Clear</button>
@@ -2492,6 +2524,8 @@
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
         let dutySyncDebugPanelOpen = false;
+        let dutySyncDebugDockVisible = false;
+        let dutySyncDebugDockMinimized = false;
         let dutySyncFlowTraceId = null;
         let dutySyncSwVersion = "unknown";
         const pullShowThreshold = 12;
@@ -2500,6 +2534,8 @@
         const dutySyncPollingIntervalMs = "{{ app_env }}" === "production" ? 45 * 60 * 1000 : 5 * 60 * 1000;
         const dutySyncDevLogStorageKey = "duty-sync-dev-console";
         const dutySyncLastNotifiedReviewStorageKey = "duty-sync-last-notified-review";
+        const dutySyncDebugDockVisibleStorageKey = "duty-sync-debug-dock-visible";
+        const dutySyncDebugDockMinimizedStorageKey = "duty-sync-debug-dock-minimized";
         const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
         const dutySyncSwBridgeMarker = "[DutySyncSWDebug] BRIDGE_OK";
         const dutySyncRenderSnapshotPrefix = "[DutySyncRenderDebugSnapshot]";
@@ -3957,8 +3993,14 @@
                     throw new Error("execCommand copy failed");
                 }
                 return true;
-            } finally {
+            } catch (_error) {
                 textarea.remove();
+                window.prompt("Copy Duty Sync debug logs:", text || "");
+                return true;
+            } finally {
+                if (textarea.isConnected) {
+                    textarea.remove();
+                }
             }
             {% else %}
             return false;
@@ -4183,6 +4225,74 @@
             persistLastNotifiedDutySyncReviewKey(reviewKey);
             return true;
         }
+
+        function loadDutySyncDebugDockPreferences() {
+            {% if app_env != "production" %}
+            try {
+                dutySyncDebugDockVisible = localStorage.getItem(dutySyncDebugDockVisibleStorageKey) === "1";
+                dutySyncDebugDockMinimized = localStorage.getItem(dutySyncDebugDockMinimizedStorageKey) === "1";
+            } catch (_error) {
+                dutySyncDebugDockVisible = false;
+                dutySyncDebugDockMinimized = false;
+            }
+            {% endif %}
+        }
+
+        function persistDutySyncDebugDockPreferences() {
+            {% if app_env != "production" %}
+            try {
+                localStorage.setItem(dutySyncDebugDockVisibleStorageKey, dutySyncDebugDockVisible ? "1" : "0");
+                localStorage.setItem(dutySyncDebugDockMinimizedStorageKey, dutySyncDebugDockMinimized ? "1" : "0");
+            } catch (_error) {
+                return;
+            }
+            {% endif %}
+        }
+
+        function renderDutySyncDebugDockState() {
+            {% if app_env != "production" %}
+            const dock = document.getElementById("duty-sync-debug-dock");
+            const state = document.getElementById("duty-sync-debug-dock-state");
+            const minimizeButton = document.getElementById("duty-sync-debug-minimize");
+            if (!dock || !state || !minimizeButton) return;
+            dock.classList.toggle("hidden", !dutySyncDebugDockVisible);
+            dock.classList.toggle("minimized", !!dutySyncDebugDockMinimized);
+            if (!dutySyncDebugDockVisible) {
+                state.textContent = "Hidden";
+            } else if (dutySyncDebugDockMinimized) {
+                state.textContent = "Minimized";
+            } else {
+                state.textContent = "Visible";
+            }
+            minimizeButton.textContent = dutySyncDebugDockMinimized ? "Expand" : "Minimize";
+            {% endif %}
+        }
+
+        function toggleDutySyncDebugDockMinimize() {
+            {% if app_env != "production" %}
+            dutySyncDebugDockMinimized = !dutySyncDebugDockMinimized;
+            persistDutySyncDebugDockPreferences();
+            renderDutySyncDebugDockState();
+            {% endif %}
+        }
+
+        window.showDutySyncDebugDock = function () {
+            {% if app_env != "production" %}
+            dutySyncDebugDockVisible = true;
+            dutySyncDebugDockMinimized = false;
+            persistDutySyncDebugDockPreferences();
+            renderDutySyncDebugDockState();
+            renderDutySyncDebugConsole();
+            {% endif %}
+        };
+
+        window.hideDutySyncDebugDock = function () {
+            {% if app_env != "production" %}
+            dutySyncDebugDockVisible = false;
+            persistDutySyncDebugDockPreferences();
+            renderDutySyncDebugDockState();
+            {% endif %}
+        };
 
         function appendDutySyncDebugMessage(message, payload = null) {
             {% if app_env != "production" %}
@@ -7802,6 +7912,10 @@
         storeDutySyncPushContextFromUrl(window.location.href, "startup_url");
         restoreDutySyncPushContextFromStorage().catch(() => {});
         handleInitialDutySyncDeepLink();
+        loadDutySyncDebugDockPreferences();
+        dutySyncDebugDockVisible = false;
+        persistDutySyncDebugDockPreferences();
+        renderDutySyncDebugDockState();
         logDutySyncRuntime("startup initialization complete", { href: window.location.href });
         renderDutySyncPushDebug();
         renderDutySyncDebugConsole();
