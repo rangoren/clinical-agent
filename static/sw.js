@@ -293,12 +293,27 @@ self.addEventListener("notificationclick", (event) => {
       }))
       .then(() => {
         if (reminderClick) {
-          storedTraceLine = "[SW/App] reminder click preserved target URL";
-          return writeDutySyncSwDebug("storage write skipped", {
+          const parsedUrl = new URL(resolvedTargetUrl, self.location.origin);
+          const context = {
+            active: true,
+            source: "service_worker_notificationclick",
+            duty_key: parsedUrl.searchParams.get("duty_key") || "",
+            reminder_kind: parsedUrl.searchParams.get("reminder_kind") || "taxi",
+          };
+          storedTraceLine = `[SW/App] stored reminder context duty_key=${context.duty_key} reminder_kind=${context.reminder_kind}`;
+          return writeDutySyncSwDebug("storage write attempt", {
             storage_key: "latest",
-            reason: "duty_reminder_click",
-            target_url: resolvedTargetUrl,
-          });
+            context,
+          }).then(() => saveDutySyncPushContext(context))
+            .then(() => writeDutySyncSwDebug("storage write success", {
+              storage_key: "latest",
+              context,
+            }))
+            .catch((error) => writeDutySyncSwDebug("storage write failure", {
+              storage_key: "latest",
+              context,
+              error: String(error),
+            }));
         }
         const parsedUrl = new URL(resolvedTargetUrl, self.location.origin);
         const context = {

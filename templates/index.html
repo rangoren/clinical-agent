@@ -4431,7 +4431,9 @@
         function saveDutySyncPushContext(context) {
             try {
                 localStorage.setItem("duty-sync-push-context", JSON.stringify(context || {}));
-                persistDutySyncPushDebug(`[SW/App] stored push context review_id=${(context || {}).review_id || ""} updated_at=${(context || {}).updated_at || ""}`);
+                persistDutySyncPushDebug(
+                    `[SW/App] stored push context review_id=${(context || {}).review_id || ""} updated_at=${(context || {}).updated_at || ""} duty_key=${(context || {}).duty_key || ""} reminder_kind=${(context || {}).reminder_kind || ""}`
+                );
             } catch (_error) {
                 return;
             }
@@ -4440,16 +4442,27 @@
         function storeDutySyncPushContextFromUrl(urlValue, sourceLabel) {
             try {
                 const parsedUrl = new URL(urlValue || window.location.href, window.location.origin);
-                if (parsedUrl.searchParams.get("duty_sync_review") !== "1") return false;
-                const reviewId = parsedUrl.searchParams.get("duty_sync_review_id") || "";
-                const updatedAt = parsedUrl.searchParams.get("duty_sync_review_updated_at") || "";
-                saveDutySyncPushContext({
-                    active: true,
-                    review_id: reviewId,
-                    updated_at: updatedAt,
-                    source: sourceLabel || "push_url"
-                });
-                return true;
+                if (parsedUrl.searchParams.get("duty_sync_review") === "1") {
+                    const reviewId = parsedUrl.searchParams.get("duty_sync_review_id") || "";
+                    const updatedAt = parsedUrl.searchParams.get("duty_sync_review_updated_at") || "";
+                    saveDutySyncPushContext({
+                        active: true,
+                        review_id: reviewId,
+                        updated_at: updatedAt,
+                        source: sourceLabel || "push_url"
+                    });
+                    return true;
+                }
+                if (parsedUrl.searchParams.get("duty_reminder") === "1") {
+                    saveDutySyncPushContext({
+                        active: true,
+                        duty_key: parsedUrl.searchParams.get("duty_key") || "",
+                        reminder_kind: parsedUrl.searchParams.get("reminder_kind") || "taxi",
+                        source: sourceLabel || "push_url"
+                    });
+                    return true;
+                }
+                return false;
             } catch (_error) {
                 return false;
             }
@@ -4475,6 +4488,21 @@
                 persistDutySyncPushDebug("[App] no stored push context found");
                 logDutySyncRuntime("restoreDutySyncPushContextFromStorage failure", { payload: context });
                 return false;
+            }
+            if (context.duty_key) {
+                pendingDutySyncReviewDeepLink = false;
+                pendingDutyReminderDutyKey = context.duty_key || pendingDutyReminderDutyKey;
+                pendingDutyReminderKind = context.reminder_kind || pendingDutyReminderKind || "taxi";
+                clearDutySyncPushContext();
+                persistDutySyncPushDebug(
+                    `[App] restored reminder context duty_key=${pendingDutyReminderDutyKey || ""} reminder_kind=${pendingDutyReminderKind || ""}`
+                );
+                logDutySyncRuntime("restoreDutySyncPushContextFromStorage success", {
+                    payload: context,
+                    duty_key: pendingDutyReminderDutyKey || null,
+                    reminder_kind: pendingDutyReminderKind || null,
+                });
+                return true;
             }
             pendingDutySyncStatusRecovery = false;
             pendingDutySyncReviewDeepLink = true;
@@ -6378,6 +6406,7 @@
                 }
                 pendingDutyReminderDutyKey = null;
                 pendingDutyReminderKind = null;
+                clearDutySyncPushContext();
                 const params = new URLSearchParams(window.location.search);
                 params.delete("duty_reminder");
                 params.delete("reminder_kind");
