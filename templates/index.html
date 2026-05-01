@@ -4859,7 +4859,7 @@
             if (dutyPushRegistration) {
                 return dutyPushRegistration;
             }
-            dutyPushRegistration = await navigator.serviceWorker.register("/static/sw.js?v={{ app_version }}");
+            dutyPushRegistration = await navigator.serviceWorker.register("/duty-sync-sw.js?v={{ app_version }}", { scope: "/" });
             if (dutyPushRegistration && typeof dutyPushRegistration.update === "function") {
                 dutyPushRegistration.update().catch(() => {});
             }
@@ -4890,7 +4890,7 @@
             }
             dutyPushRegistration = null;
             dutySyncSwVersion = "unknown";
-            const registration = await navigator.serviceWorker.register("/static/sw.js?v={{ app_version }}");
+            const registration = await navigator.serviceWorker.register("/duty-sync-sw.js?v={{ app_version }}", { scope: "/" });
             if (registration && typeof registration.update === "function") {
                 registration.update().catch(() => {});
             }
