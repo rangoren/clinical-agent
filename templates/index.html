@@ -3831,6 +3831,7 @@
             return (
                 message.includes("push event received")
                 || message.includes("notification data created")
+                || message.includes("fallback reminder context")
                 || message.includes("notificationclick")
                 || message.includes("storage write")
                 || message.includes("storage write skipped")
@@ -4438,7 +4439,7 @@
         function loadDutySyncPushContextFromIndexedDb() {
             return new Promise((resolve) => {
                 try {
-                    const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 1);
+                    const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 2);
                     request.onupgradeneeded = () => {
                         const db = request.result;
                         if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
