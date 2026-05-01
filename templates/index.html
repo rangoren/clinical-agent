@@ -4073,30 +4073,71 @@
                     // Fall through to the legacy copy path below.
                 }
             }
-            const textarea = document.createElement("textarea");
-            textarea.value = text || "";
-            textarea.style.position = "fixed";
-            textarea.style.opacity = "0";
-            textarea.style.pointerEvents = "none";
-            textarea.style.top = "0";
-            textarea.style.left = "0";
-            textarea.style.fontSize = "16px";
-            document.body.appendChild(textarea);
-            textarea.focus();
-            textarea.select();
-            textarea.setSelectionRange(0, textarea.value.length);
             try {
-                const copied = document.execCommand("copy");
-                if (!copied) {
-                    throw new Error("execCommand copy failed");
+                const textarea = document.createElement("textarea");
+                textarea.value = text || "";
+                textarea.setAttribute("readonly", "");
+                textarea.style.position = "absolute";
+                textarea.style.left = "-9999px";
+                textarea.style.top = `${window.scrollY || 0}px`;
+                textarea.style.fontSize = "16px";
+                textarea.style.opacity = "0.01";
+                document.body.appendChild(textarea);
+
+                const isiOS = /ipad|iphone|ipod/i.test(navigator.userAgent)
+                    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+                if (isiOS) {
+                    const range = document.createRange();
+                    range.selectNodeContents(textarea);
+                    const selection = window.getSelection();
+                    if (selection) {
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                    }
+                    textarea.setSelectionRange(0, textarea.value.length);
+                } else {
+                    textarea.focus();
+                    textarea.select();
+                    textarea.setSelectionRange(0, textarea.value.length);
                 }
-                return true;
-            } catch (_error) {
-                return false;
-            } finally {
+
+                const copied = document.execCommand("copy");
                 if (textarea.isConnected) {
                     textarea.remove();
                 }
+                if (copied) {
+                    return true;
+                }
+            } catch (_error) {
+                // Try a second fallback with a contenteditable node for mobile Safari edge cases.
+            }
+
+            try {
+                const node = document.createElement("div");
+                node.textContent = text || "";
+                node.contentEditable = "true";
+                node.style.position = "absolute";
+                node.style.left = "-9999px";
+                node.style.top = `${window.scrollY || 0}px`;
+                node.style.whiteSpace = "pre-wrap";
+                node.style.webkitUserSelect = "text";
+                document.body.appendChild(node);
+
+                const range = document.createRange();
+                range.selectNodeContents(node);
+                const selection = window.getSelection();
+                if (selection) {
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
+                const copied = document.execCommand("copy");
+                if (node.isConnected) {
+                    node.remove();
+                }
+                return !!copied;
+            } catch (_error) {
+                return false;
             }
             {% else %}
             return false;
