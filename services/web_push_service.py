@@ -72,6 +72,22 @@ def _effective_send_time(local_dt):
     return datetime.combine(target_day, QUIET_HOURS_RELEASE, tzinfo=APP_TIMEZONE)
 
 
+def _feature_tracking_started_at(managed_doc):
+    return (
+        _parse_iso_datetime(managed_doc.get("last_synced_at"))
+        or _parse_iso_datetime(managed_doc.get("updated_at"))
+        or _parse_iso_datetime(managed_doc.get("created_at"))
+    )
+
+
+def _candidate_became_due_before_tracking(managed_doc, send_at_local):
+    tracking_started_at = _feature_tracking_started_at(managed_doc)
+    effective_send_at = _effective_send_time(send_at_local)
+    if not tracking_started_at or not effective_send_at:
+        return False
+    return tracking_started_at > effective_send_at
+
+
 def _notification_is_due(send_at_local, now_local):
     effective_send_time = _effective_send_time(send_at_local)
     if not effective_send_time or now_local < effective_send_time:
@@ -141,13 +157,16 @@ def _build_taxi_candidate(managed_doc, state_doc, days_before, send_hour, body_t
     if state_doc.get("taxi_status") and state_doc.get("taxi_status") != TAXI_STATUS_PENDING:
         return None
     send_day = start_local.date() - timedelta(days=days_before)
+    send_at_local = datetime.combine(send_day, dt_time(hour=send_hour, minute=0), tzinfo=APP_TIMEZONE)
+    if _candidate_became_due_before_tracking(managed_doc, send_at_local):
+        return None
     notification_key = f"taxi:{reminder_kind_suffix}:{managed_doc.get('duty_key')}"
     return {
         "notification_key": notification_key,
         "duty_key": managed_doc.get("duty_key"),
         "reminder_kind": TAXI_REMINDER_KIND,
         "priority": priority,
-        "send_at_local": datetime.combine(send_day, dt_time(hour=send_hour, minute=0), tzinfo=APP_TIMEZONE),
+        "send_at_local": send_at_local,
         "title": "תזכורת מונית",
         "body": body_text,
         "url": _duty_open_url(f"taxi_{reminder_kind_suffix}", managed_doc.get("duty_key")),
@@ -173,12 +192,15 @@ def _build_snooze_candidate(managed_doc, state_doc, now_local):
         return None
     if state_doc.get("taxi_status") and state_doc.get("taxi_status") != TAXI_STATUS_PENDING:
         return None
+    send_at_local = datetime.combine(snooze_day, dt_time(hour=18, minute=0), tzinfo=APP_TIMEZONE)
+    if _candidate_became_due_before_tracking(managed_doc, send_at_local):
+        return None
     return {
         "notification_key": f"taxi:snooze:{managed_doc.get('duty_key')}:{snooze_day.isoformat()}",
         "duty_key": managed_doc.get("duty_key"),
         "reminder_kind": TAXI_REMINDER_KIND,
         "priority": 1,
-        "send_at_local": datetime.combine(snooze_day, dt_time(hour=18, minute=0), tzinfo=APP_TIMEZONE),
+        "send_at_local": send_at_local,
         "title": "תזכורת מונית",
         "body": "תזכורת להזמין מונית לתורנות הקרובה.",
         "url": _duty_open_url("taxi_snooze", managed_doc.get("duty_key")),
@@ -193,12 +215,15 @@ def _build_tomorrow_candidate(managed_doc, now_local):
     duty_key = managed_doc.get("duty_key")
     role_text = managed_doc.get("title") or managed_doc.get("role") or "תורנות"
     send_day = start_local.date() - timedelta(days=1)
+    send_at_local = datetime.combine(send_day, dt_time(hour=20, minute=0), tzinfo=APP_TIMEZONE)
+    if _candidate_became_due_before_tracking(managed_doc, send_at_local):
+        return None
     return {
         "notification_key": f"tomorrow:{duty_key}:{start_local.date().isoformat()}",
         "duty_key": duty_key,
         "reminder_kind": TOMORROW_REMINDER_KIND,
         "priority": 0,
-        "send_at_local": datetime.combine(send_day, dt_time(hour=20, minute=0), tzinfo=APP_TIMEZONE),
+        "send_at_local": send_at_local,
         "title": "תזכורת תורנות",
         "body": f"מחר יש לך תורנות. התפקיד: {role_text}.",
         "url": _duty_open_url("tomorrow_duty", duty_key),
