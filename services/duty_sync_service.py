@@ -1,5 +1,6 @@
 from dataclasses import asdict
 from datetime import datetime, timedelta
+import json
 import random
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -819,6 +820,21 @@ def _review_change_keys(review):
 
 def _review_change_types(review):
     return [item.get("change_type") for item in (review or {}).get("changes") or [] if item.get("change_type")]
+
+
+def _review_signature(review):
+    if not review:
+        return ""
+    stable_review = {
+        "review_id": review.get("review_id"),
+        "review_type": review.get("review_type"),
+        "source_month": review.get("source_month"),
+        "source_tab_name": review.get("source_tab_name"),
+        "summary": review.get("summary"),
+        "included_count": review.get("included_count"),
+        "changes": review.get("changes") or [],
+    }
+    return json.dumps(stable_review, sort_keys=True, ensure_ascii=False)
 
 
 def _render_debug_entry(message, review=None, extra=None):
