@@ -2220,6 +2220,90 @@
                 padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
             }
         }
+
+        {% if app_env != "production" %}
+        .duty-sync-debug-dock {
+            position: fixed;
+            left: 50%;
+            bottom: max(10px, env(safe-area-inset-bottom, 0px));
+            transform: translateX(-50%);
+            width: min(calc(100vw - 20px), 980px);
+            height: min(33vh, 280px);
+            z-index: 60;
+            display: flex;
+            flex-direction: column;
+            border-radius: 22px;
+            border: 1px solid rgba(17, 24, 39, 0.12);
+            background: rgba(15, 23, 42, 0.94);
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.28);
+            overflow: hidden;
+            backdrop-filter: blur(16px);
+        }
+
+        .duty-sync-debug-dock-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .duty-sync-debug-dock-title {
+            color: #eef7f4;
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        .duty-sync-debug-dock-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .duty-sync-debug-dock-button {
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.08);
+            color: #f8fafc;
+            border-radius: 10px;
+            padding: 6px 10px;
+            font-size: 0.74rem;
+            font-weight: 650;
+        }
+
+        .duty-sync-debug-dock-body {
+            flex: 1;
+            min-height: 0;
+            margin: 0;
+            padding: 12px;
+            overflow: auto;
+            color: #d6f5eb;
+            background: transparent;
+            font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        @media (max-width: 720px) {
+            .duty-sync-debug-dock {
+                width: calc(100vw - 14px);
+                height: min(38vh, 320px);
+                border-radius: 18px;
+            }
+
+            .duty-sync-debug-dock-header {
+                padding: 9px 10px;
+            }
+
+            .duty-sync-debug-dock-body {
+                padding: 10px;
+                font-size: 11px;
+            }
+        }
+        {% endif %}
     </style>
 </head>
 <body>
@@ -2353,6 +2437,19 @@
             </div>
         </footer>
     </main>
+    {% if app_env != "production" %}
+    <section id="duty-sync-debug-dock" class="duty-sync-debug-dock" aria-label="Duty Sync debug console">
+        <div class="duty-sync-debug-dock-header">
+            <div class="duty-sync-debug-dock-title">Duty Sync Debug</div>
+            <div class="duty-sync-debug-dock-actions">
+                <button class="duty-sync-debug-dock-button" type="button" onclick="renderDutySyncDebugConsole()">Refresh</button>
+                <button class="duty-sync-debug-dock-button" type="button" onclick="copyDutySyncDebugLogs()">Copy</button>
+                <button class="duty-sync-debug-dock-button" type="button" onclick="clearDutySyncDebugLogs()">Clear</button>
+            </div>
+        </div>
+        <pre id="duty-sync-debug-log" class="duty-sync-debug-dock-body">Waiting for Duty Sync debug events...</pre>
+    </section>
+    {% endif %}
     <script>
         let sessionId = localStorage.getItem("session_id");
         let chatReady = false;
@@ -3653,14 +3750,17 @@
             const node = document.getElementById("duty-sync-debug-log");
             if (!node) return;
             const entries = await getMergedDutySyncDebugEntries();
-            const openEntries = getLatestDutySyncOpenFlowEntries(entries);
-            const blocks = openEntries.map((entry) => formatDutySyncOpenDebugEntry(entry));
+            const recentEntries = entries.slice(-120);
+            const blocks = recentEntries.map((entry) =>
+                `${entry.ts || ""} ${entry.message || ""}${entry.payload && Object.keys(entry.payload).length ? ` ${JSON.stringify(entry.payload)}` : ""}`
+            );
             const versionBlock = [
                 `[DutySyncVersion]`,
                 `APP_VERSION: {{ app_version }}`,
                 `SW_VERSION: ${dutySyncSwVersion || "unknown"}`,
+                `ENTRY_COUNT: ${entries.length}`,
             ].join("\n");
-            const body = blocks.length ? blocks.join("\n") : buildDutySyncOpenDebugFallback(entries, openEntries);
+            const body = blocks.length ? blocks.join("\n") : "Waiting for Duty Sync debug events...";
             node.textContent = `${versionBlock}\n\n${body}`;
             node.scrollTop = node.scrollHeight;
             {% endif %}
