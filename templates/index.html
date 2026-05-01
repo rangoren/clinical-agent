@@ -2519,9 +2519,7 @@
                     <button class="duty-sync-debug-dock-button" type="button" onclick="clearDutySyncDebugLogs()">Clear</button>
                 </div>
                 <div class="duty-sync-debug-dock-actions">
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="triggerTaxiTestPush('7d')">Taxi 7d</button>
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="triggerTaxiTestPush('3d')">Taxi 3d</button>
-                    <button class="duty-sync-debug-dock-button" type="button" onclick="triggerTaxiTestPush('snooze')">Taxi snooze</button>
+                    <button class="duty-sync-debug-dock-button" type="button" onclick="triggerMockTomorrowAutoPush()">Mock 20:00 tomorrow</button>
                 </div>
             </div>
         </div>
@@ -3919,18 +3917,16 @@
             {% endif %}
         }
 
-        async function triggerTaxiTestPush(variant = "7d") {
+        async function triggerMockTomorrowAutoPush() {
             {% if app_env != "production" %}
             try {
-                const response = await fetch("/calendar/duty-sync/push/test-taxi", {
+                const response = await fetch("/calendar/duty-sync/push/test-auto-tomorrow", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({
-                        session_id: sessionId,
-                        variant,
-                        delay_seconds: 20
+                        session_id: sessionId
                     })
                 });
                 const data = await response.json();

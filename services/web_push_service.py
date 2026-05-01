@@ -338,17 +338,21 @@ def _build_duty_feature_candidates(session_id, now_local):
     return candidates
 
 
-def _send_due_duty_feature_pushes(session_id):
+def _send_due_duty_feature_pushes(session_id, now_local=None, reminder_kind_filter=None, duty_key_filter=None, ignore_daily_cap=False):
     if not web_push_configured():
         return 0
-    now_local = _local_now()
+    now_local = now_local or _local_now()
     sent_count = 0
     day_count = _feature_push_count_for_day(session_id, now_local.date())
-    if day_count >= MAX_DUTY_FEATURE_PUSHES_PER_DAY:
+    if not ignore_daily_cap and day_count >= MAX_DUTY_FEATURE_PUSHES_PER_DAY:
         return 0
     for candidate in _build_duty_feature_candidates(session_id, now_local):
-        if day_count >= MAX_DUTY_FEATURE_PUSHES_PER_DAY:
+        if not ignore_daily_cap and day_count >= MAX_DUTY_FEATURE_PUSHES_PER_DAY:
             break
+        if reminder_kind_filter and candidate.get("reminder_kind") != reminder_kind_filter:
+            continue
+        if duty_key_filter and candidate.get("duty_key") != duty_key_filter:
+            continue
         notification_key = candidate.get("notification_key")
         if not notification_key or _feature_push_sent(session_id, notification_key):
             continue
@@ -492,6 +496,43 @@ def schedule_test_taxi_push(session_id, reminder_variant="7d", delay_seconds=20)
         "duty_key": duty_key,
         "delay_seconds": delay_seconds,
         "variant": variant,
+    }
+
+
+def trigger_mock_tomorrow_due_push(session_id):
+    if APP_ENV == "production":
+        return {"status": "unavailable", "reply": "This QA push trigger is available in dev only."}
+    if not web_push_configured():
+        return {"status": "unavailable", "reply": "Web push is not configured in this environment."}
+    if push_subscriptions_collection.count_documents({"session_id": session_id}) <= 0:
+        return {"status": "unavailable", "reply": "Push notifications are not connected for this session."}
+    managed_doc = _find_next_future_managed_duty(session_id, now_local=_local_now())
+    if not managed_doc:
+        return {"status": "not_found", "reply": "No active future duty was found in the database."}
+    start_local = _parse_iso_datetime(managed_doc.get("start_datetime"))
+    if not start_local:
+        return {"status": "not_found", "reply": "The next duty is missing a valid start time."}
+    mock_now = datetime.combine(start_local.date() - timedelta(days=1), dt_time(hour=20, minute=0), tzinfo=APP_TIMEZONE)
+    notification_key = f"tomorrow:{managed_doc.get('duty_key')}:{start_local.date().isoformat()}"
+    duty_reminder_push_logs_collection.delete_many(
+        {
+            "session_id": session_id,
+            "notification_key": notification_key,
+        }
+    )
+    sent_count = _send_due_duty_feature_pushes(
+        session_id,
+        now_local=mock_now,
+        reminder_kind_filter=TOMORROW_REMINDER_KIND,
+        duty_key_filter=managed_doc.get("duty_key"),
+        ignore_daily_cap=True,
+    )
+    return {
+        "status": "sent" if sent_count else "not_sent",
+        "reply": "Mock 20:00 tomorrow-duty push sent." if sent_count else "No due tomorrow-duty push was sent for the mocked 20:00 check.",
+        "duty_key": managed_doc.get("duty_key"),
+        "mock_now": mock_now.isoformat(),
+        "sent_count": sent_count,
     }
 
 
