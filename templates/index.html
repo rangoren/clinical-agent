@@ -61,7 +61,9 @@
 
         body {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
             padding: 14px;
         }
 
@@ -177,10 +179,11 @@
 
         .brand-title {
             margin: 0;
-            font-size: 1.08rem;
+            font-size: 1.134rem;
             font-weight: 620;
             letter-spacing: -0.01em;
             color: var(--muted);
+            line-height: 1.05;
         }
 
         .topbar-meta {
@@ -760,6 +763,7 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
+            width: 100%;
         }
 
         .quick-result-header,
@@ -790,9 +794,9 @@
         }
 
         .quick-result-subline {
-            font-size: 0.76rem;
+            font-size: 0.96rem;
             line-height: 1.35;
-            font-weight: 620;
+            font-weight: 700;
             color: #5b706a;
         }
 
@@ -838,9 +842,10 @@
         }
 
         .quick-result-meta-line {
-            font-size: 0.72rem;
+            font-size: 0.96rem;
             line-height: 1.3;
-            color: var(--muted);
+            color: #5b706a;
+            font-weight: 700;
         }
 
         .quick-result-section {
@@ -873,11 +878,80 @@
             white-space: nowrap;
         }
 
+        .quick-result-row-middle {
+            font-size: 0.86rem;
+            line-height: 1.35;
+            font-weight: 640;
+            color: #6c837d;
+            white-space: nowrap;
+        }
+
+        .quick-result-row-dot {
+            color: #6c837d;
+            font-size: 0.78rem;
+            line-height: 1;
+            font-weight: 700;
+        }
+
         .quick-result-row-value {
             font-size: 0.84rem;
             line-height: 1.35;
             color: #566c66;
             text-align: right;
+        }
+
+        .quick-result-card.month-overview-card {
+            gap: 13px;
+        }
+
+        .quick-result-card.month-overview-card .quick-result-title,
+        .quick-result-card.month-overview-card .quick-result-subline,
+        .quick-result-card.month-overview-card .quick-result-primary,
+        .quick-result-card.month-overview-card .quick-result-secondary,
+        .quick-result-card.month-overview-card .quick-result-section-title,
+        .quick-result-card.month-overview-card .quick-result-meta-line {
+            font-size: 110%;
+        }
+
+        .quick-result-card.month-overview-card .quick-result-section {
+            gap: 11px;
+            padding-top: 12px;
+        }
+
+        .quick-result-card.month-overview-card .quick-result-row {
+            justify-content: flex-start;
+            align-items: center;
+            gap: 14px;
+            padding: 9px 0;
+        }
+
+        .quick-result-card.month-overview-card .quick-result-row-label,
+        .quick-result-card.month-overview-card .quick-result-row-middle,
+        .quick-result-card.month-overview-card .quick-result-row-value {
+            font-size: 0.95rem;
+            line-height: 1.45;
+        }
+
+        .quick-result-card.month-overview-card .quick-result-row-label,
+        .quick-result-card.month-overview-card .quick-result-row-value {
+            color: #1f4f46 !important;
+            font-weight: 690;
+            white-space: nowrap;
+        }
+
+        .quick-result-card.month-overview-card .quick-result-row-middle,
+        .quick-result-card.month-overview-card .quick-result-row-dot {
+            color: #6b8a82 !important;
+            font-weight: 660;
+            white-space: nowrap;
+        }
+
+        .message-stack.quick-result-stack,
+        .message-stack.quick-result-stack .message-frame,
+        .message-stack.quick-result-stack .bubble-wrap,
+        .message-stack.quick-result-stack .bubble {
+            width: 100%;
+            max-width: none;
         }
 
         .quick-result-more {
@@ -1173,6 +1247,215 @@
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
+        }
+
+        .duty-review-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 10px;
+            border-radius: 11px;
+            background: rgba(15, 118, 110, 0.04);
+            border: 1px solid rgba(15, 118, 110, 0.08);
+        }
+
+        .duty-review-toggle-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .duty-review-toggle-label {
+            margin: 0;
+            font-size: 0.88rem;
+            font-weight: 730;
+            color: var(--text);
+        }
+
+        .duty-review-toggle-control {
+            position: relative;
+            width: 41px;
+            height: 26px;
+            border-radius: 999px;
+            border: none;
+            outline: none;
+            appearance: none;
+            -webkit-appearance: none;
+            background: rgba(107, 123, 118, 0.28);
+            flex: 0 0 auto;
+            cursor: pointer;
+            transition: background 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+            box-shadow: inset 0 0 0 1px rgba(24, 38, 34, 0.08);
+        }
+
+        .duty-review-toggle-control::before {
+            content: "";
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 4px 10px rgba(24, 38, 34, 0.18);
+            transition: transform 180ms ease;
+        }
+
+        .duty-review-toggle-control:checked {
+            background: linear-gradient(135deg, #17685f 0%, #1d7d73 100%);
+            box-shadow: inset 0 0 0 1px rgba(23, 104, 95, 0.2);
+        }
+
+        .duty-review-toggle-control:checked::before {
+            transform: translateX(15px);
+        }
+
+        .duty-review-toggle-control:focus-visible {
+            box-shadow:
+                inset 0 0 0 1px rgba(23, 104, 95, 0.22),
+                0 0 0 3px rgba(23, 104, 95, 0.18);
+        }
+
+        .duty-review-toggle-control:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        .duty-reminder-card {
+            align-self: flex-start;
+            max-width: min(100%, 760px);
+            border-radius: 16px;
+            padding: 14px;
+            border: 1px solid rgba(15, 118, 110, 0.14);
+            background: rgba(248, 250, 252, 0.96);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            animation: riseIn 180ms ease-out;
+        }
+
+        .duty-reminder-subtitle {
+            margin: 0;
+            color: var(--brand-strong);
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .duty-reminder-subtitle.prominent {
+            color: var(--brand);
+            font-size: 0.98rem;
+            font-weight: 700;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+
+        .duty-reminder-date {
+            margin: 0;
+            color: var(--text);
+            font-size: 1rem;
+            font-weight: 720;
+        }
+
+        .duty-reminder-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+
+        .duty-reminder-team {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .duty-reminder-team-heading {
+            margin: 0 0 2px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .duty-reminder-team-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.84);
+            border: 1px solid rgba(15, 118, 110, 0.08);
+        }
+
+        .duty-reminder-team-separator {
+            color: rgba(79, 100, 95, 0.55);
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .duty-reminder-team-role,
+        .duty-reminder-team-name {
+            font-size: 0.86rem;
+            line-height: 1.35;
+        }
+
+        .duty-reminder-team-role {
+            color: var(--muted);
+            font-weight: 560;
+        }
+
+        .duty-reminder-team-name {
+            color: var(--text);
+            font-weight: 650;
+            text-align: left;
+        }
+
+        .duty-reminder-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(15, 118, 110, 0.05);
+            border: 1px solid rgba(15, 118, 110, 0.08);
+        }
+
+        .duty-reminder-status-label,
+        .duty-reminder-status-value {
+            font-size: 0.84rem;
+        }
+
+        .duty-reminder-status-label {
+            color: var(--muted);
+            font-weight: 700;
+        }
+
+        .duty-reminder-status-value {
+            color: var(--text);
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .duty-reminder-confirmation {
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(15, 118, 110, 0.09);
+            color: var(--brand-strong);
+            font-size: 0.82rem;
+            font-weight: 700;
+        }
+
+        .duty-reminder-closing-note {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.98rem;
+            line-height: 1.45;
+            font-weight: 560;
         }
 
         .draft-title {
@@ -1978,6 +2261,117 @@
                 padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
             }
         }
+
+        {% if app_env != "production" %}
+        .duty-sync-debug-dock {
+            position: relative;
+            width: min(calc(100vw - 20px), 980px);
+            height: min(40vh, 320px);
+            margin: 12px auto calc(env(safe-area-inset-bottom, 0px) + 18px);
+            display: flex;
+            flex-direction: column;
+            border-radius: 22px;
+            border: 1px solid rgba(17, 24, 39, 0.12);
+            background: rgba(15, 23, 42, 0.94);
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.28);
+            overflow: hidden;
+            backdrop-filter: blur(16px);
+        }
+
+        .duty-sync-debug-dock.hidden {
+            display: none;
+        }
+
+        .duty-sync-debug-dock.minimized {
+            height: auto;
+            width: min(calc(100vw - 20px), 980px);
+        }
+
+        .duty-sync-debug-dock.minimized .duty-sync-debug-dock-body {
+            display: none;
+        }
+
+        .duty-sync-debug-dock-header {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .duty-sync-debug-dock-title-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            padding: 8px 10px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .duty-sync-debug-dock-state {
+            color: rgba(232, 248, 242, 0.92);
+            font-size: 0.74rem;
+            font-weight: 650;
+            letter-spacing: 0.01em;
+            text-transform: none;
+        }
+
+        .duty-sync-debug-dock-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .duty-sync-debug-dock-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .duty-sync-debug-dock-button {
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.08);
+            color: #f8fafc;
+            border-radius: 10px;
+            padding: 6px 10px;
+            font-size: 0.74rem;
+            font-weight: 650;
+        }
+
+        .duty-sync-debug-dock-body {
+            flex: 1;
+            min-height: 0;
+            margin: 0;
+            padding: 12px;
+            overflow: auto;
+            color: #d6f5eb;
+            background: transparent;
+            font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        @media (max-width: 720px) {
+            .duty-sync-debug-dock {
+                width: calc(100vw - 14px);
+                height: min(42vh, 340px);
+                border-radius: 18px;
+            }
+
+            .duty-sync-debug-dock-header {
+                padding: 9px 10px;
+            }
+
+            .duty-sync-debug-dock-body {
+                padding: 10px;
+                font-size: 11px;
+            }
+        }
+        {% endif %}
     </style>
 </head>
 <body>
@@ -1996,7 +2390,7 @@
             <div class="brand">
                 <div class="brand-text">
                     <div class="brand-kicker">Built for Dr. Goren</div>
-                    <h1 class="brand-title">OB-GYN Resident Support</h1>
+                    <h1 class="brand-title">OB-GYN<br>Resident Support</h1>
                 </div>
             </div>
             <div class="topbar-meta">
@@ -2021,24 +2415,14 @@
                                 </svg>
                             </button>
                             <div id="settings-panel" class="settings-panel" role="menu" aria-label="Scheduling settings">
-                                <div class="settings-section">
-                                    <span class="settings-label">Calendar Sync</span>
-                                    <div class="calendar-copy">
-                                        <span id="calendar-label" class="calendar-label">Calendar Sync: Not connected</span>
-                                    </div>
-                                </div>
                                 <button id="calendar-action" class="calendar-action" onclick="toggleGoogleCalendarConnection()">Connect Google</button>
-                                <div class="settings-section">
-                                    <span class="settings-label">Duty Sync</span>
-                                    <div class="calendar-copy">
-                                        <span id="duty-sync-label" class="calendar-label">Duty schedule: Not connected</span>
-                                        <span id="duty-sync-details" class="calendar-subcopy">Connect the test duty sheet once from Settings.</span>
-                                    </div>
-                                </div>
                                 <button id="duty-sync-action" class="calendar-action" onclick="handleDutySyncPrimaryAction()">Connect Sheet</button>
                                 <button id="duty-sync-secondary-action" class="calendar-action secondary" onclick="disconnectDutySync()" hidden>Disconnect Sheet</button>
-                                <button id="duty-sync-push-action" class="calendar-action secondary" onclick="enableDutySyncNotifications()" hidden>Enable notifications</button>
-                                <button id="duty-sync-push-test-action" class="calendar-action secondary" onclick="sendDutySyncTestPush()" hidden>Send test push</button>
+                                <span id="calendar-label" hidden></span>
+                                <span id="duty-sync-label" hidden></span>
+                                <span id="duty-sync-details" hidden></span>
+                                <button id="duty-sync-push-action" hidden onclick="enableDutySyncNotifications()"></button>
+                                <button id="duty-sync-push-test-action" hidden onclick="sendDutySyncTestPush()"></button>
                             </div>
                         </div>
                     </div>
@@ -2075,7 +2459,6 @@
 
         <div id="entry-guidance" class="entry-guidance">Ask or choose a quick action</div>
         <div id="study-cards-shell" class="study-cards-shell"></div>
-
         <footer class="composer-shell">
             <div class="composer-card">
                 <div id="composer-mode-strip" class="composer-mode-strip">
@@ -2159,9 +2542,15 @@
         let dutySyncForegroundWatcherTimer = null;
         let dutySyncForegroundWatcherKnownReviewKey = null;
         let lastConsumedDutySyncServerFallbackKey = null;
+        let lastNotifiedDutySyncReviewKey = null;
+        let lastSeenDutySyncSwDebugId = null;
+        let initialAppLoadCompleted = false;
         let dutySyncStartupDebugLine = "No startup decision yet.";
         let dutySyncLastCheckedDebugLine = "No last_checked formatting yet.";
         let dutySyncDebugPanelOpen = false;
+        let dutySyncDebugDockVisible = false;
+        let dutySyncDebugDockMinimized = false;
+        const dutyReminderFallbackMaxAgeMs = 120000;
         let dutySyncFlowTraceId = null;
         let dutySyncSwVersion = "unknown";
         const pullShowThreshold = 12;
@@ -2169,6 +2558,9 @@
         const studyCardsCacheKey = "entry_study_cards_{{ app_version }}";
         const dutySyncPollingIntervalMs = "{{ app_env }}" === "production" ? 45 * 60 * 1000 : 5 * 60 * 1000;
         const dutySyncDevLogStorageKey = "duty-sync-dev-console";
+        const dutySyncLastNotifiedReviewStorageKey = "duty-sync-last-notified-review";
+        const dutySyncDebugDockVisibleStorageKey = "duty-sync-debug-dock-visible";
+        const dutySyncDebugDockMinimizedStorageKey = "duty-sync-debug-dock-minimized";
         const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
         const dutySyncSwBridgeMarker = "[DutySyncSWDebug] BRIDGE_OK";
         const dutySyncRenderSnapshotPrefix = "[DutySyncRenderDebugSnapshot]";
@@ -2741,7 +3133,11 @@
                 });
                 const data = await response.json();
                 setThinkingState(false);
-                appendAssistantMessage(data.reply, data.status === "error" ? "error" : "system");
+                if (data && data.duty_reminder_card) {
+                    appendDutyReminderCard(data.duty_reminder_card);
+                } else {
+                    appendAssistantMessage(data.reply, data.status === "error" ? "error" : "system");
+                }
                 if (data && data.status === "google_reconnect_required") {
                     updateCalendarUi({ available: true, connected: false, requires_reconnect: true });
                 }
@@ -2938,6 +3334,9 @@
         let activeDutyReview = null;
         let pendingDutySyncReviewId = null;
         let pendingDutySyncReviewUpdatedAt = null;
+        let pendingDutyReminderDutyKey = null;
+        let pendingDutyReminderKind = null;
+        let dutyReminderOpenPromise = null;
         let dutySyncTraceId = null;
         let lastOpenedDutySyncReviewKey = null;
         let pendingDutySyncInlineReview = null;
@@ -3407,19 +3806,33 @@
             return openEntries;
         }
 
+        function isRelevantDutySyncDebugEntry(entry) {
+            const message = String((entry && entry.message) || "");
+            return (
+                message.includes("push event received")
+                || message.includes("notification data created")
+                || message.includes("fallback reminder context")
+                || message.includes("notificationclick")
+                || message.includes("reminder load")
+            );
+        }
+
         async function renderDutySyncDebugConsole() {
             {% if app_env != "production" %}
             const node = document.getElementById("duty-sync-debug-log");
             if (!node) return;
             const entries = await getMergedDutySyncDebugEntries();
-            const openEntries = getLatestDutySyncOpenFlowEntries(entries);
-            const blocks = openEntries.map((entry) => formatDutySyncOpenDebugEntry(entry));
+            const recentEntries = entries.filter((entry) => isRelevantDutySyncDebugEntry(entry)).slice(-80);
+            const blocks = recentEntries.map((entry) =>
+                `${entry.ts || ""} ${entry.message || ""}${entry.payload && Object.keys(entry.payload).length ? ` ${JSON.stringify(entry.payload)}` : ""}`
+            );
             const versionBlock = [
                 `[DutySyncVersion]`,
                 `APP_VERSION: {{ app_version }}`,
                 `SW_VERSION: ${dutySyncSwVersion || "unknown"}`,
+                `ENTRY_COUNT: ${recentEntries.length}`,
             ].join("\n");
-            const body = blocks.length ? blocks.join("\n") : buildDutySyncOpenDebugFallback(entries, openEntries);
+            const body = blocks.length ? blocks.join("\n") : "Waiting for Duty Sync debug events...";
             node.textContent = `${versionBlock}\n\n${body}`;
             node.scrollTop = node.scrollHeight;
             {% endif %}
@@ -3460,14 +3873,24 @@
 
         async function copyDutySyncDebugLogs() {
             {% if app_env != "production" %}
-            const mergedEntries = await getMergedDutySyncDebugEntries();
-            const text = mergedEntries
-                .map((entry) => `${entry.ts} ${entry.message}${entry.payload ? ` ${JSON.stringify(entry.payload)}` : ""}`)
-                .join("\n");
+            const logNode = document.getElementById("duty-sync-debug-log");
+            const text = logNode ? String(logNode.textContent || "").trim() : "";
             try {
-                await copyDutySyncText(text);
-                logDutySyncRuntime("debug console copied");
+                const copied = await copyDutySyncText(text);
+                const state = document.getElementById("duty-sync-debug-dock-state");
+                if (state) {
+                    state.textContent = copied ? "Logs copied" : "Copy failed";
+                }
+                if (copied) {
+                    logDutySyncRuntime("debug console copied");
+                } else {
+                    logDutySyncRuntime("debug console copy failed", { error: "copy returned false" });
+                }
             } catch (error) {
+                const state = document.getElementById("duty-sync-debug-dock-state");
+                if (state) {
+                    state.textContent = "Copy failed";
+                }
                 logDutySyncRuntime("debug console copy failed", { error: String(error) });
             }
             {% endif %}
@@ -3590,7 +4013,7 @@
 
         async function copyDutySyncText(text) {
             {% if app_env != "production" %}
-            if (navigator.clipboard && window.isSecureContext) {
+            if (navigator.clipboard) {
                 try {
                     await navigator.clipboard.writeText(text);
                     return true;
@@ -3598,26 +4021,71 @@
                     // Fall through to the legacy copy path below.
                 }
             }
-            const textarea = document.createElement("textarea");
-            textarea.value = text || "";
-            textarea.setAttribute("readonly", "");
-            textarea.style.position = "fixed";
-            textarea.style.opacity = "0";
-            textarea.style.pointerEvents = "none";
-            textarea.style.top = "0";
-            textarea.style.left = "0";
-            document.body.appendChild(textarea);
-            textarea.focus();
-            textarea.select();
-            textarea.setSelectionRange(0, textarea.value.length);
             try {
-                const copied = document.execCommand("copy");
-                if (!copied) {
-                    throw new Error("execCommand copy failed");
+                const textarea = document.createElement("textarea");
+                textarea.value = text || "";
+                textarea.setAttribute("readonly", "");
+                textarea.style.position = "absolute";
+                textarea.style.left = "-9999px";
+                textarea.style.top = `${window.scrollY || 0}px`;
+                textarea.style.fontSize = "16px";
+                textarea.style.opacity = "0.01";
+                document.body.appendChild(textarea);
+
+                const isiOS = /ipad|iphone|ipod/i.test(navigator.userAgent)
+                    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+                if (isiOS) {
+                    const range = document.createRange();
+                    range.selectNodeContents(textarea);
+                    const selection = window.getSelection();
+                    if (selection) {
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                    }
+                    textarea.setSelectionRange(0, textarea.value.length);
+                } else {
+                    textarea.focus();
+                    textarea.select();
+                    textarea.setSelectionRange(0, textarea.value.length);
                 }
-                return true;
-            } finally {
-                textarea.remove();
+
+                const copied = document.execCommand("copy");
+                if (textarea.isConnected) {
+                    textarea.remove();
+                }
+                if (copied) {
+                    return true;
+                }
+            } catch (_error) {
+                // Try a second fallback with a contenteditable node for mobile Safari edge cases.
+            }
+
+            try {
+                const node = document.createElement("div");
+                node.textContent = text || "";
+                node.contentEditable = "true";
+                node.style.position = "absolute";
+                node.style.left = "-9999px";
+                node.style.top = `${window.scrollY || 0}px`;
+                node.style.whiteSpace = "pre-wrap";
+                node.style.webkitUserSelect = "text";
+                document.body.appendChild(node);
+
+                const range = document.createRange();
+                range.selectNodeContents(node);
+                const selection = window.getSelection();
+                if (selection) {
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
+                const copied = document.execCommand("copy");
+                if (node.isConnected) {
+                    node.remove();
+                }
+                return !!copied;
+            } catch (_error) {
+                return false;
             }
             {% else %}
             return false;
@@ -3808,10 +4276,119 @@
             }
         }
 
+        function loadLastNotifiedDutySyncReviewKey() {
+            try {
+                const raw = localStorage.getItem(dutySyncLastNotifiedReviewStorageKey);
+                return raw || null;
+            } catch (_error) {
+                return null;
+            }
+        }
+
+        function persistLastNotifiedDutySyncReviewKey(reviewKey) {
+            lastNotifiedDutySyncReviewKey = reviewKey || null;
+            try {
+                if (reviewKey) {
+                    localStorage.setItem(dutySyncLastNotifiedReviewStorageKey, reviewKey);
+                } else {
+                    localStorage.removeItem(dutySyncLastNotifiedReviewStorageKey);
+                }
+            } catch (_error) {
+                return;
+            }
+        }
+
+        function shouldHandleBackgroundDutySyncReview(review) {
+            const reviewKey = getDutySyncReviewIdentityKey(review);
+            if (!reviewKey) return true;
+            if (!lastNotifiedDutySyncReviewKey) {
+                lastNotifiedDutySyncReviewKey = loadLastNotifiedDutySyncReviewKey();
+            }
+            if (lastNotifiedDutySyncReviewKey === reviewKey) {
+                return false;
+            }
+            persistLastNotifiedDutySyncReviewKey(reviewKey);
+            return true;
+        }
+
+        function loadDutySyncDebugDockPreferences() {
+            {% if app_env != "production" %}
+            try {
+                dutySyncDebugDockVisible = localStorage.getItem(dutySyncDebugDockVisibleStorageKey) === "1";
+                dutySyncDebugDockMinimized = localStorage.getItem(dutySyncDebugDockMinimizedStorageKey) === "1";
+            } catch (_error) {
+                dutySyncDebugDockVisible = false;
+                dutySyncDebugDockMinimized = false;
+            }
+            {% endif %}
+        }
+
+        function persistDutySyncDebugDockPreferences() {
+            {% if app_env != "production" %}
+            try {
+                localStorage.setItem(dutySyncDebugDockVisibleStorageKey, dutySyncDebugDockVisible ? "1" : "0");
+                localStorage.setItem(dutySyncDebugDockMinimizedStorageKey, dutySyncDebugDockMinimized ? "1" : "0");
+            } catch (_error) {
+                return;
+            }
+            {% endif %}
+        }
+
+        function renderDutySyncDebugDockState() {
+            {% if app_env != "production" %}
+            const dock = document.getElementById("duty-sync-debug-dock");
+            const state = document.getElementById("duty-sync-debug-dock-state");
+            const minimizeButton = document.getElementById("duty-sync-debug-minimize");
+            if (!dock || !state || !minimizeButton) return;
+            dock.classList.toggle("hidden", !dutySyncDebugDockVisible);
+            dock.classList.toggle("minimized", !!dutySyncDebugDockMinimized);
+            if (!dutySyncDebugDockVisible) {
+                state.textContent = "Hidden";
+            } else if (dutySyncDebugDockMinimized) {
+                state.textContent = "Minimized";
+            } else {
+                state.textContent = "Visible";
+            }
+            minimizeButton.textContent = dutySyncDebugDockMinimized ? "Expand" : "Minimize";
+            {% endif %}
+        }
+
+        function toggleDutySyncDebugDockMinimize() {
+            {% if app_env != "production" %}
+            dutySyncDebugDockMinimized = !dutySyncDebugDockMinimized;
+            persistDutySyncDebugDockPreferences();
+            renderDutySyncDebugDockState();
+            {% endif %}
+        }
+
+        window.showDutySyncDebugDock = function () {
+            {% if app_env != "production" %}
+            dutySyncDebugDockVisible = true;
+            dutySyncDebugDockMinimized = false;
+            persistDutySyncDebugDockPreferences();
+            renderDutySyncDebugDockState();
+            renderDutySyncDebugConsole();
+            {% endif %}
+        };
+
+        window.hideDutySyncDebugDock = function () {
+            {% if app_env != "production" %}
+            dutySyncDebugDockVisible = false;
+            persistDutySyncDebugDockPreferences();
+            renderDutySyncDebugDockState();
+            {% endif %}
+        };
+
+        function appendDutySyncDebugMessage(message, payload = null) {
+            {% if app_env != "production" %}
+            return;
+            {% endif %}
+        }
+
         function loadDutySyncPushContextFromIndexedDb() {
             return new Promise((resolve) => {
                 try {
-                    const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 1);
+                    const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 2);
                     request.onupgradeneeded = () => {
                         const db = request.result;
                         if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
@@ -3843,7 +4420,9 @@
         function saveDutySyncPushContext(context) {
             try {
                 localStorage.setItem("duty-sync-push-context", JSON.stringify(context || {}));
-                persistDutySyncPushDebug(`[SW/App] stored push context review_id=${(context || {}).review_id || ""} updated_at=${(context || {}).updated_at || ""}`);
+                persistDutySyncPushDebug(
+                    `[SW/App] stored push context review_id=${(context || {}).review_id || ""} updated_at=${(context || {}).updated_at || ""} duty_key=${(context || {}).duty_key || ""} reminder_kind=${(context || {}).reminder_kind || ""} pending_open=${(context || {}).pending_open ? "1" : "0"}`
+                );
             } catch (_error) {
                 return;
             }
@@ -3852,16 +4431,27 @@
         function storeDutySyncPushContextFromUrl(urlValue, sourceLabel) {
             try {
                 const parsedUrl = new URL(urlValue || window.location.href, window.location.origin);
-                if (parsedUrl.searchParams.get("duty_sync_review") !== "1") return false;
-                const reviewId = parsedUrl.searchParams.get("duty_sync_review_id") || "";
-                const updatedAt = parsedUrl.searchParams.get("duty_sync_review_updated_at") || "";
-                saveDutySyncPushContext({
-                    active: true,
-                    review_id: reviewId,
-                    updated_at: updatedAt,
-                    source: sourceLabel || "push_url"
-                });
-                return true;
+                if (parsedUrl.searchParams.get("duty_sync_review") === "1") {
+                    const reviewId = parsedUrl.searchParams.get("duty_sync_review_id") || "";
+                    const updatedAt = parsedUrl.searchParams.get("duty_sync_review_updated_at") || "";
+                    saveDutySyncPushContext({
+                        active: true,
+                        review_id: reviewId,
+                        updated_at: updatedAt,
+                        source: sourceLabel || "push_url"
+                    });
+                    return true;
+                }
+                if (parsedUrl.searchParams.get("duty_reminder") === "1") {
+                    saveDutySyncPushContext({
+                        active: true,
+                        duty_key: parsedUrl.searchParams.get("duty_key") || "",
+                        reminder_kind: parsedUrl.searchParams.get("reminder_kind") || "taxi",
+                        source: sourceLabel || "push_url"
+                    });
+                    return true;
+                }
+                return false;
             } catch (_error) {
                 return false;
             }
@@ -3870,6 +4460,29 @@
         function clearDutySyncPushContext() {
             try {
                 localStorage.removeItem("duty-sync-push-context");
+            } catch (_error) {
+                // Continue and try to clear the IndexedDB fallback as well.
+            }
+            try {
+                const request = indexedDB.open(DUTY_SYNC_PUSH_DB_NAME, 2);
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
+                        db.createObjectStore(DUTY_SYNC_PUSH_STORE_NAME);
+                    }
+                };
+                request.onsuccess = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(DUTY_SYNC_PUSH_STORE_NAME)) {
+                        db.close();
+                        return;
+                    }
+                    const transaction = db.transaction(DUTY_SYNC_PUSH_STORE_NAME, "readwrite");
+                    const store = transaction.objectStore(DUTY_SYNC_PUSH_STORE_NAME);
+                    store.delete("latest");
+                    transaction.oncomplete = () => db.close();
+                    transaction.onerror = () => db.close();
+                };
             } catch (_error) {
                 return;
             }
@@ -3887,6 +4500,36 @@
                 persistDutySyncPushDebug("[App] no stored push context found");
                 logDutySyncRuntime("restoreDutySyncPushContextFromStorage failure", { payload: context });
                 return false;
+            }
+            if (context.duty_key) {
+                const deliveredAt = context.delivered_at ? new Date(context.delivered_at) : null;
+                const deliveredAtMs = deliveredAt && !Number.isNaN(deliveredAt.getTime()) ? deliveredAt.getTime() : null;
+                const withinReminderFallbackWindow =
+                    context.pending_open
+                    && deliveredAtMs
+                    && (Date.now() - deliveredAtMs) <= dutyReminderFallbackMaxAgeMs;
+                if (context.pending_open && !withinReminderFallbackWindow) {
+                    clearDutySyncPushContext();
+                    persistDutySyncPushDebug("[App] stale reminder context cleared");
+                    logDutySyncRuntime("restoreDutySyncPushContextFromStorage failure", {
+                        payload: context,
+                        reason: "stale_reminder_context",
+                    });
+                    return false;
+                }
+                pendingDutySyncReviewDeepLink = false;
+                pendingDutyReminderDutyKey = context.duty_key || pendingDutyReminderDutyKey;
+                pendingDutyReminderKind = context.reminder_kind || pendingDutyReminderKind || "taxi";
+                clearDutySyncPushContext();
+                persistDutySyncPushDebug(
+                    `[App] restored reminder context duty_key=${pendingDutyReminderDutyKey || ""} reminder_kind=${pendingDutyReminderKind || ""} pending_open=${context.pending_open ? "1" : "0"}`
+                );
+                logDutySyncRuntime("restoreDutySyncPushContextFromStorage success", {
+                    payload: context,
+                    duty_key: pendingDutyReminderDutyKey || null,
+                    reminder_kind: pendingDutyReminderKind || null,
+                });
+                return true;
             }
             pendingDutySyncStatusRecovery = false;
             pendingDutySyncReviewDeepLink = true;
@@ -4112,6 +4755,7 @@
                 action.textContent = "Connect Google Calendar";
                 action.disabled = false;
                 action.dataset.unavailable = "true";
+                action.classList.add("secondary");
                 renderDutySyncPrimaryBanner();
                 return;
             }
@@ -4122,12 +4766,15 @@
             if (status && status.requires_reconnect) {
                 label.textContent = "Calendar Sync: Reconnect needed";
                 action.textContent = "Reconnect Google Calendar";
+                action.classList.add("secondary");
             } else if (status.connected) {
                 label.textContent = "Calendar Sync: Connected";
                 action.textContent = "Disconnect Calendar";
+                action.classList.remove("secondary");
             } else {
                 label.textContent = "Calendar Sync: Not connected";
                 action.textContent = "Connect Google Calendar";
+                action.classList.add("secondary");
             }
             renderDutySyncPrimaryBanner();
         }
@@ -4185,8 +4832,43 @@
             if (dutyPushRegistration) {
                 return dutyPushRegistration;
             }
-            dutyPushRegistration = await navigator.serviceWorker.register("/static/sw.js");
+            dutyPushRegistration = await navigator.serviceWorker.register("/duty-sync-sw.js?v={{ app_version }}", { scope: "/" });
+            if (dutyPushRegistration && typeof dutyPushRegistration.update === "function") {
+                dutyPushRegistration.update().catch(() => {});
+            }
             return dutyPushRegistration;
+        }
+
+        async function forceRefreshDutyPushServiceWorker() {
+            if (!("serviceWorker" in navigator)) {
+                return null;
+            }
+            try {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const registration of registrations || []) {
+                    try {
+                        if (registration.pushManager) {
+                            const subscription = await registration.pushManager.getSubscription();
+                            if (subscription) {
+                                await subscription.unsubscribe().catch(() => {});
+                            }
+                        }
+                    } catch (_error) {
+                        // Keep going so we can still unregister stale registrations.
+                    }
+                    await registration.unregister().catch(() => {});
+                }
+            } catch (_error) {
+                // Fall through and try a clean register anyway.
+            }
+            dutyPushRegistration = null;
+            dutySyncSwVersion = "unknown";
+            const registration = await navigator.serviceWorker.register("/duty-sync-sw.js?v={{ app_version }}", { scope: "/" });
+            if (registration && typeof registration.update === "function") {
+                registration.update().catch(() => {});
+            }
+            dutyPushRegistration = registration;
+            return registration;
         }
 
         function base64ToUint8Array(base64String) {
@@ -4194,6 +4876,38 @@
             const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
             const rawData = window.atob(base64);
             return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+        }
+
+        async function syncDutyPushSubscriptionToServer(options = {}) {
+            const forceRefresh = !!(options && options.forceRefresh);
+            const registration = forceRefresh
+                ? await forceRefreshDutyPushServiceWorker()
+                : await registerDutyPushServiceWorker();
+            const statusResponse = await fetch("/calendar/duty-sync/push/status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: sessionId })
+            });
+            const status = await statusResponse.json();
+            if (!status.available || !status.public_key) {
+                return { status: "unavailable", reply: "Web push is not configured in this environment." };
+            }
+            let subscription = await registration.pushManager.getSubscription();
+            if (!subscription) {
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: base64ToUint8Array(status.public_key)
+                });
+            }
+            const subscribeResponse = await fetch("/calendar/duty-sync/push/subscribe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    subscription: subscription.toJSON()
+                })
+            });
+            return await subscribeResponse.json();
         }
 
         async function enableDutySyncNotifications() {
@@ -4207,33 +4921,7 @@
                     appendAssistantMessage("Notification permission was not granted.", "error");
                     return;
                 }
-                const registration = await registerDutyPushServiceWorker();
-                const statusResponse = await fetch("/calendar/duty-sync/push/status", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ session_id: sessionId })
-                });
-                const status = await statusResponse.json();
-                if (!status.available || !status.public_key) {
-                    appendAssistantMessage("Web push is not configured in this environment.", "error");
-                    return;
-                }
-                let subscription = await registration.pushManager.getSubscription();
-                if (!subscription) {
-                    subscription = await registration.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: base64ToUint8Array(status.public_key)
-                    });
-                }
-                const subscribeResponse = await fetch("/calendar/duty-sync/push/subscribe", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        subscription: subscription.toJSON()
-                    })
-                });
-                const subscribeData = await subscribeResponse.json();
+                const subscribeData = await syncDutyPushSubscriptionToServer({ forceRefresh: true });
                 appendAssistantMessage(subscribeData.reply || "Duty Sync push alerts are enabled.", subscribeData.status === "subscribed" ? "system" : "error");
                 hideSessionBanner();
                 const pushAction = document.getElementById("duty-sync-push-action");
@@ -4259,40 +4947,23 @@
                 return false;
             }
             try {
-                const registration = await registerDutyPushServiceWorker();
-                const subscription = await registration.pushManager.getSubscription();
+                let registration = await registerDutyPushServiceWorker();
+                let subscription = await registration.pushManager.getSubscription();
                 if (!subscription) {
                     persistDutySyncPushDebug("[App] existing push subscription found=no");
-                    return false;
+                    const subscribeData = await syncDutyPushSubscriptionToServer({ forceRefresh: true });
+                    persistDutySyncPushDebug(`[App] subscribe response=${subscribeData.status === "subscribed" ? "success" : "failure"}`);
+                    return subscribeData.status === "subscribed";
                 }
                 persistDutySyncPushDebug("[App] existing push subscription found=yes");
-                const statusResponse = await fetch("/calendar/duty-sync/push/status", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ session_id: sessionId })
-                });
-                const status = await statusResponse.json();
-                if (!status.available) {
-                    persistDutySyncPushDebug("[App] subscribe request sent to server=no");
-                    persistDutySyncPushDebug("[App] subscribe response=failure");
-                    persistDutySyncPushDebug("[App] server error=Web push is not configured in this environment.");
-                    return false;
-                }
-                if (status.subscribed) {
-                    persistDutySyncPushDebug("[App] subscribe request sent to server=no");
-                    persistDutySyncPushDebug("[App] subscribe response=success (already subscribed)");
-                    return true;
-                }
                 persistDutySyncPushDebug("[App] subscribe request sent to server=yes");
-                const subscribeResponse = await fetch("/calendar/duty-sync/push/subscribe", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        subscription: subscription.toJSON()
-                    })
-                });
-                const subscribeData = await subscribeResponse.json();
+                let subscribeData = await syncDutyPushSubscriptionToServer({ forceRefresh: false });
+                if (subscribeData.status !== "subscribed") {
+                    registration = await forceRefreshDutyPushServiceWorker();
+                    subscription = registration ? await registration.pushManager.getSubscription().catch(() => null) : null;
+                    persistDutySyncPushDebug("[App] force refresh registration attempted=yes");
+                    subscribeData = await syncDutyPushSubscriptionToServer({ forceRefresh: false });
+                }
                 persistDutySyncPushDebug(`[App] subscribe response=${subscribeData.status === "subscribed" ? "success" : "failure"}`);
                 if (subscribeData.debug) {
                     persistDutySyncPushDebug(`[App] server save debug=${JSON.stringify(subscribeData.debug)}`);
@@ -4641,9 +5312,12 @@
             const params = new URLSearchParams(window.location.search);
             const requestedMode = params.get("app_mode");
             const reviewDeepLink = params.get("duty_sync_review");
+            const dutyReminderDeepLink = params.get("duty_reminder");
             const calendarStatus = params.get("calendar_status");
             pendingDutySyncReviewId = params.get("duty_sync_review_id");
             pendingDutySyncReviewUpdatedAt = params.get("duty_sync_review_updated_at");
+            pendingDutyReminderDutyKey = params.get("duty_key");
+            pendingDutyReminderKind = params.get("reminder_kind") || "taxi";
             dutySyncTraceId = params.get("duty_sync_trace_id");
             pendingDutySyncInlineReview = loadPendingDutySyncInlineReview();
             const swTrace = (params.get("duty_sync_trace_sw") || "").split("|").filter(Boolean);
@@ -4680,7 +5354,7 @@
             }
             const shouldOpenSchedulingOnLoad =
                 requestedMode === "scheduling" &&
-                (reviewDeepLink === "1" || !!calendarStatus);
+                (reviewDeepLink === "1" || dutyReminderDeepLink === "1" || !!calendarStatus);
             appMode = shouldOpenSchedulingOnLoad ? "scheduling" : "clinical";
             dutySyncStartupDebugLine = `[App] startup mode=${appMode} requested_mode=${requestedMode || "none"} scheduling_forced=${shouldOpenSchedulingOnLoad} clinical_default=${!shouldOpenSchedulingOnLoad}`;
             dutySyncDebug(
@@ -4798,13 +5472,12 @@
             logDutySyncRuntime("restorePushContextAndResumeDutySyncReview start", { href: window.location.href, source });
             const restored = await restoreDutySyncPushContextFromStorage();
             const shouldResume = shouldResumeDutySyncReviewOnLifecycleEvent();
-            const hasRealPushContext =
-                !!restored ||
+            const hasReviewPushContext =
                 pendingDutySyncReviewDeepLink ||
                 !!pendingDutySyncReviewId ||
                 !!pendingDutySyncReviewUpdatedAt ||
                 isDutySyncPushDeepLinkUrlActive();
-            if (hasRealPushContext) {
+            if (hasReviewPushContext) {
                 transitionImmediatelyToSchedulingForPush(`restorePushContextAndResumeDutySyncReview:${source}`);
             }
             if (shouldResume) {
@@ -4814,7 +5487,7 @@
                 logDutySyncRuntime("restorePushContextAndResumeDutySyncReview exit", { reason: "resumed" });
                 return;
             }
-            pendingDutySyncStatusRecovery = !restored && hasRealPushContext;
+            pendingDutySyncStatusRecovery = !restored && hasReviewPushContext;
             logDutySyncRuntime("FLOW_RESUME_SKIPPED", { source: "resume", reason: "no_resume" });
             if (pendingDutySyncStatusRecovery) {
                 if (appMode !== "scheduling") {
@@ -4827,6 +5500,7 @@
                 return;
             }
             const shouldRunForegroundRecovery =
+                initialAppLoadCompleted &&
                 (source === "pageshow" || source === "visibilitychange" || source === "focus")
                 && document.visibilityState === "visible";
             logDutySyncForegroundRecoveryDebug("pendingDutySyncForegroundRecovery set", {
@@ -5089,7 +5763,9 @@
                 action.textContent = "Connect Sheet";
                 action.disabled = true;
                 action.hidden = false;
+                action.classList.add("secondary");
                 secondaryAction.hidden = true;
+                secondaryAction.classList.remove("secondary");
                 pushAction.hidden = true;
                 pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
@@ -5103,7 +5779,9 @@
                 details.textContent = buildDutySyncDetails(status, status.details || "Reconnect Google Calendar to keep Duty Sync connected.");
                 action.textContent = "Reconnect Google Calendar";
                 action.hidden = false;
+                action.classList.add("secondary");
                 secondaryAction.hidden = true;
+                secondaryAction.classList.remove("secondary");
                 pushAction.hidden = true;
                 pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
@@ -5116,7 +5794,9 @@
                 details.textContent = buildDutySyncDetails(status, status.details || "Connect your duty sheet to turn on automatic sync.");
                 action.textContent = "Connect Sheet";
                 action.hidden = false;
+                action.classList.add("secondary");
                 secondaryAction.hidden = true;
+                secondaryAction.classList.remove("secondary");
                 pushAction.hidden = true;
                 pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
@@ -5131,6 +5811,7 @@
             details.textContent = buildDutySyncDetails(status, baseText);
             action.hidden = true;
             secondaryAction.hidden = false;
+            secondaryAction.classList.remove("secondary");
             pushAction.hidden = true;
             pushTestAction.hidden = true;
             scheduleDutySyncPolling();
@@ -5427,14 +6108,26 @@
                         appendDutyReviewCard(data.pending_review, "generic_pending_review", "checkDutySync.interactive");
                     }
                     if (isBackground && data.has_new_pending_review) {
-                        appendDutySyncInAppNotice(data.reply || "Duty Sync found updates that need review.");
-                        appendDutyReviewCard(data.pending_review, "poll", "checkDutySync.background");
-                        maybeShowDutySyncBrowserNotification(data.pending_review, data.reply);
+                        const shouldNotify = shouldHandleBackgroundDutySyncReview(data.pending_review);
+                        appendDutySyncDebugMessage("client background poll saw pending review", {
+                            review_id: data.pending_review.review_id || null,
+                            updated_at: data.pending_review.updated_at || null,
+                            should_notify: shouldNotify,
+                        });
+                        if (shouldNotify) {
+                            appendDutySyncInAppNotice(data.reply || "Duty Sync found updates that need review.");
+                            appendDutyReviewCard(data.pending_review, "poll", "checkDutySync.background");
+                            maybeShowDutySyncBrowserNotification(data.pending_review, data.reply);
+                        }
                     }
                 } else if (!isBackground && data.reply) {
+                    persistLastNotifiedDutySyncReviewKey(null);
                     appendAssistantMessage(data.reply, data.status === "error" ? "error" : "system");
                 } else if (!isBackground && !data.reply) {
+                    persistLastNotifiedDutySyncReviewKey(null);
                     appendAssistantMessage("Duty Sync checked the latest roster.", "system");
+                } else if (!data.pending_review) {
+                    persistLastNotifiedDutySyncReviewKey(null);
                 }
                 await refreshDutySyncStatus();
             } catch (error) {
@@ -5514,9 +6207,287 @@
             const parsed = parseDutyDateTime(duty.start_datetime || duty.date || change.date || "");
             const weekdayText = parsed ? dutyWeekdayFormatter.format(parsed) : "";
             const dateText = formatDutyDate(duty.start_datetime || duty.date || change.date || "");
-            const titleParts = String(duty.title || duty.role || "").split("/").map((part) => part.trim()).filter(Boolean);
-            const titleText = titleParts.join(" · ");
+            const titleText = formatDutyMemberRoleLabel({
+                display_title: duty.title || duty.role || ""
+            });
             return [weekdayText, dateText, titleText].filter(Boolean).join(" · ");
+        }
+
+        function resolveDutyReviewTaxiState(change) {
+            return (change && change.taxi_reminder) || {
+                taxi_reminder_enabled: true,
+                taxi_status: "pending",
+                last_snoozed_for_date: null,
+            };
+        }
+
+        function formatTaxiStatusLabel(taxiState) {
+            const state = taxiState || {};
+            if (state.taxi_status === "ordered") return "Ordered";
+            if (state.taxi_status === "not_needed") return "Not needed";
+            if (state.taxi_reminder_enabled === false) return "Off";
+            if (state.last_snoozed_for_date) return "Reminder set for tomorrow";
+            return "Pending";
+        }
+
+        function formatDutyMemberRoleLabel(member) {
+            const raw = String((member && (member.display_title || member.title || member.role)) || "").trim();
+            if (!raw) return "Duty";
+            const roleDisplayMap = {
+                "מיון": "מיון גניקולוגי",
+                "ב": "תורנית ב׳",
+                "תורן ד": "תורנית ד׳",
+                "תורן חצי": "תורנית חצי"
+            };
+            if (roleDisplayMap[raw]) {
+                return roleDisplayMap[raw];
+            }
+            if (raw.startsWith("תורנות/")) {
+                const trimmed = raw.slice("תורנות/".length).trim() || raw;
+                return roleDisplayMap[trimmed] || trimmed;
+            }
+            if (raw.startsWith("תורנות ")) {
+                const trimmed = raw.slice("תורנות ".length).trim() || raw;
+                return roleDisplayMap[trimmed] || trimmed;
+            }
+            return raw;
+        }
+
+        function removeExistingDutyReminderCard(dutyKey) {
+            const existing = document.getElementById(`duty-reminder-${dutyKey}`);
+            if (existing) {
+                existing.remove();
+            }
+        }
+
+        async function updateDutyReviewTaxiToggle(reviewId, dutyKey, duty, enabled, card) {
+            try {
+                const chat = document.getElementById("chat");
+                const previousScrollTop = chat ? chat.scrollTop : null;
+                const response = await fetch("/calendar/duty-sync/review/taxi-toggle", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        review_id: reviewId,
+                        duty_key: dutyKey,
+                        enabled,
+                        duty: duty || {}
+                    })
+                });
+                const data = await response.json();
+                if (data.pending_review) {
+                    if (card) card.remove();
+                    appendDutyReviewCard(
+                        data.pending_review,
+                        "generic_pending_review",
+                        "updateDutyReviewTaxiToggle",
+                        { preserveScrollPosition: true, previousScrollTop }
+                    );
+                    await refreshDutySyncStatus();
+                    return;
+                }
+                if (data.reply) {
+                    appendAssistantMessage(data.reply, data.status === "updated" ? "system" : "error");
+                }
+            } catch (error) {
+                appendAssistantMessage("Error: " + error, "error");
+            }
+        }
+
+        function appendDutyReminderCard(reminderCard, confirmationText = "") {
+            if (!reminderCard || !reminderCard.duty_key) return;
+            removeExistingDutyReminderCard(reminderCard.duty_key);
+            hideStudyCards();
+            refreshEntryGuidanceVisibility();
+
+            const chat = document.getElementById("chat");
+            const card = document.createElement("div");
+            card.className = "duty-reminder-card";
+            card.id = `duty-reminder-${reminderCard.duty_key}`;
+
+            const title = document.createElement("p");
+            title.className = "draft-title";
+            title.textContent = reminderCard.title || "Duty reminder";
+            card.appendChild(title);
+
+            if (reminderCard.subtitle) {
+                const subtitle = document.createElement("p");
+                subtitle.className = "duty-reminder-subtitle";
+                if (reminderCard.read_only_taxi) {
+                    subtitle.classList.add("prominent");
+                }
+                subtitle.textContent = reminderCard.subtitle;
+                card.appendChild(subtitle);
+            }
+
+            if (reminderCard.date_line) {
+                const dateLine = document.createElement("p");
+                dateLine.className = "duty-reminder-date";
+                dateLine.textContent = reminderCard.date_line;
+                card.appendChild(dateLine);
+            }
+
+            const taxiState = reminderCard.taxi || {};
+            if (reminderCard.hide_taxi_status !== true) {
+                const statusRow = document.createElement("div");
+                statusRow.className = "duty-reminder-status";
+                statusRow.innerHTML = `
+                    <div class="duty-reminder-status-label">Taxi status</div>
+                    <div class="duty-reminder-status-value">${escapeHtml(reminderCard.taxi_status_label || formatTaxiStatusLabel(taxiState))}</div>
+                `;
+                card.appendChild(statusRow);
+            }
+
+            if (confirmationText) {
+                const confirmation = document.createElement("div");
+                confirmation.className = "duty-reminder-confirmation";
+                confirmation.textContent = confirmationText;
+                card.appendChild(confirmation);
+            }
+
+            const team = Array.isArray(reminderCard.team) ? reminderCard.team : [];
+            if (team.length) {
+                const teamSection = document.createElement("div");
+                teamSection.className = "duty-reminder-team";
+                if (reminderCard.team_heading) {
+                    const heading = document.createElement("p");
+                    heading.className = "duty-reminder-team-heading";
+                    heading.textContent = reminderCard.team_heading;
+                    teamSection.appendChild(heading);
+                }
+                team.forEach((member) => {
+                    const row = document.createElement("div");
+                    row.className = "duty-reminder-team-row";
+                    row.innerHTML = `
+                        <div class="duty-reminder-team-role">${escapeHtml(formatDutyMemberRoleLabel(member))}</div>
+                        <div class="duty-reminder-team-separator" aria-hidden="true">·</div>
+                        <div class="duty-reminder-team-name">${escapeHtml(member.person_name || "Unknown")}</div>
+                    `;
+                    teamSection.appendChild(row);
+                });
+                card.appendChild(teamSection);
+            }
+
+            if (reminderCard.closing_note) {
+                const closingNote = document.createElement("p");
+                closingNote.className = "duty-reminder-closing-note";
+                closingNote.textContent = reminderCard.closing_note;
+                card.appendChild(closingNote);
+            }
+
+            const canShowTaxiActions =
+                !reminderCard.read_only_taxi &&
+                taxiState.taxi_reminder_enabled !== false &&
+                taxiState.taxi_status === "pending" &&
+                Array.isArray(reminderCard.actions) &&
+                reminderCard.actions.length;
+            if (canShowTaxiActions) {
+                const actions = document.createElement("div");
+                actions.className = "draft-actions";
+                reminderCard.actions.forEach((item) => {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = item.action === "not_needed" ? "ghost-button" : "secondary-button";
+                    button.textContent = item.label;
+                    button.addEventListener("click", async () => {
+                        button.disabled = true;
+                        try {
+                            const response = await fetch("/calendar/duty-sync/reminder/action", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    session_id: sessionId,
+                                    duty_key: reminderCard.duty_key,
+                                    action: item.action
+                                })
+                            });
+                            const data = await response.json();
+                            if (data.reminder_card) {
+                                appendDutyReminderCard(data.reminder_card, data.confirmation || "");
+                                return;
+                            }
+                            appendAssistantMessage(data.reply || "Duty reminder updated.", data.status === "updated" ? "system" : "error");
+                        } catch (error) {
+                            appendAssistantMessage("Error: " + error, "error");
+                        }
+                    });
+                    actions.appendChild(button);
+                });
+                card.appendChild(actions);
+            }
+
+            chat.appendChild(card);
+            card.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
+            scrollChatToBottom();
+        }
+
+        async function openDutyReminderContextByKey(dutyKey, reminderKind = "taxi", source = "duty_reminder") {
+            if (!dutyKey) return;
+            if (dutyReminderOpenPromise) return dutyReminderOpenPromise;
+            dutyReminderOpenPromise = (async () => {
+                const startedAt = performance.now();
+                const modeChanged = appMode !== "scheduling";
+                if (modeChanged) {
+                    appMode = "scheduling";
+                    renderModeState();
+                }
+                resetChatSurfaceForPushModeTransition();
+                logDutySyncRuntime("reminder load start", {
+                    duty_key: dutyKey,
+                    reminder_kind: reminderKind,
+                    source,
+                });
+                try {
+                    const response = await fetch("/calendar/duty-sync/reminder/load", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            session_id: sessionId,
+                            duty_key: dutyKey,
+                            reminder_kind: reminderKind
+                        })
+                    });
+                    const data = await response.json();
+                    logDutySyncRuntime("reminder load complete", {
+                        duty_key: dutyKey,
+                        reminder_kind: reminderKind,
+                        source,
+                        client_total_ms: Math.round(performance.now() - startedAt),
+                        server_timing: data && data.debug_timing ? data.debug_timing : null,
+                        status: data && data.status ? data.status : "unknown",
+                    });
+                    if (data && data.reminder_card) {
+                        appendDutyReminderCard(data.reminder_card);
+                    } else {
+                        appendAssistantMessage(data.reply || "That duty reminder could not be opened right now.", "error");
+                    }
+                } catch (error) {
+                    logDutySyncRuntime("reminder load failed", {
+                        duty_key: dutyKey,
+                        reminder_kind: reminderKind,
+                        source,
+                        client_total_ms: Math.round(performance.now() - startedAt),
+                        error: String(error),
+                    });
+                    appendAssistantMessage("Error: " + error, "error");
+                }
+                pendingDutyReminderDutyKey = null;
+                pendingDutyReminderKind = null;
+                clearDutySyncPushContext();
+                const params = new URLSearchParams(window.location.search);
+                params.delete("duty_reminder");
+                params.delete("reminder_kind");
+                params.delete("duty_key");
+                const nextQuery = params.toString();
+                const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
+                window.history.replaceState({}, document.title, nextUrl);
+            })();
+            try {
+                return await dutyReminderOpenPromise;
+            } finally {
+                dutyReminderOpenPromise = null;
+            }
         }
 
         function removeExistingDutyReviewCard(reviewId) {
@@ -5526,7 +6497,7 @@
             }
         }
 
-        function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown") {
+        function appendDutyReviewCard(review, renderSource = "generic_pending_review", renderCaller = "unknown", options = {}) {
             if (!review || !review.review_id) return;
             const renderReview = normalizeDutyReviewForRender(review);
             let selectedCalendarId = renderReview.selected_calendar ? renderReview.selected_calendar.provider_calendar_id : null;
@@ -5648,6 +6619,33 @@
                 }
 
                 item.appendChild(itemTitle);
+                const toggleDuty = change.new_duty || null;
+                if (toggleDuty && toggleDuty.duty_key) {
+                    const taxiState = resolveDutyReviewTaxiState(change);
+                    const toggleRow = document.createElement("label");
+                    toggleRow.className = "duty-review-toggle-row";
+                    const toggleCopy = document.createElement("div");
+                    toggleCopy.className = "duty-review-toggle-copy";
+
+                    const toggleLabel = document.createElement("p");
+                    toggleLabel.className = "duty-review-toggle-label";
+                    toggleLabel.textContent = "Taxi reminder";
+
+                    const toggleInput = document.createElement("input");
+                    toggleInput.type = "checkbox";
+                    toggleInput.className = "duty-review-toggle-control";
+                    toggleInput.checked = taxiState.taxi_reminder_enabled !== false;
+                    toggleInput.setAttribute("role", "switch");
+                    toggleInput.setAttribute("aria-label", "Taxi reminder");
+                    toggleInput.addEventListener("change", () => {
+                        updateDutyReviewTaxiToggle(renderReview.review_id, toggleDuty.duty_key, toggleDuty, toggleInput.checked, card);
+                    });
+
+                    toggleCopy.appendChild(toggleLabel);
+                    toggleRow.appendChild(toggleCopy);
+                    toggleRow.appendChild(toggleInput);
+                    item.appendChild(toggleRow);
+                }
                 if (actions.childElementCount) {
                     item.appendChild(actions);
                 }
@@ -5767,8 +6765,14 @@
             card.appendChild(footerActions);
 
             chat.appendChild(card);
-            card.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
-            scrollChatToBottom();
+            if (options && options.preserveScrollPosition) {
+                if (typeof options.previousScrollTop === "number") {
+                    chat.scrollTop = options.previousScrollTop;
+                }
+            } else {
+                card.scrollIntoView({ block: "end", inline: "nearest", behavior: "auto" });
+                scrollChatToBottom();
+            }
         }
 
         async function toggleDutyReviewItem(reviewId, changeKey, card) {
@@ -6022,6 +7026,10 @@
 
             const stack = document.createElement("div");
             stack.className = "message-stack";
+            const isQuickResult = role === "assistant" && typeof html === "string" && html.includes("quick-result-card");
+            if (isQuickResult) {
+                stack.classList.add("quick-result-stack");
+            }
 
             const bubble = document.createElement("div");
             bubble.className = "bubble" + (variant ? ` ${variant}` : "");
@@ -6821,6 +7829,8 @@
                 appendAssistantMessage("Error: " + error, "error");
                 setComposerEnabled(true);
                 setStatus("Error");
+            } finally {
+                initialAppLoadCompleted = true;
             }
         }
 
@@ -6928,7 +7938,12 @@
                     switchAppMode("clinical");
                     return;
                 }
-                const assistantRow = appendAssistantMessage(data.reply);
+                let assistantRow = null;
+                if (data.duty_reminder_card) {
+                    appendDutyReminderCard(data.duty_reminder_card);
+                } else {
+                    assistantRow = appendAssistantMessage(data.reply);
+                }
                 if (data.scheduling_redirect_message) {
                     bindSchedulingRedirectMessage(assistantRow, data.scheduling_redirect_message);
                 }
@@ -7117,6 +8132,8 @@
         storeDutySyncPushContextFromUrl(window.location.href, "startup_url");
         restoreDutySyncPushContextFromStorage().catch(() => {});
         handleInitialDutySyncDeepLink();
+        loadDutySyncDebugDockPreferences();
+        renderDutySyncDebugDockState();
         logDutySyncRuntime("startup initialization complete", { href: window.location.href });
         renderDutySyncPushDebug();
         renderDutySyncDebugConsole();
@@ -7134,10 +8151,32 @@
                         dutySyncSwVersion = data.sw_version;
                     }
                     persistDutySyncSwDebugEntries(data.entries || []);
+                    {% if app_env != "production" %}
+                    const swEntries = Array.isArray(data.entries) ? data.entries : [];
+                    const newSwEntries = lastSeenDutySyncSwDebugId
+                        ? swEntries.filter((entry) => entry && entry.id && entry.id > lastSeenDutySyncSwDebugId)
+                        : swEntries.slice(-2);
+                    if (swEntries.length) {
+                        lastSeenDutySyncSwDebugId = swEntries[swEntries.length - 1].id || lastSeenDutySyncSwDebugId;
+                    }
+                    newSwEntries.forEach((entry) => {
+                        const message = String((entry && entry.message) || "");
+                        if (message.includes("push event received")) {
+                            appendDutySyncDebugMessage("service worker push received", entry.payload || {});
+                        }
+                        if (message.includes("notification data created")) {
+                            appendDutySyncDebugMessage("service worker notification shown", entry.payload || {});
+                        }
+                    });
+                    {% endif %}
                     renderDutySyncDebugConsole();
                     return;
                 }
                 if (data.type === "duty-sync-foreground-review-available") {
+                    appendDutySyncDebugMessage("service worker foreground review available", {
+                        review_id: data.review_id || null,
+                        updated_at: data.updated_at || null,
+                    });
                     if (document.visibilityState === "visible" && document.hasFocus()) {
                         pendingDutySyncForegroundPrompt = {
                             review_id: data.review_id || null,
@@ -7145,6 +8184,28 @@
                         };
                         renderDutySyncPrimaryBanner();
                     }
+                    return;
+                }
+                if (data.type === "duty-sync-open-reminder") {
+                    const targetUrl = data.url || "";
+                    dutySyncDebug("service worker reminder message received", { targetUrl });
+                    try {
+                        const parsedUrl = new URL(targetUrl, window.location.origin);
+                        if (parsedUrl.origin === window.location.origin) {
+                            const dutyKey = parsedUrl.searchParams.get("duty_key") || "";
+                            const reminderKind = parsedUrl.searchParams.get("reminder_kind") || "taxi";
+                            if (dutyKey) {
+                                pendingDutySyncReviewDeepLink = false;
+                                pendingDutyReminderDutyKey = dutyKey;
+                                pendingDutyReminderKind = reminderKind;
+                                await openDutyReminderContextByKey(dutyKey, reminderKind, "service_worker_message");
+                                return;
+                            }
+                        }
+                    } catch (_error) {
+                        // Fall back to location navigation below.
+                    }
+                    window.location.href = targetUrl || "/?app_mode=scheduling";
                     return;
                 }
                 if (data.type !== "duty-sync-open-review") return;
@@ -7282,16 +8343,19 @@
         registerDutyPushServiceWorker()
             .then(() => Promise.allSettled([requestDutySyncSwVersion(), requestDutySyncSwDebugBridge()]))
             .catch(() => {});
-        window.addEventListener("pageshow", () => {
+        window.addEventListener("pageshow", async () => {
             dutySyncDebug("pageshow fired", { href: window.location.href });
             persistDutySyncPushDebug("[Client] app resumed");
             ensureDutySyncFlowTraceId("resume", { source: "resume" }, true);
             logDutySyncRuntime("push/deep-link entry received", { source: "pageshow", href: window.location.href });
             storeDutySyncPushContextFromUrl(window.location.href, "pageshow_url");
             queueContextReentryPulse();
-            restorePushContextAndResumeDutySyncReview("pageshow").catch(() => {});
+            await restorePushContextAndResumeDutySyncReview("pageshow").catch(() => {});
+            if (initialAppLoadCompleted && !pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+                openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "pageshow");
+            }
         });
-        document.addEventListener("visibilitychange", () => {
+        document.addEventListener("visibilitychange", async () => {
             dutySyncDebug("visibilitychange fired", { visibilityState: document.visibilityState, href: window.location.href });
             if (document.visibilityState === "hidden") {
                 appWasBackgrounded = true;
@@ -7306,19 +8370,25 @@
                     queueContextReentryPulse();
                     appWasBackgrounded = false;
                 }
-                restorePushContextAndResumeDutySyncReview("visibilitychange").catch(() => {});
+                await restorePushContextAndResumeDutySyncReview("visibilitychange").catch(() => {});
+                if (initialAppLoadCompleted && !pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+                    openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "visibilitychange");
+                }
                 return;
             }
             stopDutySyncForegroundWatcher();
         });
-        window.addEventListener("focus", () => {
+        window.addEventListener("focus", async () => {
             if (document.visibilityState !== "visible") return;
             startDutySyncForegroundWatcher();
             if (appWasBackgrounded) {
                 queueContextReentryPulse();
                 appWasBackgrounded = false;
             }
-            restorePushContextAndResumeDutySyncReview("focus").catch(() => {});
+            await restorePushContextAndResumeDutySyncReview("focus").catch(() => {});
+            if (initialAppLoadCompleted && !pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+                openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "focus");
+            }
         });
         if (pendingDutySyncReviewDeepLink) {
             storeDutySyncPushContextFromUrl(window.location.href, "pending_deeplink_url");
@@ -7340,7 +8410,11 @@
         setupPullToRefreshOption();
         {% endif %}
         handleCalendarCallbackStatus();
-        bootstrapSession();
+        bootstrapSession().finally(() => {
+            if (!pendingDutySyncReviewDeepLink && pendingDutyReminderDutyKey) {
+                openDutyReminderContextByKey(pendingDutyReminderDutyKey, pendingDutyReminderKind || "taxi", "initial");
+            }
+        });
         if (document.visibilityState === "visible") {
             startDutySyncForegroundWatcher();
         }

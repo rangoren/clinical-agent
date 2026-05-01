@@ -10,6 +10,7 @@ import requests
 
 from db import (
     duty_sync_connections_collection,
+    duty_sync_managed_events_collection,
     duty_sync_snapshots_collection,
     scheduled_events_collection,
     scheduling_drafts_collection,
@@ -180,13 +181,27 @@ DUTY_TEAM_TIME_KEYWORDS = (
     "עכשיו",
 )
 DUTY_ROLE_ENGLISH_MAP = {
-    "חדר לידה": "Labor ward duty",
-    "קבלה": "Admissions duty",
-    "מיון": "ER duty",
-    "ב": "B duty",
-    "תורן חצי": "Half duty",
-    "תורן ד": "D duty",
-    "מחלקות": "Department duty",
+    "חדר לידה": "חדר לידה",
+    "קבלה": "קבלה",
+    "מיון": "מיון גניקולוגי",
+    "ב": "תורנית ב׳",
+    "תורן חצי": "תורנית חצי",
+    "תורן ד": "תורנית ד׳",
+    "מחלקות": "מחלקות",
+}
+HEBREW_MONTH_NAMES = {
+    1: "ינואר",
+    2: "פברואר",
+    3: "מרץ",
+    4: "אפריל",
+    5: "מאי",
+    6: "יוני",
+    7: "יולי",
+    8: "אוגוסט",
+    9: "ספטמבר",
+    10: "אוקטובר",
+    11: "נובמבר",
+    12: "דצמבר",
 }
 UNRESOLVED_SCHEDULING_REPLY = "I’m not sure I understood that. Try asking it a bit more clearly."
 TIME_WORD_HOURS = {
@@ -2690,6 +2705,47 @@ def _load_latest_duty_team_roster(session_id):
     return best_payload
 
 
+def _load_duty_team_roster_for_date(session_id, target_date):
+    connection_doc = duty_sync_connections_collection.find_one({"session_id": session_id, "is_connected": True}) or {}
+    raw_sheet_reference = connection_doc.get("sheet_id") or connection_doc.get("sheet_url") or ""
+    if not normalize_text(raw_sheet_reference):
+        return None
+    sheet_id = normalize_sheet_id(raw_sheet_reference)
+    if not sheet_id:
+        return None
+
+    metadata = _fetch_duty_sheet_metadata(session_id, sheet_id) or {}
+    month_name = HEBREW_MONTH_NAMES.get(target_date.month)
+    candidate_tabs = []
+    fallback_tabs = []
+    for sheet in metadata.get("sheets") or []:
+        tab_name = normalize_text((sheet.get("properties") or {}).get("title"))
+        if not tab_name or RELEVANT_TAB_TOKEN not in tab_name:
+            continue
+        if month_name and month_name in tab_name:
+            candidate_tabs.append(tab_name)
+        else:
+            fallback_tabs.append(tab_name)
+    ordered_tabs = candidate_tabs + [tab for tab in fallback_tabs if tab not in candidate_tabs]
+    for candidate_tab in ordered_tabs:
+        cached = _get_cached_duty_team_payload(session_id, sheet_id, candidate_tab)
+        if cached:
+            payload = cached
+        else:
+            values = _fetch_duty_sheet_values(session_id, sheet_id, candidate_tab)
+            parsed = _extract_roster_assignments(candidate_tab, values)
+            payload = {
+                "sheet_id": sheet_id,
+                "tab_name": candidate_tab,
+                "latest_date": parsed.get("latest_date"),
+                "assignments": parsed.get("assignments") or [],
+            }
+            _store_cached_duty_team_payload(session_id, sheet_id, candidate_tab, payload)
+        if any(item.get("date") == target_date for item in payload.get("assignments") or []):
+            return payload
+    return None
+
+
 def _is_on_duty_lookup_request(user_message):
     lowered = (user_message or "").strip().lower()
     if not lowered:
@@ -2774,20 +2830,55 @@ def _resolve_on_duty_lookup_window(user_message):
         target_date = (now + timedelta(days=1)).date()
         return "tomorrow", target_date
     if "tonight" in lowered or "tonigh" in lowered or "הלילה" in lowered:
-        return "tonight", now.date()
+        target_date = (now - timedelta(days=1)).date() if now.hour < 8 else now.date()
+        return "tonight", target_date
     if "now" in lowered or "עכשיו" in lowered:
-        return "now", now.date()
+        target_date = (now - timedelta(days=1)).date() if now.hour < 8 else now.date()
+        return "now", target_date
     return "today", now.date()
 
 
 def _format_on_duty_header(window_key, target_date):
     if window_key == "now":
-        return f"On duty now · {target_date.strftime('%A, %d.%m')}"
+        return "On duty now"
     if window_key == "tonight":
-        return f"Tonight · {target_date.strftime('%A, %d.%m')} duty team"
+        return "Tonight's duty team"
     if window_key == "tomorrow":
-        return f"Tomorrow · {target_date.strftime('%A, %d.%m')} duty team"
-    return f"Today · {target_date.strftime('%A, %d.%m')} duty team"
+        return "Tomorrow's duty team"
+    return "Today's duty team"
+
+
+def _format_on_duty_team_heading(window_key):
+    if window_key == "now":
+        return "Who's on right now"
+    if window_key == "tonight":
+        return "Who's on tonight"
+    if window_key == "tomorrow":
+        return "Who's on tomorrow"
+    return "Who's on today"
+
+
+def _build_on_duty_card(window_key, target_date, matched, roster_payload):
+    date_line = target_date.strftime("%A · %d %b %Y")
+    return {
+        "card_type": "duty_reminder",
+        "reminder_kind": "on_duty_lookup",
+        "duty_key": f"on-duty-{window_key}-{target_date.isoformat()}",
+        "title": _format_on_duty_header(window_key, target_date),
+        "subtitle": date_line,
+        "date_line": "",
+        "team_heading": _format_on_duty_team_heading(window_key),
+        "team": [
+            {
+                "role": item.get("role"),
+                "display_title": item.get("role_label") or item.get("title") or item.get("role") or "Duty",
+                "person_name": item.get("person_name") or "Unknown",
+            }
+            for item in matched
+        ],
+        "hide_taxi_status": True,
+        "read_only_taxi": True,
+    }
 
 
 def _build_on_duty_reply(session_id, user_message):
@@ -2808,8 +2899,9 @@ def _build_on_duty_reply(session_id, user_message):
             "scheduling_draft": None,
         }
 
+    window_key, target_date = _resolve_on_duty_lookup_window(user_message)
     try:
-        roster_payload = _load_latest_duty_team_roster(session_id)
+        roster_payload = _load_duty_team_roster_for_date(session_id, target_date)
     except GoogleCalendarReconnectRequiredError:
         return {
             "reply": "Reconnect Google Calendar in Settings, then I can check who is on duty.",
@@ -2824,11 +2916,10 @@ def _build_on_duty_reply(session_id, user_message):
     assignments = (roster_payload or {}).get("assignments") or []
     if not assignments:
         return {
-            "reply": "I couldn’t find duty team data in the current duty sheet.",
+            "reply": "I couldn’t find duty team data for that date in the duty sheet.",
             "scheduling_draft": None,
         }
 
-    window_key, target_date = _resolve_on_duty_lookup_window(user_message)
     local_now = _local_now()
     if window_key == "now":
         matched = [
@@ -2843,19 +2934,15 @@ def _build_on_duty_reply(session_id, user_message):
     if not matched:
         timeframe = "right now" if window_key == "now" else ("tonight" if window_key == "tonight" else ("tomorrow" if window_key == "tomorrow" else "today"))
         return {
-            "reply": (
-                f"I couldn’t find anyone on duty {timeframe}.\n\n"
-                f"Based on {normalize_text((roster_payload or {}).get('tab_name') or 'the latest duty sheet')}."
-            ),
+            "reply": f"I couldn’t find anyone on duty {timeframe}.",
             "scheduling_draft": None,
         }
-
-    lines = [_format_on_duty_header(window_key, target_date)]
-    for item in matched:
-        lines.append(f"- {item.get('role_label') or 'Duty'} · {item.get('person_name') or 'Unknown'}")
-    lines.append("")
-    lines.append(f"Based on {normalize_text((roster_payload or {}).get('tab_name') or 'the latest duty sheet')}.")
-    return {"reply": "\n".join(lines), "scheduling_draft": None}
+    matched.sort(key=lambda item: (RELEVANT_ROLE_HEADERS.index(item["role"]) if item.get("role") in RELEVANT_ROLE_HEADERS else 999, item.get("person_name") or ""))
+    return {
+        "reply": "",
+        "scheduling_draft": None,
+        "duty_reminder_card": _build_on_duty_card(window_key, target_date, matched, roster_payload),
+    }
 
 
 def _build_shift_summary_for_date(session_id, target_date):
@@ -3424,6 +3511,44 @@ def _load_historical_duty_records(session_id, category, start_date, end_date):
     return sorted(matched, key=lambda item: item["date"])
 
 
+def _load_month_overview_managed_duty_records(session_id, start_date, end_date):
+    if not session_id or not start_date or not end_date:
+        return []
+    start_iso = start_date.isoformat()
+    end_iso = end_date.isoformat()
+    docs = list(
+        duty_sync_managed_events_collection.find(
+            {
+                "session_id": session_id,
+                "status": {"$ne": "deleted"},
+                "date": {"$gte": start_iso, "$lte": end_iso},
+            },
+            {
+                "date": 1,
+                "title": 1,
+                "role": 1,
+            },
+        ).sort([("date", 1), ("role", 1)])
+    )
+    records = []
+    for doc in docs:
+        raw_date = str(doc.get("date") or "").strip()
+        if not raw_date:
+            continue
+        try:
+            duty_date = datetime.fromisoformat(raw_date).date()
+        except ValueError:
+            continue
+        records.append(
+            {
+                "date": duty_date,
+                "title": doc.get("title") or doc.get("role") or "תורנות",
+                "role": doc.get("role") or "",
+            }
+        )
+    return records
+
+
 def _format_quick_card_date(duty_date):
     return duty_date.strftime("%a %d %b")
 
@@ -3446,27 +3571,64 @@ def _quick_row(label, value):
     return {"label": label, "value": value}
 
 
-def _quick_duty_rows(records, limit=5):
+def _quick_three_part_row(left_label, middle_label, value):
+    return {
+        "label": left_label,
+        "middle_label": middle_label,
+        "value": value,
+    }
+
+
+def _quick_duty_role_label(raw_title):
+    normalized = normalize_text(raw_title)
+    if not normalized:
+        return "תורנות"
+    if normalized.startswith("תורנות/"):
+        normalized = normalized.replace("תורנות/", "", 1).strip() or normalized
+    if normalized.startswith("תורנות "):
+        normalized = normalized.replace("תורנות ", "", 1).strip() or normalized
+    if "/" in normalized:
+        normalized = normalized.split("/")[-1].strip() or normalized
+    role_display_map = {
+        "מיון": "מיון גניקולוגי",
+        "ב": "תורנית ב׳",
+        "תורן חצי": "תורנית חצי",
+        "תורן ד": "תורנית ד׳",
+    }
+    return role_display_map.get(normalized) or normalized
+
+
+def _quick_duty_rows(records, limit=None, three_part=False):
     rows = []
-    for item in records[:limit]:
-        category = _classify_duty_event_title(item.get("title"))
-        value = {
-            "regular": "Duty",
-            "half": "Half Duty",
-            "department": "Department Duty",
-        }.get(category) or "Duty"
-        rows.append(_quick_row(_format_quick_card_row_date(item["date"]), value))
+    normalized_records = list(records or [])
+    if limit is not None:
+        normalized_records = normalized_records[:limit]
+    for item in normalized_records:
+        value = _quick_duty_role_label(item.get("role") or item.get("title"))
+        duty_date = item["date"]
+        if three_part:
+            rows.append(
+                _quick_three_part_row(
+                    duty_date.strftime("%a"),
+                    duty_date.strftime("%b %d"),
+                    value,
+                )
+            )
+        else:
+            rows.append(_quick_row(_format_quick_card_row_date(duty_date), value))
     return rows
 
 
 def _quick_breakdown_rows(rows, limit=3):
     normalized = list(rows or [])
+    if limit is None:
+        return normalized, 0
     return normalized[:limit], max(0, len(normalized) - limit)
 
 
-def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_secondary=None, support_line=None, sections=None, breakdown_rows=None, progress=None):
+def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_secondary=None, support_line=None, sections=None, breakdown_rows=None, progress=None, card_class=None):
     parts = [
-        '<div class="quick-result-card">',
+        f'<div class="quick-result-card{f" {html_escape(card_class)}" if card_class else ""}">',
         '<div class="quick-result-header">',
         f'<p class="quick-result-title">{html_escape(title)}</p>',
         f'<p class="quick-result-subline">{html_escape(subline)}</p>',
@@ -3486,7 +3648,11 @@ def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_s
     if support_line:
         parts.append(f'<p class="quick-result-support">{html_escape(support_line)}</p>')
     parts.append('</div>')
-    metadata_lines = [line for line in (metadata_lines or []) if line]
+    metadata_lines = [
+        line
+        for line in (metadata_lines or [])
+        if line and normalize_text(line) != "Deduplicated by start date"
+    ]
     if metadata_lines:
         parts.append('<div class="quick-result-meta">')
         for line in metadata_lines:
@@ -3499,17 +3665,26 @@ def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_s
         parts.append('<div class="quick-result-section">')
         parts.append(f'<p class="quick-result-section-title">{html_escape(section.get("label") or "")}</p>')
         for row in rows:
-            parts.append(
-                '<div class="quick-result-row">'
-                f'<span class="quick-result-row-label">{html_escape(str(row.get("label") or ""))}</span>'
-                f'<span class="quick-result-row-value">{html_escape(str(row.get("value") or ""))}</span>'
-                '</div>'
-            )
-        if section.get("more_count"):
-            parts.append(f'<div class="quick-result-more">+{int(section["more_count"])} more</div>')
+            if row.get("middle_label"):
+                parts.append(
+                    '<div class="quick-result-row">'
+                    f'<span class="quick-result-row-label">{html_escape(str(row.get("label") or ""))}</span>'
+                    '<span class="quick-result-row-dot" aria-hidden="true">&middot;</span>'
+                    f'<span class="quick-result-row-middle">{html_escape(str(row.get("middle_label") or ""))}</span>'
+                    '<span class="quick-result-row-dot" aria-hidden="true">&middot;</span>'
+                    f'<span class="quick-result-row-value">{html_escape(str(row.get("value") or ""))}</span>'
+                    '</div>'
+                )
+            else:
+                parts.append(
+                    '<div class="quick-result-row">'
+                    f'<span class="quick-result-row-label">{html_escape(str(row.get("label") or ""))}</span>'
+                    f'<span class="quick-result-row-value">{html_escape(str(row.get("value") or ""))}</span>'
+                    '</div>'
+                )
         parts.append('</div>')
     if breakdown_rows:
-        visible_rows, more_count = _quick_breakdown_rows(breakdown_rows, limit=3)
+        visible_rows, more_count = _quick_breakdown_rows(breakdown_rows, limit=None)
         if visible_rows:
             parts.append('<div class="quick-result-section">')
             for label, value in visible_rows:
@@ -3519,8 +3694,6 @@ def _quick_result_html(title, subline, main_primary, metadata_lines=None, main_s
                     f'<span class="quick-result-row-value">{html_escape(str(value))}</span>'
                     '</div>'
                 )
-            if more_count:
-                parts.append(f'<div class="quick-result-more">+{int(more_count)} more</div>')
             parts.append('</div>')
     parts.append('</div>')
     return "".join(parts)
@@ -3530,14 +3703,14 @@ def _render_month_overview_quick_result(session_id):
     today = _utcnow().date()
     start_date = today.replace(day=1)
     end_date = today.replace(day=monthrange(today.year, today.month)[1])
-    records = _load_historical_duty_records(session_id, "regular", start_date, end_date)
+    records = _load_month_overview_managed_duty_records(session_id, start_date, end_date)
     if not records:
         return {
             "reply": _quick_result_html(
                 "This Month",
                 "Completed vs upcoming",
                 "No duties found",
-                metadata_lines=[_format_quick_date_range(start_date, end_date), "Deduplicated by start date"],
+                metadata_lines=[_format_quick_date_range(start_date, end_date)],
             ),
             "scheduling_draft": None,
         }
@@ -3547,14 +3720,12 @@ def _render_month_overview_quick_result(session_id):
     if completed:
         sections.append({
             "label": "Completed",
-            "rows": _quick_duty_rows(completed, limit=5),
-            "more_count": max(0, len(completed) - 5),
+            "rows": _quick_duty_rows(completed, three_part=True),
         })
     if upcoming:
         sections.append({
             "label": "Upcoming",
-            "rows": _quick_duty_rows(upcoming, limit=5),
-            "more_count": max(0, len(upcoming) - 5),
+            "rows": _quick_duty_rows(upcoming, three_part=True),
         })
     total = len(records)
     return {
@@ -3562,10 +3733,11 @@ def _render_month_overview_quick_result(session_id):
             "This Month",
             "Completed vs upcoming",
             f"{len(completed)} of {total} completed",
-            metadata_lines=[_format_quick_date_range(start_date, end_date), "Deduplicated by start date"],
+            metadata_lines=[_format_quick_date_range(start_date, end_date)],
             main_secondary=f"{len(upcoming)} upcoming",
             sections=sections,
             progress=(len(completed) / total) if total else 0,
+            card_class="month-overview-card",
         ),
         "scheduling_draft": None,
     }
@@ -3584,7 +3756,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
                 f"Sundays in {today.year}",
                 f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
                 f"{count} Sunday duties",
-                metadata_lines=["Deduplicated by start date"],
+                metadata_lines=[],
                 breakdown_rows=[("Sunday", count)],
             ),
             "scheduling_draft": None,
@@ -3601,7 +3773,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
                 "Monthly Average",
                 f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
                 f"{average:.1f} duties/month",
-                metadata_lines=[f"{months_with_data} month{'s' if months_with_data != 1 else ''} with data", "Deduplicated by start date"],
+                metadata_lines=[f"{months_with_data} month{'s' if months_with_data != 1 else ''} with data"],
                 breakdown_rows=[(datetime.strptime(month_key, "%Y-%m").strftime("%B"), count) for month_key, count in sorted(month_counts.items())[-6:]],
             ),
             "scheduling_draft": None,
@@ -3618,7 +3790,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
                 "Busiest Weekday",
                 f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
                 f"Busiest weekday: {busiest_name}",
-                metadata_lines=["Deduplicated by start date"],
+                metadata_lines=[],
                 main_secondary=f"{weekday_counts.get(busiest, 0)} duties",
                 breakdown_rows=[(datetime(2026, 4, 20 + idx).strftime("%A"), count) for idx, count in sorted_rows[:6]],
             ),
@@ -3635,7 +3807,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
                     "Peak Month",
                     f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
                     "No duties found",
-                    metadata_lines=["Deduplicated by start date"],
+                    metadata_lines=[],
                 ),
                 "scheduling_draft": None,
             }
@@ -3646,7 +3818,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
                 "Peak Month",
                 f"Regular duties · {_format_quick_date_range(current_year_start, current_year_end)}",
                 f"Busiest month: {month_label}",
-                metadata_lines=["Deduplicated by start date"],
+                metadata_lines=[],
                 main_secondary=f"{month_counts[busiest_month]} duties",
                 breakdown_rows=[(datetime.strptime(month_key, "%Y-%m").strftime("%B"), count) for month_key, count in sorted(month_counts.items(), key=lambda item: item[1], reverse=True)[:6]],
             ),
@@ -3694,7 +3866,7 @@ def _render_dynamic_stat_quick_result(session_id, quick_key):
             "Year Comparison",
             "Regular duties year over year",
             "Flat year over year" if direction == "flat" else f"{abs(delta)} duties {direction}",
-            metadata_lines=[f"Jan 1 – {today.strftime('%b')} {today.day} each year", "Deduplicated by start date"],
+            metadata_lines=[f"Jan 1 – {today.strftime('%b')} {today.day} each year"],
             main_secondary=f"{this_year_count} this year · {last_year_count} last year",
             breakdown_rows=[("This year", this_year_count), ("Last year", last_year_count)],
         ),
@@ -3713,7 +3885,7 @@ def _render_planning_quick_result(session_id, quick_key):
                 "Planning Insight",
                 "Looking ahead",
                 "No duties found",
-                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                metadata_lines=["Upcoming duties only"],
             ),
             "scheduling_draft": None,
         }
@@ -3725,9 +3897,9 @@ def _render_planning_quick_result(session_id, quick_key):
                 "Next Week",
                 "Looking ahead",
                 f"{len(next_week_dates)} duties next week",
-                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                metadata_lines=["Upcoming duties only"],
                 support_line=", ".join(duty_date.strftime("%b %d") for duty_date in next_week_dates[:3]) if next_week_dates else None,
-                breakdown_rows=[(_format_quick_card_row_date(duty_date), "Duty") for duty_date in next_week_dates[:6]],
+                breakdown_rows=[(_format_quick_card_row_date(duty_date), "תורנות") for duty_date in next_week_dates[:6]],
             ),
             "scheduling_draft": None,
         }
@@ -3748,7 +3920,7 @@ def _render_planning_quick_result(session_id, quick_key):
                 "Schedule Gaps",
                 "Looking ahead",
                 main_primary,
-                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                metadata_lines=["Upcoming duties only"],
                 support_line=support_line,
             ),
             "scheduling_draft": None,
@@ -3763,7 +3935,7 @@ def _render_planning_quick_result(session_id, quick_key):
                 "Busy Stretch",
                 "Looking ahead",
                 main_primary,
-                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                metadata_lines=["Upcoming duties only"],
                 support_line=support_line,
             ),
             "scheduling_draft": None,
@@ -3775,7 +3947,7 @@ def _render_planning_quick_result(session_id, quick_key):
                 "Weekend Load",
                 "Looking ahead",
                 f"{weekend_count} weekend duties ahead",
-                metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+                metadata_lines=["Upcoming duties only"],
             ),
             "scheduling_draft": None,
         }
@@ -3790,7 +3962,7 @@ def _render_planning_quick_result(session_id, quick_key):
             "Forward Pattern",
             "Looking ahead",
             f"Busiest ahead: {month_label}",
-            metadata_lines=["Upcoming duties only", "Deduplicated by start date"],
+            metadata_lines=["Upcoming duties only"],
             main_secondary=f"{month_counts[busiest_month]} duties",
             breakdown_rows=[(datetime.strptime(month_key, "%Y-%m").strftime("%B"), count) for month_key, count in sorted(month_counts.items())[:6]],
         ),

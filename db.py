@@ -25,6 +25,8 @@ duty_sync_connections_collection = db["duty_sync_connections"]
 duty_sync_snapshots_collection = db["duty_sync_snapshots"]
 duty_sync_pending_reviews_collection = db["duty_sync_pending_reviews"]
 duty_sync_managed_events_collection = db["duty_sync_managed_events"]
+duty_reminder_states_collection = db["duty_reminder_states"]
+duty_reminder_push_logs_collection = db["duty_reminder_push_logs"]
 push_subscriptions_collection = db["push_subscriptions"]
 study_content_collection = db["study_content"]
 study_user_state_collection = db["study_user_state"]
@@ -51,6 +53,10 @@ def _ensure_indexes():
         duty_sync_snapshots_collection.create_index([("session_id", ASCENDING), ("approved_at", ASCENDING)])
         duty_sync_pending_reviews_collection.create_index([("session_id", ASCENDING), ("status", ASCENDING), ("created_at", ASCENDING)])
         duty_sync_managed_events_collection.create_index([("session_id", ASCENDING), ("duty_key", ASCENDING)], unique=True)
+        duty_reminder_states_collection.create_index([("session_id", ASCENDING), ("duty_key", ASCENDING)], unique=True)
+        duty_reminder_states_collection.create_index([("updated_at", ASCENDING)])
+        duty_reminder_push_logs_collection.create_index([("session_id", ASCENDING), ("notification_key", ASCENDING)], unique=True)
+        duty_reminder_push_logs_collection.create_index([("session_id", ASCENDING), ("local_day", ASCENDING), ("created_at", ASCENDING)])
         push_subscriptions_collection.create_index([("session_id", ASCENDING), ("endpoint", ASCENDING)], unique=True)
         push_subscriptions_collection.create_index([("updated_at", ASCENDING)])
         study_content_collection.create_index([("id", ASCENDING)], unique=True)

@@ -3,20 +3,500 @@ from __future__ import annotations
 import json
 import threading
 import time
-from datetime import datetime
+from datetime import date, datetime, time as dt_time, timedelta
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
-from db import duty_sync_connections_collection, push_subscriptions_collection
+from pymongo.errors import DuplicateKeyError
+
+from db import (
+    duty_reminder_push_logs_collection,
+    duty_reminder_states_collection,
+    duty_sync_connections_collection,
+    duty_sync_managed_events_collection,
+    push_subscriptions_collection,
+)
 from services.logging_service import log_event
 from settings import APP_BASE_URL, APP_ENV, WEB_PUSH_PRIVATE_KEY, WEB_PUSH_PUBLIC_KEY, WEB_PUSH_SUBJECT
 
 
 _push_poller_started = False
 _push_poller_lock = threading.Lock()
+APP_TIMEZONE = ZoneInfo("Asia/Jerusalem")
+QUIET_HOURS_START = 22
+QUIET_HOURS_END = 8
+QUIET_HOURS_RELEASE = dt_time(hour=8, minute=30)
+MAX_DUTY_FEATURE_PUSHES_PER_DAY = 2
+TAXI_STATUS_PENDING = "pending"
+TAXI_REMINDER_KIND = "taxi"
+TOMORROW_REMINDER_KIND = "tomorrow_duty"
 
 
 def web_push_configured():
     return bool(WEB_PUSH_PUBLIC_KEY and WEB_PUSH_PRIVATE_KEY and WEB_PUSH_SUBJECT)
+
+
+def _utcnow():
+    return datetime.utcnow()
+
+
+def _local_now():
+    return datetime.now(APP_TIMEZONE)
+
+
+def _parse_iso_datetime(raw_value):
+    if not raw_value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(raw_value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=APP_TIMEZONE)
+    return parsed.astimezone(APP_TIMEZONE)
+
+
+def _is_quiet_hours(local_dt):
+    if not local_dt:
+        return False
+    current_time = local_dt.timetz().replace(tzinfo=None)
+    return current_time >= dt_time(hour=QUIET_HOURS_START) or current_time < dt_time(hour=QUIET_HOURS_END)
+
+
+def _effective_send_time(local_dt):
+    if not local_dt:
+        return None
+    if not _is_quiet_hours(local_dt):
+        return local_dt
+    target_day = local_dt.date()
+    if local_dt.timetz().replace(tzinfo=None) >= dt_time(hour=QUIET_HOURS_START):
+        target_day = target_day + timedelta(days=1)
+    return datetime.combine(target_day, QUIET_HOURS_RELEASE, tzinfo=APP_TIMEZONE)
+
+
+def _feature_tracking_started_at(managed_doc):
+    return (
+        _parse_iso_datetime(managed_doc.get("last_synced_at"))
+        or _parse_iso_datetime(managed_doc.get("updated_at"))
+        or _parse_iso_datetime(managed_doc.get("created_at"))
+    )
+
+
+def _candidate_became_due_before_tracking(managed_doc, send_at_local):
+    tracking_started_at = _feature_tracking_started_at(managed_doc)
+    effective_send_at = _effective_send_time(send_at_local)
+    if not tracking_started_at or not effective_send_at:
+        return False
+    return tracking_started_at > effective_send_at
+
+
+def _notification_is_due(send_at_local, now_local):
+    effective_send_time = _effective_send_time(send_at_local)
+    if not effective_send_time or now_local < effective_send_time:
+        return False
+    if _is_quiet_hours(now_local):
+        return False
+    if now_local.date() > effective_send_time.date() and now_local.timetz().replace(tzinfo=None) < QUIET_HOURS_RELEASE:
+        return False
+    return True
+
+
+def _feature_push_count_for_day(session_id, local_day):
+    return duty_reminder_push_logs_collection.count_documents({"session_id": session_id, "local_day": local_day.isoformat()})
+
+
+def _feature_push_sent(session_id, notification_key):
+    return duty_reminder_push_logs_collection.find_one({"session_id": session_id, "notification_key": notification_key}) is not None
+
+
+def _record_feature_push_log(session_id, duty_key, notification_key, reminder_kind, title, body, sent_at_local):
+    now = _utcnow()
+    duty_reminder_push_logs_collection.update_one(
+        {"session_id": session_id, "notification_key": notification_key},
+        {
+            "$set": {
+                "session_id": session_id,
+                "duty_key": duty_key,
+                "notification_key": notification_key,
+                "reminder_kind": reminder_kind,
+                "title": title,
+                "body": body,
+                "local_day": sent_at_local.date().isoformat(),
+                "sent_at_local": sent_at_local.isoformat(),
+                "updated_at": now,
+            },
+            "$setOnInsert": {"created_at": now},
+        },
+        upsert=True,
+    )
+
+
+def _claim_feature_push_log(session_id, duty_key, notification_key, reminder_kind, title, body, scheduled_for_local):
+    now = _utcnow()
+    try:
+        duty_reminder_push_logs_collection.insert_one(
+            {
+                "session_id": session_id,
+                "duty_key": duty_key,
+                "notification_key": notification_key,
+                "reminder_kind": reminder_kind,
+                "title": title,
+                "body": body,
+                "local_day": scheduled_for_local.date().isoformat(),
+                "scheduled_for_local": scheduled_for_local.isoformat(),
+                "delivery_state": "claimed",
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        return True
+    except DuplicateKeyError:
+        return False
+
+
+def _release_feature_push_claim(session_id, notification_key):
+    duty_reminder_push_logs_collection.delete_one(
+        {
+            "session_id": session_id,
+            "notification_key": notification_key,
+            "delivery_state": "claimed",
+        }
+    )
+
+
+def _default_taxi_state():
+    return {"taxi_reminder_enabled": True, "taxi_status": TAXI_STATUS_PENDING}
+
+
+def _duty_open_url(reminder_kind, duty_key):
+    query = urlencode(
+        {
+            "app_mode": "scheduling",
+            "duty_reminder": "1",
+            "reminder_kind": reminder_kind,
+            "duty_key": duty_key or "",
+        }
+    )
+    return f"{APP_BASE_URL}/?{query}" if APP_BASE_URL else f"/?{query}"
+
+
+def _build_taxi_candidate(managed_doc, state_doc, days_before, send_hour, body_text, now_local, priority, reminder_kind_suffix):
+    start_local = _parse_iso_datetime(managed_doc.get("start_datetime"))
+    if not start_local or start_local <= now_local:
+        return None
+    state_doc = state_doc or _default_taxi_state()
+    if state_doc.get("duty_deleted"):
+        return None
+    if state_doc.get("taxi_reminder_enabled") is False:
+        return None
+    if state_doc.get("taxi_status") and state_doc.get("taxi_status") != TAXI_STATUS_PENDING:
+        return None
+    send_day = start_local.date() - timedelta(days=days_before)
+    send_at_local = datetime.combine(send_day, dt_time(hour=send_hour, minute=0), tzinfo=APP_TIMEZONE)
+    if _candidate_became_due_before_tracking(managed_doc, send_at_local):
+        return None
+    notification_key = f"taxi:{reminder_kind_suffix}:{managed_doc.get('duty_key')}"
+    return {
+        "notification_key": notification_key,
+        "duty_key": managed_doc.get("duty_key"),
+        "reminder_kind": TAXI_REMINDER_KIND,
+        "priority": priority,
+        "send_at_local": send_at_local,
+        "title": "תזכורת מונית",
+        "body": body_text,
+        "url": _duty_open_url(f"taxi_{reminder_kind_suffix}", managed_doc.get("duty_key")),
+        "relevant": lambda current_local: _parse_iso_datetime(managed_doc.get("start_datetime")) and _parse_iso_datetime(managed_doc.get("start_datetime")) > current_local,
+    }
+
+
+def _build_snooze_candidate(managed_doc, state_doc, now_local):
+    start_local = _parse_iso_datetime(managed_doc.get("start_datetime"))
+    if not start_local or start_local <= now_local:
+        return None
+    state_doc = state_doc or {}
+    snooze_for = state_doc.get("last_snoozed_for_date")
+    if not snooze_for:
+        return None
+    try:
+        snooze_day = date.fromisoformat(str(snooze_for))
+    except ValueError:
+        return None
+    if state_doc.get("duty_deleted"):
+        return None
+    if state_doc.get("taxi_reminder_enabled") is False:
+        return None
+    if state_doc.get("taxi_status") and state_doc.get("taxi_status") != TAXI_STATUS_PENDING:
+        return None
+    send_at_local = datetime.combine(snooze_day, dt_time(hour=18, minute=0), tzinfo=APP_TIMEZONE)
+    if _candidate_became_due_before_tracking(managed_doc, send_at_local):
+        return None
+    return {
+        "notification_key": f"taxi:snooze:{managed_doc.get('duty_key')}:{snooze_day.isoformat()}",
+        "duty_key": managed_doc.get("duty_key"),
+        "reminder_kind": TAXI_REMINDER_KIND,
+        "priority": 1,
+        "send_at_local": send_at_local,
+        "title": "תזכורת מונית",
+        "body": "תזכורת להזמין מונית לתורנות הקרובה.",
+        "url": _duty_open_url("taxi_snooze", managed_doc.get("duty_key")),
+        "relevant": lambda current_local: _parse_iso_datetime(managed_doc.get("start_datetime")) and _parse_iso_datetime(managed_doc.get("start_datetime")) > current_local,
+    }
+
+
+def _build_tomorrow_candidate(managed_doc, now_local):
+    start_local = _parse_iso_datetime(managed_doc.get("start_datetime"))
+    if not start_local or start_local <= now_local:
+        return None
+    duty_key = managed_doc.get("duty_key")
+    role_text = managed_doc.get("title") or managed_doc.get("role") or "תורנות"
+    send_day = start_local.date() - timedelta(days=1)
+    send_at_local = datetime.combine(send_day, dt_time(hour=20, minute=0), tzinfo=APP_TIMEZONE)
+    if _candidate_became_due_before_tracking(managed_doc, send_at_local):
+        return None
+    return {
+        "notification_key": f"tomorrow:{duty_key}:{start_local.date().isoformat()}",
+        "duty_key": duty_key,
+        "reminder_kind": TOMORROW_REMINDER_KIND,
+        "priority": 0,
+        "send_at_local": send_at_local,
+        "title": "תזכורת תורנות",
+        "body": f"מחר יש לך תורנות. התפקיד: {role_text}.",
+        "url": _duty_open_url("tomorrow_duty", duty_key),
+        "relevant": lambda current_local: _parse_iso_datetime(managed_doc.get("start_datetime")) and _parse_iso_datetime(managed_doc.get("start_datetime")) > current_local,
+    }
+
+
+def _find_tomorrow_managed_duty(session_id, now_local=None):
+    current_local = now_local or _local_now()
+    target_date = current_local.date() + timedelta(days=1)
+    matched_docs = []
+    for managed_doc in duty_sync_managed_events_collection.find({"session_id": session_id, "status": "active"}):
+        start_local = _parse_iso_datetime(managed_doc.get("start_datetime"))
+        if not start_local:
+            continue
+        if start_local.date() == target_date and start_local > current_local:
+            matched_docs.append((start_local, managed_doc))
+    if not matched_docs:
+        return None
+    matched_docs.sort(key=lambda item: item[0])
+    return matched_docs[0][1]
+
+
+def _find_next_future_managed_duty(session_id, now_local=None):
+    current_local = now_local or _local_now()
+    matched_docs = []
+    for managed_doc in duty_sync_managed_events_collection.find({"session_id": session_id, "status": "active"}):
+        start_local = _parse_iso_datetime(managed_doc.get("start_datetime"))
+        if not start_local or start_local <= current_local:
+            continue
+        matched_docs.append((start_local, managed_doc))
+    if not matched_docs:
+        return None
+    matched_docs.sort(key=lambda item: item[0])
+    return matched_docs[0][1]
+
+
+def _build_duty_feature_candidates(session_id, now_local):
+    state_docs = {
+        doc.get("duty_key"): doc
+        for doc in duty_reminder_states_collection.find({"session_id": session_id})
+        if doc.get("duty_key")
+    }
+    candidates = []
+    for managed_doc in duty_sync_managed_events_collection.find({"session_id": session_id, "status": "active"}):
+        duty_key = managed_doc.get("duty_key")
+        if not duty_key:
+            continue
+        state_doc = state_docs.get(duty_key) or _default_taxi_state()
+        for candidate in (
+            _build_taxi_candidate(
+                managed_doc,
+                state_doc,
+                days_before=7,
+                send_hour=18,
+                body_text="יש לך תורנות בעוד שבוע. זה הזמן להזמין מונית.",
+                now_local=now_local,
+                priority=3,
+                reminder_kind_suffix="7d",
+            ),
+            _build_taxi_candidate(
+                managed_doc,
+                state_doc,
+                days_before=3,
+                send_hour=18,
+                body_text="תזכורת אחרונה להזמין מונית לתורנות הקרובה.",
+                now_local=now_local,
+                priority=2,
+                reminder_kind_suffix="3d",
+            ),
+            _build_snooze_candidate(managed_doc, state_doc, now_local),
+            _build_tomorrow_candidate(managed_doc, now_local),
+        ):
+            if candidate:
+                candidates.append(candidate)
+    candidates.sort(key=lambda item: (item.get("send_at_local"), item.get("priority"), item.get("duty_key") or ""))
+    return candidates
+
+
+def _send_due_duty_feature_pushes(session_id, now_local=None, reminder_kind_filter=None, duty_key_filter=None, ignore_daily_cap=False):
+    if not web_push_configured():
+        return 0
+    now_local = now_local or _local_now()
+    sent_count = 0
+    day_count = _feature_push_count_for_day(session_id, now_local.date())
+    if not ignore_daily_cap and day_count >= MAX_DUTY_FEATURE_PUSHES_PER_DAY:
+        return 0
+    for candidate in _build_duty_feature_candidates(session_id, now_local):
+        if not ignore_daily_cap and day_count >= MAX_DUTY_FEATURE_PUSHES_PER_DAY:
+            break
+        if reminder_kind_filter and candidate.get("reminder_kind") != reminder_kind_filter:
+            continue
+        if duty_key_filter and candidate.get("duty_key") != duty_key_filter:
+            continue
+        notification_key = candidate.get("notification_key")
+        if not notification_key or _feature_push_sent(session_id, notification_key):
+            continue
+        if not _notification_is_due(candidate.get("send_at_local"), now_local):
+            continue
+        relevant_check = candidate.get("relevant")
+        if callable(relevant_check) and not relevant_check(now_local):
+            continue
+        claimed = _claim_feature_push_log(
+            session_id=session_id,
+            duty_key=candidate.get("duty_key"),
+            notification_key=notification_key,
+            reminder_kind=candidate.get("reminder_kind"),
+            title=candidate.get("title"),
+            body=candidate.get("body"),
+            scheduled_for_local=candidate.get("send_at_local") or now_local,
+        )
+        if not claimed:
+            continue
+        delivered = send_web_push_message(
+            session_id=session_id,
+            title=candidate.get("title"),
+            body=candidate.get("body"),
+            tag=notification_key,
+            url=candidate.get("url"),
+        )
+        if delivered:
+            _record_feature_push_log(
+                session_id=session_id,
+                duty_key=candidate.get("duty_key"),
+                notification_key=notification_key,
+                reminder_kind=candidate.get("reminder_kind"),
+                title=candidate.get("title"),
+                body=candidate.get("body"),
+                sent_at_local=now_local,
+            )
+            sent_count += 1
+            day_count += 1
+        else:
+            _release_feature_push_claim(session_id, notification_key)
+    return sent_count
+
+
+def schedule_test_tomorrow_duty_push(session_id, delay_seconds=20):
+    if APP_ENV == "production":
+        return {"status": "unavailable", "reply": "This QA push trigger is available in dev only."}
+    if not web_push_configured():
+        return {"status": "unavailable", "reply": "Web push is not configured in this environment."}
+    if push_subscriptions_collection.count_documents({"session_id": session_id}) <= 0:
+        return {"status": "unavailable", "reply": "Push notifications are not connected for this session."}
+    now_local = _local_now()
+    managed_doc = _find_tomorrow_managed_duty(session_id, now_local=now_local)
+    if not managed_doc:
+        return {"status": "not_found", "reply": "No active duty for tomorrow was found in the database."}
+    delay_seconds = max(1, int(delay_seconds or 20))
+    duty_key = managed_doc.get("duty_key")
+    role_text = managed_doc.get("title") or managed_doc.get("role") or "תורנות"
+    body_text = f"מחר יש לך תורנות. התפקיד: {role_text}."
+    url = _duty_open_url("tomorrow_duty", duty_key)
+
+    def _delayed_send():
+        time.sleep(delay_seconds)
+        delivered = send_web_push_message(
+            session_id=session_id,
+            title="תזכורת תורנות",
+            body=body_text,
+            tag=f"qa:tomorrow:{duty_key}:{int(time.time())}",
+            url=url,
+        )
+        log_event(
+            "duty_sync_test_tomorrow_push_dispatched",
+            session_id=session_id,
+            payload={
+                "duty_key": duty_key,
+                "delay_seconds": delay_seconds,
+                "delivered": delivered,
+            },
+        )
+
+    thread = threading.Thread(target=_delayed_send, name=f"duty-sync-test-tomorrow-{session_id}", daemon=True)
+    thread.start()
+    return {
+        "status": "scheduled",
+        "reply": f"Tomorrow duty test push will send in {delay_seconds} seconds.",
+        "duty_key": duty_key,
+        "delay_seconds": delay_seconds,
+    }
+
+
+def schedule_test_taxi_push(session_id, reminder_variant="7d", delay_seconds=20):
+    if APP_ENV == "production":
+        return {"status": "unavailable", "reply": "This QA push trigger is available in dev only."}
+    if not web_push_configured():
+        return {"status": "unavailable", "reply": "Web push is not configured in this environment."}
+    if push_subscriptions_collection.count_documents({"session_id": session_id}) <= 0:
+        return {"status": "unavailable", "reply": "Push notifications are not connected for this session."}
+    now_local = _local_now()
+    managed_doc = _find_next_future_managed_duty(session_id, now_local=now_local)
+    if not managed_doc:
+        return {"status": "not_found", "reply": "No active future duty was found in the database."}
+    delay_seconds = max(1, int(delay_seconds or 20))
+    duty_key = managed_doc.get("duty_key")
+    variant = str(reminder_variant or "7d").strip().lower()
+    if variant == "3d":
+        body_text = "תזכורת אחרונה להזמין מונית לתורנות הקרובה."
+        reminder_kind = "taxi_3d"
+    elif variant == "snooze":
+        body_text = "תזכורת להזמין מונית לתורנות הקרובה."
+        reminder_kind = "taxi_snooze"
+    else:
+        variant = "7d"
+        body_text = "יש לך תורנות בעוד שבוע. זה הזמן להזמין מונית."
+        reminder_kind = "taxi_7d"
+    url = _duty_open_url(reminder_kind, duty_key)
+
+    def _delayed_send():
+        time.sleep(delay_seconds)
+        delivered = send_web_push_message(
+            session_id=session_id,
+            title="תזכורת מונית",
+            body=body_text,
+            tag=f"qa:taxi:{variant}:{duty_key}:{int(time.time())}",
+            url=url,
+        )
+        log_event(
+            "duty_sync_test_taxi_push_dispatched",
+            session_id=session_id,
+            payload={
+                "duty_key": duty_key,
+                "variant": variant,
+                "delay_seconds": delay_seconds,
+                "delivered": delivered,
+            },
+        )
+
+    thread = threading.Thread(target=_delayed_send, name=f"duty-sync-test-taxi-{variant}-{session_id}", daemon=True)
+    thread.start()
+    return {
+        "status": "scheduled",
+        "reply": f"Taxi {variant} test push will send in {delay_seconds} seconds.",
+        "duty_key": duty_key,
+        "delay_seconds": delay_seconds,
+        "variant": variant,
+    }
 
 
 def get_web_push_status(session_id):
@@ -27,6 +507,15 @@ def get_web_push_status(session_id):
         "subscription_count": subscription_count,
         "public_key": WEB_PUSH_PUBLIC_KEY if web_push_configured() else "",
     }
+
+
+def _latest_push_subscription_docs(session_id):
+    latest_docs = list(
+        push_subscriptions_collection.find({"session_id": session_id}).sort(
+            [("updated_at", -1), ("created_at", -1)]
+        ).limit(1)
+    )
+    return latest_docs
 
 
 def save_web_push_subscription(session_id, subscription):
@@ -53,6 +542,7 @@ def save_web_push_subscription(session_id, subscription):
         },
         upsert=True,
     )
+    push_subscriptions_collection.delete_many({"session_id": session_id, "endpoint": {"$ne": endpoint}})
     subscription_count = push_subscriptions_collection.count_documents({"session_id": session_id})
     debug_payload = {
         "session_id": session_id,
@@ -134,7 +624,7 @@ def send_web_push_message(session_id, title, body, tag="duty-sync-review", url=N
         payload["review_id"] = review.get("review_id") or ""
         payload["updated_at"] = review.get("updated_at") or ""
     sent_count = 0
-    for doc in push_subscriptions_collection.find({"session_id": session_id}):
+    for doc in _latest_push_subscription_docs(session_id):
         if _send_notification_to_subscription(doc.get("subscription") or {}, payload):
             sent_count += 1
     return sent_count
@@ -194,6 +684,7 @@ def _poll_once():
     for session_id in session_ids:
         try:
             result = poll_duty_sheet(session_id)
+            _send_due_duty_feature_pushes(session_id)
             review = result.get("pending_review")
             if review:
                 connection = duty_sync_connections_collection.find_one(
@@ -203,24 +694,30 @@ def _poll_once():
                 current_signature = _review_signature(review)
                 if current_signature and current_signature != (connection or {}).get("last_pushed_review_signature"):
                     push_scope_review = _build_push_review_scope(review, (connection or {}).get("last_pushed_review_payload") or {})
-                    sent_count = send_duty_sync_push(session_id, push_scope_review, result.get("reply"))
-                    if sent_count:
-                        duty_sync_connections_collection.update_one(
-                            {"session_id": session_id},
-                            {
-                                "$set": {
-                                    "last_pushed_review_signature": current_signature,
-                                    "last_pushed_review_payload": review,
-                                    "last_push_review_scope": push_scope_review,
-                                    "last_push_open_context": {
-                                        "review_id": review.get("review_id"),
-                                        "updated_at": review.get("updated_at"),
-                                        "pushed_at": datetime.utcnow(),
-                                    },
-                                    "last_pushed_at": datetime.utcnow(),
-                                }
-                            },
-                        )
+                    claim_result = duty_sync_connections_collection.update_one(
+                        {
+                            "session_id": session_id,
+                            "$or": [
+                                {"last_pushed_review_signature": {"$exists": False}},
+                                {"last_pushed_review_signature": {"$ne": current_signature}},
+                            ],
+                        },
+                        {
+                            "$set": {
+                                "last_pushed_review_signature": current_signature,
+                                "last_pushed_review_payload": review,
+                                "last_push_review_scope": push_scope_review,
+                                "last_push_open_context": {
+                                    "review_id": review.get("review_id"),
+                                    "updated_at": review.get("updated_at"),
+                                    "pushed_at": datetime.utcnow(),
+                                },
+                                "last_pushed_at": datetime.utcnow(),
+                            }
+                        },
+                    )
+                    if claim_result.modified_count:
+                        send_duty_sync_push(session_id, push_scope_review, result.get("reply"))
             else:
                 duty_sync_connections_collection.update_one(
                     {"session_id": session_id},

@@ -2,7 +2,7 @@ self.__dutySyncDebug = (...args) => {
   console.log("[DutySyncDebug][SW]", ...args);
 };
 
-const DUTY_SYNC_SW_VERSION = "v0.3.232";
+const DUTY_SYNC_SW_VERSION = "v0.3.399";
 const DUTY_SYNC_PUSH_DB_NAME = "duty-sync-push";
 const DUTY_SYNC_PUSH_STORE_NAME = "context";
 const DUTY_SYNC_DEBUG_STORE_NAME = "debug_logs";
@@ -136,6 +136,14 @@ function postDutySyncOpenReviewMessage(client, targetUrl) {
   return true;
 }
 
+function postDutySyncOpenReminderMessage(client, targetUrl) {
+  if (!client || !("postMessage" in client)) {
+    return false;
+  }
+  client.postMessage({ type: "duty-sync-open-reminder", url: targetUrl });
+  return true;
+}
+
 function notifyDutySyncForegroundClients(targetUrl, reviewIdentity) {
   return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
     (clients || []).forEach((client) => {
@@ -194,6 +202,15 @@ function withDutySyncReviewIdentity(targetUrl, review) {
   }
 }
 
+function isDutyReminderUrl(targetUrl) {
+  try {
+    const url = new URL(targetUrl, self.location.origin);
+    return url.searchParams.get("duty_reminder") === "1";
+  } catch (_error) {
+    return false;
+  }
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
 });
@@ -210,6 +227,7 @@ self.addEventListener("push", (event) => {
     review_id: payload.review_id || "",
     updated_at: payload.updated_at || "",
   };
+  const isReminderPush = isDutyReminderUrl(targetUrl);
   const options = {
     body: payload.body || "Duty Sync found personal schedule changes.",
     tag: payload.tag || "duty-sync-review",
@@ -229,14 +247,51 @@ self.addEventListener("push", (event) => {
       body: options.body,
       target_url_before_enrichment: targetUrl,
     })
+      .then(() => {
+        if (!isReminderPush) {
+          return false;
+        }
+        return self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+          const hasVisibleClient = (clients || []).some((client) => client && client.visibilityState === "visible");
+          if (hasVisibleClient) {
+            return writeDutySyncSwDebug("reminder fallback context skipped", {
+              reason: "visible_client_present",
+              target_url: targetUrl,
+            });
+          }
+          const parsedUrl = new URL(targetUrl, self.location.origin);
+          const context = {
+            active: true,
+            source: "service_worker_push_received",
+            duty_key: parsedUrl.searchParams.get("duty_key") || "",
+            reminder_kind: parsedUrl.searchParams.get("reminder_kind") || "taxi",
+            delivered_at: new Date().toISOString(),
+            pending_open: true,
+          };
+          return writeDutySyncSwDebug("fallback reminder context write attempt", {
+            storage_key: "latest",
+            context,
+          }).then(() => saveDutySyncPushContext(context))
+            .then(() => writeDutySyncSwDebug("fallback reminder context write success", {
+              storage_key: "latest",
+              context,
+            }))
+            .catch((error) => writeDutySyncSwDebug("fallback reminder context write failure", {
+              storage_key: "latest",
+              context,
+              error: String(error),
+            }));
+        });
+      })
       .then(() =>
         writeDutySyncSwDebug("notification data created", {
           notification_data: options.data,
           review_id: options.data.review_id || null,
           updated_at: options.data.updated_at || null,
+          is_reminder_push: isReminderPush,
         })
       )
-      .then(() => notifyDutySyncForegroundClients(targetUrl, reviewIdentity))
+      .then(() => (isReminderPush ? true : notifyDutySyncForegroundClients(targetUrl, reviewIdentity)))
       .then(() => self.registration.showNotification(title, options))
   );
 });
@@ -250,7 +305,8 @@ self.addEventListener("notificationclick", (event) => {
     review_id: notificationData.review_id || (review && review.review_id) || "",
     updated_at: notificationData.updated_at || (review && review.updated_at) || "",
   };
-  const resolvedTargetUrl = withDutySyncReviewIdentity(baseTargetUrl, reviewIdentity);
+  const reminderClick = isDutyReminderUrl(baseTargetUrl);
+  const resolvedTargetUrl = reminderClick ? baseTargetUrl : withDutySyncReviewIdentity(baseTargetUrl, reviewIdentity);
   const traceId = `push-${Date.now()}`;
   self.__dutySyncDebug("notificationclick fired", { targetUrl: resolvedTargetUrl, traceId });
   let storedTraceLine = "";
@@ -266,11 +322,35 @@ self.addEventListener("notificationclick", (event) => {
         notification_data: notificationData,
         review_id: reviewIdentity.review_id || null,
         updated_at: reviewIdentity.updated_at || null,
+        is_reminder_click: reminderClick,
         target_url_raw: baseTargetUrl,
         target_url_enriched: resolvedTargetUrl,
         trace_id: traceId,
       }))
       .then(() => {
+        if (reminderClick) {
+          const parsedUrl = new URL(resolvedTargetUrl, self.location.origin);
+          const context = {
+            active: true,
+            source: "service_worker_notificationclick",
+            duty_key: parsedUrl.searchParams.get("duty_key") || "",
+            reminder_kind: parsedUrl.searchParams.get("reminder_kind") || "taxi",
+          };
+          storedTraceLine = `[SW/App] stored reminder context duty_key=${context.duty_key} reminder_kind=${context.reminder_kind}`;
+          return writeDutySyncSwDebug("storage write attempt", {
+            storage_key: "latest",
+            context,
+          }).then(() => saveDutySyncPushContext(context))
+            .then(() => writeDutySyncSwDebug("storage write success", {
+              storage_key: "latest",
+              context,
+            }))
+            .catch((error) => writeDutySyncSwDebug("storage write failure", {
+              storage_key: "latest",
+              context,
+              error: String(error),
+            }));
+        }
         const parsedUrl = new URL(resolvedTargetUrl, self.location.origin);
         const context = {
           active: true,
@@ -324,20 +404,54 @@ self.addEventListener("notificationclick", (event) => {
             "[SW] navigate/openWindow attempted",
           ]);
           self.__dutySyncDebug("client found", { clientCount: clients.length, targetUrl });
-          writeDutySyncOpenFlowDebug("before postMessage", {
-            trace_id: traceId,
-            target_client_id: client && client.id ? client.id : null,
-          });
-          const messageSent = postDutySyncOpenReviewMessage(client, targetUrl);
-          writeDutySyncOpenFlowDebug("after postMessage", {
-            trace_id: traceId,
-            sent: messageSent,
-            target_client_id: client && client.id ? client.id : null,
-          });
-          writeDutySyncOpenFlowDebug("duty-sync-open-review message sent", {
-            sent: messageSent,
-            target_client_id: client && client.id ? client.id : null,
-          });
+          let messageSent = false;
+          if (!reminderClick) {
+            writeDutySyncOpenFlowDebug("before postMessage", {
+              trace_id: traceId,
+              target_client_id: client && client.id ? client.id : null,
+            });
+            messageSent = postDutySyncOpenReviewMessage(client, targetUrl);
+            writeDutySyncOpenFlowDebug("after postMessage", {
+              trace_id: traceId,
+              sent: messageSent,
+              target_client_id: client && client.id ? client.id : null,
+            });
+            writeDutySyncOpenFlowDebug("duty-sync-open-review message sent", {
+              sent: messageSent,
+              target_client_id: client && client.id ? client.id : null,
+            });
+          } else {
+            writeDutySyncOpenFlowDebug("postMessage skipped", {
+              trace_id: traceId,
+              reason: "duty_reminder_click",
+              target_client_id: client && client.id ? client.id : null,
+            });
+            messageSent = postDutySyncOpenReminderMessage(client, targetUrl);
+            writeDutySyncOpenFlowDebug("duty-sync-open-reminder message sent", {
+              trace_id: traceId,
+              sent: messageSent,
+              target_client_id: client && client.id ? client.id : null,
+            });
+            if (client && "focus" in client) {
+              writeDutySyncOpenFlowDebug("before focus", {
+                trace_id: traceId,
+                target_client_id: client && client.id ? client.id : null,
+              });
+              return client.focus().then((focusedClient) => {
+                writeDutySyncOpenFlowDebug("after focus", {
+                  trace_id: traceId,
+                  called: true,
+                  target_client_id: client && client.id ? client.id : null,
+                });
+                writeDutySyncOpenFlowDebug("focus called", {
+                  called: true,
+                  target_client_id: client && client.id ? client.id : null,
+                });
+                return focusedClient;
+              });
+            }
+            return client;
+          }
           if ("navigate" in client) {
             self.__dutySyncDebug("navigation attempted", { via: "client.navigate", targetUrl });
             return client.navigate(targetUrl).then((navigatedClient) => {
