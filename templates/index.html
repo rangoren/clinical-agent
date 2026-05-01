@@ -7986,8 +7986,7 @@
         restoreDutySyncPushContextFromStorage().catch(() => {});
         handleInitialDutySyncDeepLink();
         loadDutySyncDebugDockPreferences();
-        dutySyncDebugDockVisible = true;
-        dutySyncDebugDockMinimized = true;
+        dutySyncDebugDockVisible = false;
         persistDutySyncDebugDockPreferences();
         renderDutySyncDebugDockState();
         logDutySyncRuntime("startup initialization complete", { href: window.location.href });
