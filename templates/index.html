@@ -4665,6 +4665,7 @@
                 action.textContent = "Connect Google Calendar";
                 action.disabled = false;
                 action.dataset.unavailable = "true";
+                action.classList.add("secondary");
                 renderDutySyncPrimaryBanner();
                 return;
             }
@@ -4675,12 +4676,15 @@
             if (status && status.requires_reconnect) {
                 label.textContent = "Calendar Sync: Reconnect needed";
                 action.textContent = "Reconnect Google Calendar";
+                action.classList.add("secondary");
             } else if (status.connected) {
                 label.textContent = "Calendar Sync: Connected";
                 action.textContent = "Disconnect Calendar";
+                action.classList.remove("secondary");
             } else {
                 label.textContent = "Calendar Sync: Not connected";
                 action.textContent = "Connect Google Calendar";
+                action.classList.add("secondary");
             }
             renderDutySyncPrimaryBanner();
         }
@@ -5646,7 +5650,9 @@
                 action.textContent = "Connect Sheet";
                 action.disabled = true;
                 action.hidden = false;
+                action.classList.add("secondary");
                 secondaryAction.hidden = true;
+                secondaryAction.classList.remove("secondary");
                 pushAction.hidden = true;
                 pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
@@ -5660,7 +5666,9 @@
                 details.textContent = buildDutySyncDetails(status, status.details || "Reconnect Google Calendar to keep Duty Sync connected.");
                 action.textContent = "Reconnect Google Calendar";
                 action.hidden = false;
+                action.classList.add("secondary");
                 secondaryAction.hidden = true;
+                secondaryAction.classList.remove("secondary");
                 pushAction.hidden = true;
                 pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
@@ -5673,7 +5681,9 @@
                 details.textContent = buildDutySyncDetails(status, status.details || "Connect your duty sheet to turn on automatic sync.");
                 action.textContent = "Connect Sheet";
                 action.hidden = false;
+                action.classList.add("secondary");
                 secondaryAction.hidden = true;
+                secondaryAction.classList.remove("secondary");
                 pushAction.hidden = true;
                 pushTestAction.hidden = true;
                 scheduleDutySyncPolling();
@@ -5688,6 +5698,7 @@
             details.textContent = buildDutySyncDetails(status, baseText);
             action.hidden = true;
             secondaryAction.hidden = false;
+            secondaryAction.classList.remove("secondary");
             pushAction.hidden = true;
             pushTestAction.hidden = true;
             scheduleDutySyncPolling();
