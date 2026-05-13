@@ -124,6 +124,10 @@ def _scope_set(scope_value):
 def _refresh_google_access_token(session_id, connection):
     refresh_token = (connection or {}).get("refresh_token")
     if not refresh_token:
+        calendar_connections_collection.update_one(
+            {"session_id": session_id, "provider": "google"},
+            {"$set": {"requires_reconnect": True, "updated_at": _utcnow()}},
+        )
         return None
 
     try:
@@ -192,11 +196,12 @@ def _guess_calendar_type(name):
 def _upsert_connection(session_id, token_payload, calendars):
     now = _utcnow()
     expiry = now + timedelta(seconds=int(token_payload.get("expires_in", 3600)))
+    existing_connection = _get_connection(session_id)
     connection_doc = {
         "session_id": session_id,
         "provider": "google",
         "access_token": token_payload.get("access_token"),
-        "refresh_token": token_payload.get("refresh_token"),
+        "refresh_token": token_payload.get("refresh_token") or (existing_connection or {}).get("refresh_token"),
         "requires_reconnect": False,
         "scope": token_payload.get("scope"),
         "token_type": token_payload.get("token_type", "Bearer"),
